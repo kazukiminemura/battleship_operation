@@ -1,4 +1,4 @@
-import type { CombatState, ShipEntity, ProjectileEntity, WeaponType, CombatEvent } from './types'
+import type { BuildingEntity, CombatState, ShipEntity, ProjectileEntity, WeaponType, CombatEvent } from './types'
 import type { SeededRandom } from './random'
 import { applyDamage, checkDestroyed } from './damage'
 
@@ -110,6 +110,10 @@ export function stepProjectiles(state: CombatState, rng: SeededRandom): CombatSt
     e => e.kind === 'ship' && !e.destroyed
   ) as ShipEntity[]
 
+  const buildings = [...entities.values()].filter(
+    e => e.kind === 'building' && !e.destroyed
+  ) as BuildingEntity[]
+
   for (const [id, entity] of entities) {
     if (entity.kind !== 'projectile' || entity.destroyed) continue
 
@@ -174,6 +178,43 @@ export function stepProjectiles(state: CombatState, rng: SeededRandom): CombatSt
         proj = { ...proj, destroyed: true }
         hit = true
         break
+      }
+    }
+
+    if (!hit && proj.weaponType !== 'torpedo') {
+      for (const building of buildings) {
+        const owner = entities.get(proj.ownerId)
+        if (owner && owner.kind === 'ship' && building.team !== 'neutral' && (owner as ShipEntity).team === building.team) continue
+
+        const dx = building.pos.x - proj.pos.x
+        const dy = building.pos.y - proj.pos.y
+        const dist = Math.sqrt(dx * dx + dy * dy)
+
+        if (dist < Math.max(cfg.hitRadius, building.radius)) {
+          let updatedBuilding = applyDamage(building, proj.damage)
+          updatedBuilding = checkDestroyed(updatedBuilding)
+
+          events.push(
+            { tick: state.tick, type: 'weapon.hit', sourceId: proj.ownerId, targetId: building.id, damage: proj.damage, position: { ...proj.pos }, weaponId: proj.weaponType },
+            { tick: state.tick, type: 'damage.taken', sourceId: proj.ownerId, targetId: building.id, damage: proj.damage },
+          )
+
+          const wType = proj.weaponType
+          metrics = {
+            ...metrics,
+            hitCountByWeapon: { ...metrics.hitCountByWeapon, [wType]: (metrics.hitCountByWeapon[wType] ?? 0) + 1 },
+            damageByWeapon:   { ...metrics.damageByWeapon,   [wType]: (metrics.damageByWeapon[wType]   ?? 0) + proj.damage },
+          }
+
+          if (updatedBuilding.destroyed && !building.destroyed) {
+            events.push({ tick: state.tick, type: 'entity.destroyed', targetId: building.id, position: { ...building.pos } })
+          }
+
+          entities.set(building.id, updatedBuilding)
+          proj = { ...proj, destroyed: true }
+          hit = true
+          break
+        }
       }
     }
 

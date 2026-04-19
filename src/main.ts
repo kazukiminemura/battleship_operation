@@ -97,7 +97,7 @@ function main(): void {
         renderer.setCamera((player as ShipEntity).pos.x, (player as ShipEntity).pos.y)
       }
 
-      renderer.render(state, input.getWeaponMode())
+      renderer.render(state, input.getWeaponMode(), input.getAimPoint())
       hud.render(state, input.getWeaponMode(), WORLD_SIZE)
       sound.processEvents(state.eventLog, state.tick)
     },

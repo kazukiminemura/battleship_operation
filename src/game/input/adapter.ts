@@ -6,6 +6,7 @@ export class InputAdapter {
   private commands: Command[] = []
   private keys = new Set<string>()
   private weaponMode: WeaponMode = 'gun'
+  private aimPoint: Vec3 | null = null
   private canvas: HTMLCanvasElement
   private renderer: CanvasRenderer
 
@@ -17,6 +18,10 @@ export class InputAdapter {
 
   getWeaponMode(): WeaponMode {
     return this.weaponMode
+  }
+
+  getAimPoint(): Vec3 | null {
+    return this.aimPoint ? { ...this.aimPoint } : null
   }
 
   private bindEvents(): void {
@@ -37,6 +42,18 @@ export class InputAdapter {
       }
     })
     window.addEventListener('keyup', (e) => this.keys.delete(e.code))
+
+    this.canvas.addEventListener('mousemove', (e) => {
+      const rect = this.canvas.getBoundingClientRect()
+      const cx = e.clientX - rect.left
+      const cy = e.clientY - rect.top
+      const [wx, wy] = this.renderer.s2w(cx, cy)
+      this.aimPoint = { x: wx, y: wy, z: 0 }
+    })
+
+    this.canvas.addEventListener('mouseleave', () => {
+      this.aimPoint = null
+    })
 
     this.canvas.addEventListener('click', (e) => {
       const rect = this.canvas.getBoundingClientRect()

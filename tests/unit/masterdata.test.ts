@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createInitialState, type PlayerShipType } from '../../src/game/data/masterdata'
-import type { ShipEntity } from '../../src/game/simulation/types'
+import type { BuildingEntity, ShipEntity } from '../../src/game/simulation/types'
 
 function playerOf(type: PlayerShipType): ShipEntity {
   const state = createInitialState(type)
@@ -29,5 +29,15 @@ describe('createInitialState', () => {
     expect(cruiser.maxSpeed).toBeGreaterThan(battleship.maxSpeed)
     expect(battleship.maxHp).toBeGreaterThan(cruiser.maxHp)
     expect(cruiser.maxHp).toBeGreaterThan(destroyer.maxHp)
+  })
+
+  it('places destructible buildings on the central island', () => {
+    const state = createInitialState()
+    const buildings = [...state.entities.values()].filter(e => e.kind === 'building') as BuildingEntity[]
+
+    expect(buildings).toHaveLength(3)
+    expect(buildings.map(b => b.id)).toContain('building.island.command')
+    expect(buildings.every(b => b.team === 'enemy')).toBe(true)
+    expect(buildings.every(b => b.hp > 0 && !b.destroyed)).toBe(true)
   })
 })

@@ -2,7 +2,7 @@ export type Vec3 = { x: number; y: number; z: number }
 
 export type WeaponType = 'gun' | 'torpedo' | 'aa' | 'missile'
 
-export type EntityType = 'ship' | 'projectile' | 'torpedo' | 'objective'
+export type EntityType = 'ship' | 'projectile' | 'torpedo' | 'objective' | 'building'
 
 export type SpeedLevel = 'full' | 'cruise' | 'slow' | 'stop' | 'reverse'
 
@@ -48,13 +48,25 @@ export interface ProjectileEntity {
   destroyed: boolean
 }
 
+export interface BuildingEntity {
+  kind: 'building'
+  id: string
+  pos: Vec3
+  hp: number
+  maxHp: number
+  radius: number
+  team: 'enemy' | 'neutral'
+  destroyed: boolean
+  templateId: string
+}
+
 export interface ObjectiveEntity {
   kind: 'objective'
   id: string
   completed: boolean
 }
 
-export type Entity = ShipEntity | ProjectileEntity | ObjectiveEntity
+export type Entity = ShipEntity | ProjectileEntity | ObjectiveEntity | BuildingEntity
 
 export interface CombatState {
   tick: number

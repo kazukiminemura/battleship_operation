@@ -1,4 +1,4 @@
-import type { CombatState, Command, CommandType, ShipEntity, WeaponType, CombatEvent } from './types'
+import type { BuildingEntity, CombatState, Command, CommandType, ShipEntity, Vec3, WeaponType, CombatEvent } from './types'
 import type { RngStreams } from './random'
 import type { StaticData } from '../data/masterdata'
 import { stepMovement, applyMoveCommand, applySpeedUpCommand, applySpeedDownCommand, applyRotateCommand, applyStopCommand } from './movement'
@@ -64,17 +64,16 @@ function generateAutoFireCommands(state: CombatState): Command[] {
   const enemies = [...state.entities.values()].filter(
     e => e.kind === 'ship' && !(e as ShipEntity).destroyed && (e as ShipEntity).team === 'enemy'
   ) as ShipEntity[]
-  if (enemies.length === 0) return cmds
 
-  // nearest enemy target
-  let nearest = enemies[0]!
-  let minDist = Infinity
-  for (const e of enemies) {
-    const dx = e.pos.x - player.pos.x
-    const dy = e.pos.y - player.pos.y
-    const d = Math.sqrt(dx * dx + dy * dy)
-    if (d < minDist) { minDist = d; nearest = e }
-  }
+  const buildings = [...state.entities.values()].filter(
+    e => e.kind === 'building' && !(e as BuildingEntity).destroyed && (e as BuildingEntity).team === 'enemy'
+  ) as BuildingEntity[]
+
+  const targets: { pos: Vec3; kind: 'ship' | 'building' }[] = [
+    ...enemies.map(e => ({ pos: e.pos, kind: 'ship' as const })),
+    ...buildings.map(b => ({ pos: b.pos, kind: 'building' as const })),
+  ]
+  if (targets.length === 0) return cmds
 
   const WEAPON_CMD: Record<WeaponType, CommandType> = {
     gun: 'fire.primary',
@@ -85,6 +84,21 @@ function generateAutoFireCommands(state: CombatState): Command[] {
 
   for (const weapon of player.weapons) {
     if (!weapon.autoFire || weapon.cooldownTick > 0 || weapon.ammo <= 0) continue
+
+    const candidates = weapon.type === 'torpedo'
+      ? targets.filter(t => t.kind === 'ship')
+      : targets
+    if (candidates.length === 0) continue
+
+    let nearest = candidates[0]!
+    let minDist = Infinity
+    for (const target of candidates) {
+      const dx = target.pos.x - player.pos.x
+      const dy = target.pos.y - player.pos.y
+      const d = Math.sqrt(dx * dx + dy * dy)
+      if (d < minDist) { minDist = d; nearest = target }
+    }
+
     const maxRange = WEAPON_CONFIGS[weapon.type].maxRange
     if (minDist > maxRange) continue   // target out of range
     cmds.push({

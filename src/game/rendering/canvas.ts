@@ -1,5 +1,5 @@
-import type { CombatState, ShipEntity, ProjectileEntity, WeaponType } from '../simulation/types'
-import { WORLD_SIZE } from '../simulation/movement'
+import type { BuildingEntity, CombatState, ShipEntity, ProjectileEntity, Vec3, WeaponType } from '../simulation/types'
+import { ISLAND_COLLIDER, isOnLand, WORLD_SIZE } from '../simulation/movement'
 import { WEAPON_CONFIGS } from '../simulation/weapons'
 
 // Ship physical dimensions in world units (length, width, height)
@@ -82,13 +82,14 @@ export class CanvasRenderer {
     ]
   }
 
-  render(state: CombatState, selectedWeapon?: WeaponType): void {
+  render(state: CombatState, selectedWeapon?: WeaponType, aimPoint?: Vec3 | null): void {
     this.recalcIso()
     const { ctx } = this
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height)
 
     this.renderOcean()
     this.renderGrid()
+    this.renderIsland()
 
     // Range ellipse for selected weapon
     if (selectedWeapon) {
@@ -104,9 +105,19 @@ export class CanvasRenderer {
     const projectiles = [...state.entities.values()]
       .filter(e => e.kind === 'projectile' && !(e as ProjectileEntity).destroyed) as ProjectileEntity[]
 
+    const buildings = ([...state.entities.values()]
+      .filter(e => e.kind === 'building') as BuildingEntity[])
+      .sort((a, b) => a.pos.y - b.pos.y)
+
     this.renderSplashes(state)
+    for (const b of buildings)   this.renderBuilding(b)
     for (const p of projectiles) this.renderProjectile(p)
     for (const s of ships)       this.renderShip(s)
+
+    if (selectedWeapon && aimPoint) {
+      const player = state.entities.get('ship.player') as ShipEntity | undefined
+      if (player && !player.destroyed) this.renderAimPointer(player, selectedWeapon, aimPoint)
+    }
   }
 
   // ── water splashes ─────────────────────────────────────────────────────────
@@ -393,6 +404,193 @@ export class CanvasRenderer {
     }
   }
 
+  // ── island and buildings ──────────────────────────────────────────────────
+
+  private renderIsland(): void {
+    const { ctx } = this
+    const steps = 72
+    const shoreline: [number, number][] = []
+    const beach: [number, number][] = []
+    const grass: [number, number][] = []
+
+    for (let i = 0; i < steps; i++) {
+      const a = (i / steps) * Math.PI * 2
+      const n1 = signedNoise(ISLAND_COLLIDER.x, ISLAND_COLLIDER.y, i)
+      const n2 = signedNoise(ISLAND_COLLIDER.y, ISLAND_COLLIDER.x, i + 19)
+      const r = 1 + n1 * 0.08 + n2 * 0.04
+      shoreline.push(this.w2s(
+        ISLAND_COLLIDER.x + Math.cos(a) * ISLAND_COLLIDER.rx * r,
+        ISLAND_COLLIDER.y + Math.sin(a) * ISLAND_COLLIDER.ry * r,
+      ))
+      beach.push(this.w2s(
+        ISLAND_COLLIDER.x + Math.cos(a) * ISLAND_COLLIDER.rx * 0.91 * r,
+        ISLAND_COLLIDER.y + Math.sin(a) * ISLAND_COLLIDER.ry * 0.91 * r,
+      ))
+      grass.push(this.w2s(
+        ISLAND_COLLIDER.x + Math.cos(a) * ISLAND_COLLIDER.rx * 0.74 * r,
+        ISLAND_COLLIDER.y + Math.sin(a) * ISLAND_COLLIDER.ry * 0.74 * r,
+      ))
+    }
+
+    drawClosedPath(ctx, shoreline)
+    ctx.fillStyle = 'rgba(202,160,92,0.38)'
+    ctx.fill()
+    ctx.strokeStyle = 'rgba(228,206,158,0.45)'
+    ctx.lineWidth = 2
+    ctx.stroke()
+
+    drawClosedPath(ctx, beach)
+    const beachGrad = ctx.createLinearGradient(0, this.canvas.height * 0.35, 0, this.canvas.height * 0.72)
+    beachGrad.addColorStop(0, '#d2b36d')
+    beachGrad.addColorStop(1, '#8f7040')
+    ctx.fillStyle = beachGrad
+    ctx.fill()
+
+    drawClosedPath(ctx, grass)
+    const grassGrad = ctx.createLinearGradient(0, this.canvas.height * 0.30, 0, this.canvas.height * 0.78)
+    grassGrad.addColorStop(0, '#4d7c3c')
+    grassGrad.addColorStop(0.55, '#2f5f35')
+    grassGrad.addColorStop(1, '#1f3f2d')
+    ctx.fillStyle = grassGrad
+    ctx.fill()
+
+    // Small elevation patches make the island read as land rather than a flat decal.
+    for (let i = 0; i < 11; i++) {
+      const px = ISLAND_COLLIDER.x + signedNoise(ISLAND_COLLIDER.x, ISLAND_COLLIDER.y, i + 100) * ISLAND_COLLIDER.rx * 0.42
+      const py = ISLAND_COLLIDER.y + signedNoise(ISLAND_COLLIDER.y, ISLAND_COLLIDER.x, i + 130) * ISLAND_COLLIDER.ry * 0.34
+      const [sx, sy] = this.w2s(px, py)
+      ctx.save()
+      ctx.translate(sx, sy)
+      ctx.scale(1.5, 0.62)
+      ctx.beginPath()
+      ctx.arc(0, 0, (45 + Math.abs(signedNoise(px, py, i)) * 45) * this.iso.scale, 0, Math.PI * 2)
+      ctx.fillStyle = i % 3 === 0 ? 'rgba(79,96,55,0.35)' : 'rgba(38,77,44,0.30)'
+      ctx.fill()
+      ctx.restore()
+    }
+
+    // Thin surf strokes around the coast.
+    for (let i = 0; i < steps; i += 6) {
+      const a = (i / steps) * Math.PI * 2
+      const [x0, y0] = this.w2s(ISLAND_COLLIDER.x + Math.cos(a) * ISLAND_COLLIDER.rx * 1.03, ISLAND_COLLIDER.y + Math.sin(a) * ISLAND_COLLIDER.ry * 1.03)
+      const [x1, y1] = this.w2s(ISLAND_COLLIDER.x + Math.cos(a + 0.10) * ISLAND_COLLIDER.rx * 1.03, ISLAND_COLLIDER.y + Math.sin(a + 0.10) * ISLAND_COLLIDER.ry * 1.03)
+      ctx.beginPath()
+      ctx.moveTo(x0, y0)
+      ctx.lineTo(x1, y1)
+      ctx.strokeStyle = 'rgba(220,245,255,0.28)'
+      ctx.lineWidth = 1
+      ctx.stroke()
+    }
+  }
+
+  private renderBuilding(building: BuildingEntity): void {
+    if (building.destroyed) {
+      this.renderRuins(building)
+      return
+    }
+
+    const { ctx, iso } = this
+    const [cx, cy] = this.w2s(building.pos.x, building.pos.y)
+    const hpRatio = building.hp / building.maxHp
+    const spec = building.templateId.includes('radar')
+      ? { w: 48, d: 42, h: 130, top: '#94a3b8', side: '#475569' }
+      : building.templateId.includes('depot')
+        ? { w: 130, d: 92, h: 54, top: '#9a3412', side: '#5c1f0a' }
+        : { w: 112, d: 82, h: 72, top: '#78716c', side: '#44403c' }
+
+    this.drawIsoBox(building.pos.x, building.pos.y, spec.w, spec.d, spec.h, spec.top, spec.side)
+
+    if (building.templateId.includes('radar')) {
+      const mastTop = cy - spec.h * iso.scale
+      ctx.strokeStyle = '#cbd5e1'
+      ctx.lineWidth = Math.max(1, 2 * iso.scale)
+      ctx.beginPath()
+      ctx.moveTo(cx, cy - 8 * iso.scale)
+      ctx.lineTo(cx, mastTop)
+      ctx.stroke()
+      ctx.save()
+      ctx.translate(cx, mastTop)
+      ctx.scale(1.7, 0.55)
+      ctx.beginPath()
+      ctx.arc(0, 0, 34 * iso.scale, 0, Math.PI * 2)
+      ctx.strokeStyle = '#e2e8f0'
+      ctx.lineWidth = Math.max(1, 2.4 * iso.scale)
+      ctx.stroke()
+      ctx.restore()
+    }
+
+    const barW = Math.max(18, building.radius * iso.scale * 1.4)
+    const barY = cy - spec.h * iso.scale - 13
+    ctx.fillStyle = 'rgba(0,0,0,0.62)'
+    ctx.fillRect(cx - barW / 2 - 1, barY - 1, barW + 2, 5)
+    ctx.fillStyle = hpRatio > 0.5 ? '#22c55e' : hpRatio > 0.25 ? '#eab308' : '#ef4444'
+    ctx.fillRect(cx - barW / 2, barY, barW * hpRatio, 3)
+  }
+
+  private renderRuins(building: BuildingEntity): void {
+    const { ctx, iso } = this
+    const [cx, cy] = this.w2s(building.pos.x, building.pos.y)
+    const r = building.radius * iso.scale
+
+    ctx.save()
+    ctx.translate(cx, cy)
+    ctx.scale(1.35, 0.55)
+    ctx.beginPath()
+    ctx.arc(0, 0, r * 1.2, 0, Math.PI * 2)
+    ctx.fillStyle = 'rgba(40,32,28,0.55)'
+    ctx.fill()
+    ctx.restore()
+
+    for (let i = 0; i < 9; i++) {
+      const a = (i / 9) * Math.PI * 2 + signedNoise(building.pos.x, building.pos.y, i) * 0.5
+      const dist = r * (0.25 + Math.abs(signedNoise(building.pos.y, building.pos.x, i + 8)) * 0.9)
+      const x = cx + Math.cos(a) * dist
+      const y = cy + Math.sin(a) * dist * 0.45
+      const size = Math.max(2, r * (0.12 + Math.abs(signedNoise(building.pos.x, building.pos.y, i + 14)) * 0.14))
+      ctx.fillStyle = i % 2 === 0 ? '#57534e' : '#292524'
+      ctx.fillRect(x - size / 2, y - size / 2, size, size)
+    }
+  }
+
+  private drawIsoBox(wx: number, wy: number, w: number, d: number, h: number, top: string, side: string): void {
+    const { ctx, iso } = this
+    const hw = w / 2
+    const hd = d / 2
+    const hPx = h * iso.scale
+    const base = [
+      this.w2s(wx - hw, wy - hd),
+      this.w2s(wx + hw, wy - hd),
+      this.w2s(wx + hw, wy + hd),
+      this.w2s(wx - hw, wy + hd),
+    ] as [number, number][]
+    const roof = base.map(([x, y]) => [x, y - hPx]) as [number, number][]
+
+    ctx.beginPath()
+    ctx.moveTo(base[1]![0], base[1]![1])
+    ctx.lineTo(base[2]![0], base[2]![1])
+    ctx.lineTo(roof[2]![0], roof[2]![1])
+    ctx.lineTo(roof[1]![0], roof[1]![1])
+    ctx.closePath()
+    ctx.fillStyle = side
+    ctx.fill()
+
+    ctx.beginPath()
+    ctx.moveTo(base[2]![0], base[2]![1])
+    ctx.lineTo(base[3]![0], base[3]![1])
+    ctx.lineTo(roof[3]![0], roof[3]![1])
+    ctx.lineTo(roof[2]![0], roof[2]![1])
+    ctx.closePath()
+    ctx.fillStyle = lerpHex(side, top, 0.35)
+    ctx.fill()
+
+    drawClosedPath(ctx, roof)
+    ctx.fillStyle = top
+    ctx.fill()
+    ctx.strokeStyle = lerpHex(top, '#ffffff', 0.25)
+    ctx.lineWidth = 0.8
+    ctx.stroke()
+  }
+
   // ── ship ───────────────────────────────────────────────────────────────────
 
   private renderShip(ship: ShipEntity): void {
@@ -657,6 +855,78 @@ export class CanvasRenderer {
     ctx.stroke()
     ctx.setLineDash([])
   }
+
+  private renderAimPointer(player: ShipEntity, weaponType: WeaponType, aimPoint: Vec3): void {
+    const { ctx, iso } = this
+    const cfg = WEAPON_CONFIGS[weaponType]
+    const dx = aimPoint.x - player.pos.x
+    const dy = aimPoint.y - player.pos.y
+    const dist = Math.sqrt(dx * dx + dy * dy)
+    const inRange = dist <= cfg.maxRange
+    const blocked = weaponType === 'torpedo' && isOnLand(aimPoint.x, aimPoint.y)
+    const color = !inRange || blocked ? '#ef4444' : '#f8fafc'
+    const accent: Record<WeaponType, string> = {
+      gun: '#fbbf24',
+      torpedo: '#fb923c',
+      aa: '#67e8f9',
+      missile: '#c4b5fd',
+    }
+    const [sx, sy] = this.w2s(aimPoint.x, aimPoint.y)
+    const [px, py] = this.w2s(player.pos.x, player.pos.y)
+    const r = Math.max(8, 38 * iso.scale)
+
+    ctx.save()
+    ctx.globalAlpha = 0.95
+    ctx.beginPath()
+    ctx.moveTo(px, py)
+    ctx.lineTo(sx, sy)
+    ctx.strokeStyle = inRange ? 'rgba(226,232,240,0.28)' : 'rgba(239,68,68,0.28)'
+    ctx.lineWidth = 1
+    ctx.setLineDash([7, 6])
+    ctx.stroke()
+    ctx.setLineDash([])
+
+    ctx.save()
+    ctx.translate(sx, sy)
+    ctx.scale(1.55, 0.62)
+    ctx.beginPath()
+    ctx.arc(0, 0, r, 0, Math.PI * 2)
+    ctx.strokeStyle = inRange && !blocked ? 'rgba(248,250,252,0.55)' : 'rgba(239,68,68,0.65)'
+    ctx.lineWidth = 1.2
+    ctx.stroke()
+    ctx.restore()
+
+    ctx.beginPath()
+    ctx.moveTo(sx - r * 1.4, sy)
+    ctx.lineTo(sx - r * 0.45, sy)
+    ctx.moveTo(sx + r * 0.45, sy)
+    ctx.lineTo(sx + r * 1.4, sy)
+    ctx.moveTo(sx, sy - r * 0.9)
+    ctx.lineTo(sx, sy - r * 0.28)
+    ctx.moveTo(sx, sy + r * 0.28)
+    ctx.lineTo(sx, sy + r * 0.9)
+    ctx.strokeStyle = color
+    ctx.lineWidth = 1.5
+    ctx.stroke()
+
+    ctx.beginPath()
+    ctx.arc(sx, sy, 2.5, 0, Math.PI * 2)
+    ctx.fillStyle = accent[weaponType]
+    ctx.fill()
+
+    if (!inRange || blocked) {
+      ctx.beginPath()
+      ctx.moveTo(sx - r * 0.55, sy - r * 0.45)
+      ctx.lineTo(sx + r * 0.55, sy + r * 0.45)
+      ctx.moveTo(sx + r * 0.55, sy - r * 0.45)
+      ctx.lineTo(sx - r * 0.55, sy + r * 0.45)
+      ctx.strokeStyle = '#ef4444'
+      ctx.lineWidth = 1.4
+      ctx.stroke()
+    }
+
+    ctx.restore()
+  }
 }
 
 // linear interpolate between two hex colors
@@ -672,6 +942,13 @@ function lerpHex(a: string, b: string, t: number): string {
   const g = Math.round(ag! + (bg! - ag!) * t)
   const bl2 = Math.round(ab! + (bb! - ab!) * t)
   return `rgb(${r},${g},${bl2})`
+}
+
+function drawClosedPath(ctx: CanvasRenderingContext2D, points: [number, number][]): void {
+  ctx.beginPath()
+  ctx.moveTo(points[0]![0], points[0]![1])
+  for (const [x, y] of points.slice(1)) ctx.lineTo(x, y)
+  ctx.closePath()
 }
 
 function signedNoise(x: number, y: number, salt: number): number {

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   stepMovement, applySpeedUpCommand, applySpeedDownCommand,
-  applyMoveCommand, applyRotateCommand, WORLD_SIZE, SPEED_LEVEL_TARGET,
+  applyMoveCommand, applyRotateCommand, isOnLand, WORLD_SIZE, SPEED_LEVEL_TARGET,
 } from '../../src/game/simulation/movement'
 import type { CombatState, ShipEntity, Metrics, SpeedLevel } from '../../src/game/simulation/types'
 
@@ -75,6 +75,23 @@ describe('stepMovement', () => {
     const next = stepMovement(state)
     const updated = next.entities.get(ship.id) as ShipEntity
     expect(updated.pos.x).toBe(500)
+  })
+
+  it('prevents ships from entering island land', () => {
+    const ship = makeShip({
+      pos: { x: 5000, y: 5485, z: 0 },
+      angle: -Math.PI / 2,
+      speed: 5,
+      targetSpeed: 5,
+    })
+    const state = makeState([ship])
+    let next = state
+
+    for (let i = 0; i < 20; i++) next = stepMovement(next)
+
+    const updated = next.entities.get(ship.id) as ShipEntity
+    expect(isOnLand(updated.pos.x, updated.pos.y)).toBe(false)
+    expect(updated.speed).toBe(0)
   })
 })
 

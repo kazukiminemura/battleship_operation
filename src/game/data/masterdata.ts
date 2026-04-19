@@ -1,4 +1,4 @@
-import type { ShipEntity, CombatState, Metrics } from '../simulation/types'
+import type { BuildingEntity, ShipEntity, CombatState, Metrics } from '../simulation/types'
 
 export type PlayerShipType = 'destroyer' | 'cruiser' | 'battleship'
 
@@ -147,8 +147,22 @@ function makeCruiser(id: string, x: number, y: number, angle: number): ShipEntit
   }
 }
 
+function makeBuilding(id: string, x: number, y: number, hp: number, radius: number, templateId: string): BuildingEntity {
+  return {
+    kind: 'building',
+    id,
+    pos: { x, y, z: 0 },
+    hp,
+    maxHp: hp,
+    radius,
+    team: 'enemy',
+    destroyed: false,
+    templateId,
+  }
+}
+
 export function createInitialState(playerType: PlayerShipType = 'destroyer'): CombatState {
-  const entities = new Map<string, ShipEntity>()
+  const entities = new Map<string, import('../simulation/types').Entity>()
   entities.set('ship.player', makePlayerShip(playerType))
 
   const destroyers: [string, number, number, number][] = [
@@ -170,6 +184,15 @@ export function createInitialState(playerType: PlayerShipType = 'destroyer'): Co
   ]
   for (const [id, x, y, angle] of cruisers) entities.set(id, makeCruiser(id, x, y, angle))
 
+  const islandBuildings: [string, number, number, number, number, string][] = [
+    ['building.island.command', 5000, 4930, 180, 44, 'building.command.bunker'],
+    ['building.island.radar',   4850, 5100,  95, 34, 'building.radar.tower'],
+    ['building.island.depot',   5180, 5120, 130, 40, 'building.supply.depot'],
+  ]
+  for (const [id, x, y, hp, radius, templateId] of islandBuildings) {
+    entities.set(id, makeBuilding(id, x, y, hp, radius, templateId))
+  }
+
   const metrics: Metrics = {
     result: 'none', durationTicks: 0, playerDamageTaken: 0, playerAmmoSpent: 0,
     hitCountByWeapon: {}, shotCountByWeapon: {}, damageByWeapon: {}, enemiesDestroyed: 0,
@@ -177,7 +200,7 @@ export function createInitialState(playerType: PlayerShipType = 'destroyer'): Co
 
   return {
     tick: 0,
-    entities: entities as Map<string, import('../simulation/types').Entity>,
+    entities,
     eventLog: [],
     missionResult: 'none',
     metrics,

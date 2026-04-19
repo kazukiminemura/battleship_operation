@@ -1,13 +1,15 @@
-import type { ShipEntity } from './types'
+import type { BuildingEntity, ShipEntity } from './types'
 
-export function applyDamage(ship: ShipEntity, amount: number): ShipEntity {
-  const newHp = Math.max(0, Math.min(ship.maxHp, ship.hp - amount))
-  return { ...ship, hp: newHp }
+type DamageableEntity = ShipEntity | BuildingEntity
+
+export function applyDamage<T extends DamageableEntity>(entity: T, amount: number): T {
+  const newHp = Math.max(0, Math.min(entity.maxHp, entity.hp - amount))
+  return { ...entity, hp: newHp }
 }
 
-export function checkDestroyed(ship: ShipEntity): ShipEntity {
-  if (ship.hp <= 0 && !ship.destroyed) {
-    return { ...ship, destroyed: true }
+export function checkDestroyed<T extends DamageableEntity>(entity: T): T {
+  if (entity.hp <= 0 && !entity.destroyed) {
+    return { ...entity, destroyed: true }
   }
-  return ship
+  return entity
 }
