@@ -122,6 +122,13 @@ export function stepProjectiles(state: CombatState, rng: SeededRandom): CombatSt
     }
 
     if (proj.lifetime <= 0) {
+      events.push({
+        tick: state.tick,
+        type: 'weapon.missed',
+        sourceId: proj.ownerId,
+        weaponId: proj.weaponType,   // reuse field to pass type to sound system
+        position: { ...proj.pos },
+      })
       entities.set(id, { ...proj, destroyed: true })
       continue
     }
@@ -142,7 +149,7 @@ export function stepProjectiles(state: CombatState, rng: SeededRandom): CombatSt
         updatedShip = checkDestroyed(updatedShip)
 
         events.push(
-          { tick: state.tick, type: 'weapon.hit',   sourceId: proj.ownerId, targetId: ship.id, damage: proj.damage, position: { ...proj.pos } },
+          { tick: state.tick, type: 'weapon.hit',   sourceId: proj.ownerId, targetId: ship.id, damage: proj.damage, position: { ...proj.pos }, weaponId: proj.weaponType },
           { tick: state.tick, type: 'damage.taken', sourceId: proj.ownerId, targetId: ship.id, damage: proj.damage },
         )
 

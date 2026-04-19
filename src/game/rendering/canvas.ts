@@ -4,9 +4,11 @@ import { WEAPON_CONFIGS } from '../simulation/weapons'
 
 // Ship physical dimensions in world units (length, width, height)
 const SHIP_DIMS: Record<string, { l: number; w: number; h: number }> = {
-  'hull.destroyer.basic':       { l: 130, w: 28, h: 15 },  // player
-  'hull.enemy.destroyer.basic': { l: 90,  w: 20, h: 11 },  // small enemy
-  'hull.cruiser.basic':         { l: 165, w: 36, h: 22 },  // large enemy
+  'hull.destroyer.basic':       { l: 130, w: 28, h: 15 },
+  'hull.enemy.destroyer.basic': { l: 90,  w: 20, h: 11 },
+  'hull.cruiser.basic':         { l: 165, w: 36, h: 22 },
+  'hull.cruiser.player':        { l: 190, w: 44, h: 27 },
+  'hull.battleship.basic':      { l: 255, w: 62, h: 38 },
 }
 
 // Isometric projection parameters
@@ -102,8 +104,243 @@ export class CanvasRenderer {
     const projectiles = [...state.entities.values()]
       .filter(e => e.kind === 'projectile' && !(e as ProjectileEntity).destroyed) as ProjectileEntity[]
 
+    this.renderSplashes(state)
     for (const p of projectiles) this.renderProjectile(p)
     for (const s of ships)       this.renderShip(s)
+  }
+
+  // ── water splashes ─────────────────────────────────────────────────────────
+
+  private static readonly SPLASH_TICKS = 40
+
+  private renderSplashes(state: CombatState): void {
+    const { ctx } = this
+    const D = CanvasRenderer.SPLASH_TICKS
+
+    for (const ev of state.eventLog) {
+      if (ev.type !== 'weapon.missed' || !ev.position) continue
+      const age = state.tick - ev.tick
+      if (age < 0 || age >= D) continue
+
+      const t   = age / D
+      const pos = ev.position
+      const wtype = (ev.weaponId ?? 'gun') as WeaponType
+      const s   = this.iso.scale
+      const [cx, cy] = this.w2s(pos.x, pos.y)
+
+      // Weapon-specific sizing (world units)
+      const maxR = wtype === 'torpedo' ? 190 : wtype === 'missile' ? 150 : wtype === 'gun' ? 85 : 42
+      const N    = wtype === 'torpedo' ? 22  : wtype === 'missile' ? 16  : wtype === 'gun' ? 12 : 7
+      const ringColor =
+        wtype === 'torpedo' ? '100,195,255' :
+        wtype === 'missile' ? '180,215,255' : '170,228,255'
+
+      // Soft underwater shadow / pressure bloom below the splash.
+      if (t < 0.70) {
+        const bloomT = Math.min(1, t / 0.70)
+        ctx.save()
+        ctx.translate(cx, cy)
+        ctx.scale(1.45, 0.58)
+        const bloomR = maxR * s * (0.18 + bloomT * 0.88)
+        const bloom = ctx.createRadialGradient(0, 0, 0, 0, 0, bloomR)
+        bloom.addColorStop(0, `rgba(210,242,255,${(1 - bloomT) * 0.28})`)
+        bloom.addColorStop(0.55, `rgba(95,180,230,${(1 - bloomT) * 0.16})`)
+        bloom.addColorStop(1, 'rgba(40,100,160,0)')
+        ctx.beginPath()
+        ctx.arc(0, 0, bloomR, 0, Math.PI * 2)
+        ctx.fillStyle = bloom
+        ctx.fill()
+        ctx.restore()
+      }
+
+      // ── 1. Impact flash (t < 0.10) ──────────────────────────
+      if (t < 0.10) {
+        const ft = t / 0.10
+        ctx.save()
+        ctx.translate(cx, cy)
+        ctx.scale(1, 0.5)
+        const gr = ctx.createRadialGradient(0, 0, 0, 0, 0, maxR * s * Math.SQRT2 * 0.55)
+        gr.addColorStop(0,   `rgba(255,255,255,${(1 - ft) * 0.95})`)
+        gr.addColorStop(0.5, `rgba(210,242,255,${(1 - ft) * 0.6})`)
+        gr.addColorStop(1,   'rgba(200,238,255,0)')
+        ctx.beginPath()
+        ctx.arc(0, 0, maxR * s * Math.SQRT2 * 0.55, 0, Math.PI * 2)
+        ctx.fillStyle = gr
+        ctx.fill()
+        ctx.restore()
+      }
+
+      // ── 2. Water column (t < 0.48) ──────────────────────────
+      if (t < 0.48) {
+        const ct     = t / 0.48
+        const colH   = maxR * s * 2.2 * Math.sin(Math.PI * ct)
+        const colWBot = maxR * s * 0.20
+        const colWTop = maxR * s * 0.06 * (1 - ct * 0.7)
+        const colA   = (1 - ct) * 0.80
+
+        const grad = ctx.createLinearGradient(cx, cy, cx, cy - colH)
+        grad.addColorStop(0,   `rgba(200,235,255,${colA})`)
+        grad.addColorStop(0.5, `rgba(225,245,255,${colA * 0.75})`)
+        grad.addColorStop(1,   'rgba(240,250,255,0)')
+
+        ctx.beginPath()
+        ctx.moveTo(cx - colWBot, cy)
+        ctx.bezierCurveTo(
+          cx - colWTop * 2, cy - colH * 0.4,
+          cx - colWTop,     cy - colH * 0.8,
+          cx,               cy - colH,
+        )
+        ctx.bezierCurveTo(
+          cx + colWTop,     cy - colH * 0.8,
+          cx + colWTop * 2, cy - colH * 0.4,
+          cx + colWBot,     cy,
+        )
+        ctx.closePath()
+        ctx.fillStyle = grad
+        ctx.fill()
+
+        // Crown ring at column base
+        const crownR = maxR * 0.28 * (1 + ct * 0.5)
+        ctx.beginPath()
+        const CR = 32
+        for (let i = 0; i <= CR; i++) {
+          const a = (i / CR) * Math.PI * 2
+          const [rx, ry] = this.w2s(pos.x + Math.cos(a) * crownR, pos.y + Math.sin(a) * crownR)
+          i === 0 ? ctx.moveTo(rx, ry) : ctx.lineTo(rx, ry)
+        }
+        ctx.strokeStyle = `rgba(200,238,255,${colA * 0.6})`
+        ctx.lineWidth = 1.5
+        ctx.stroke()
+
+        // Torn side sheets of water, asymmetric so it feels less like a perfect icon.
+        const sheetCount = wtype === 'aa' ? 4 : wtype === 'gun' ? 7 : 10
+        for (let i = 0; i < sheetCount; i++) {
+          const n = signedNoise(pos.x, pos.y, i)
+          const side = i % 2 === 0 ? -1 : 1
+          const spread = (0.20 + Math.abs(n) * 0.50) * maxR * s
+          const height = colH * (0.18 + Math.abs(signedNoise(pos.y, pos.x, i + 11)) * 0.32)
+          const x0 = cx + side * colWBot * (0.55 + i / sheetCount)
+          const x1 = cx + side * spread
+          const y1 = cy - height
+          ctx.beginPath()
+          ctx.moveTo(x0, cy)
+          ctx.quadraticCurveTo(cx + side * spread * 0.35, cy - height * 0.85, x1, y1)
+          ctx.strokeStyle = `rgba(225,246,255,${colA * (0.28 + Math.abs(n) * 0.26)})`
+          ctx.lineWidth = Math.max(0.6, maxR * s * 0.012 * (1 - ct))
+          ctx.stroke()
+        }
+      }
+
+      // ── 3. Spray particles ──────────────────────────────────
+      const peakH = maxR * s * 1.9
+      const seed  = Math.sin(pos.x * 0.0031 + pos.y * 0.0019) * 1.2
+
+      for (let i = 0; i < N; i++) {
+        const angle       = (i / N) * Math.PI * 2 + seed
+        const speedFactor = 0.50 + 0.50 * Math.abs(Math.sin(i * 2.39))
+        const horizT      = Math.min(1, t * 2.0) * speedFactor
+        const vertT       = Math.min(1, t * 1.6) * speedFactor
+
+        const [px, pyBase] = this.w2s(
+          pos.x + Math.cos(angle) * maxR * horizT,
+          pos.y + Math.sin(angle) * maxR * horizT,
+        )
+        const arcH = peakH * Math.sin(Math.PI * Math.min(1, vertT)) * speedFactor
+        const py   = pyBase - arcH
+        const alpha = Math.max(0, (1 - t * 1.15) * 0.88)
+        const dotR  = Math.max(0.7, maxR * s * 0.048 * (1 - t * 0.55))
+
+        ctx.beginPath()
+        ctx.arc(px, py, dotR, 0, Math.PI * 2)
+        ctx.fillStyle = `rgba(215,240,255,${alpha})`
+        ctx.fill()
+
+        // Thin trail line from base to particle
+        if (arcH > 4 && t < 0.45) {
+          ctx.beginPath()
+          ctx.moveTo(px, pyBase)
+          ctx.lineTo(px, py)
+          ctx.strokeStyle = `rgba(200,235,255,${alpha * 0.25})`
+          ctx.lineWidth = 0.5
+          ctx.stroke()
+        }
+      }
+
+      // Fine mist cloud that lingers after the hard water column collapses.
+      if (t > 0.05 && t < 0.80) {
+        const mt = (t - 0.05) / 0.75
+        const mistCount = wtype === 'aa' ? 8 : wtype === 'gun' ? 18 : 28
+        for (let i = 0; i < mistCount; i++) {
+          const a = signedNoise(pos.x + 31, pos.y - 17, i) * Math.PI
+          const r = maxR * (0.10 + Math.abs(signedNoise(pos.y, pos.x, i + 23)) * 0.82) * Math.min(1, mt * 1.8)
+          const [mx, myBase] = this.w2s(pos.x + Math.cos(a) * r, pos.y + Math.sin(a) * r)
+          const lift = peakH * (0.15 + Math.abs(signedNoise(pos.x, pos.y, i + 41)) * 0.50) * Math.sin(Math.PI * Math.min(1, mt))
+          const radius = Math.max(0.5, maxR * s * (0.015 + Math.abs(signedNoise(pos.x, pos.y, i + 59)) * 0.020))
+          const alpha = Math.max(0, (1 - mt) * 0.22)
+
+          ctx.beginPath()
+          ctx.arc(mx, myBase - lift, radius, 0, Math.PI * 2)
+          ctx.fillStyle = `rgba(235,248,255,${alpha})`
+          ctx.fill()
+        }
+      }
+
+      // ── 4. Wave rings (isometric, via w2s) ──────────────────
+      const rings = wtype === 'torpedo' ? 4 : wtype === 'missile' ? 3 : 2
+      const STEPS = 40
+
+      for (let ri = 0; ri < rings; ri++) {
+        const delay = ri * 0.17
+        const rt    = Math.max(0, (t - delay) / (1 - delay))
+        if (rt <= 0) continue
+
+        const worldRt = maxR * rt
+        const alpha   = (1 - rt) * (ri === 0 ? 0.90 : 0.55)
+        const lw      = Math.max(0.3, (3.0 - ri * 0.8) * (1 - rt * 0.55))
+
+        ctx.beginPath()
+        for (let i = 0; i <= STEPS; i++) {
+          const a = (i / STEPS) * Math.PI * 2
+          const [rx, ry] = this.w2s(pos.x + Math.cos(a) * worldRt, pos.y + Math.sin(a) * worldRt)
+          i === 0 ? ctx.moveTo(rx, ry) : ctx.lineTo(rx, ry)
+        }
+        ctx.closePath()
+        ctx.strokeStyle = `rgba(${ringColor},${alpha})`
+        ctx.lineWidth   = lw
+        ctx.stroke()
+      }
+
+      // ── 5. Foam scatter (settling droplets, late phase) ──────
+      if (t > 0.18) {
+        const ft  = (t - 0.18) / 0.82
+        const Nf  = Math.round(N * 0.75)
+        for (let i = 0; i < Nf; i++) {
+          const fAngle = (i / Nf) * Math.PI * 2 + i * 0.18
+          const fr     = maxR * (0.15 + 0.75 * Math.abs(Math.sin(i * 1.73 + 0.5)))
+          const [fx, fy] = this.w2s(pos.x + Math.cos(fAngle) * fr, pos.y + Math.sin(fAngle) * fr)
+          const fAlpha   = Math.max(0, (1 - ft) * 0.40)
+          const fR       = Math.max(0.5, maxR * s * 0.030)
+          ctx.beginPath()
+          ctx.arc(fx, fy, fR, 0, Math.PI * 2)
+          ctx.fillStyle = `rgba(225,242,255,${fAlpha})`
+          ctx.fill()
+
+          // Short foam streaks aligned with the ripple flow.
+          if (i % 2 === 0) {
+            const [fx2, fy2] = this.w2s(
+              pos.x + Math.cos(fAngle) * (fr + maxR * 0.09),
+              pos.y + Math.sin(fAngle) * (fr + maxR * 0.09),
+            )
+            ctx.beginPath()
+            ctx.moveTo(fx, fy)
+            ctx.lineTo(fx2, fy2)
+            ctx.strokeStyle = `rgba(225,242,255,${fAlpha * 0.55})`
+            ctx.lineWidth = Math.max(0.4, maxR * s * 0.006)
+            ctx.stroke()
+          }
+        }
+      }
+    }
   }
 
   // ── ocean ──────────────────────────────────────────────────────────────────
@@ -435,4 +672,9 @@ function lerpHex(a: string, b: string, t: number): string {
   const g = Math.round(ag! + (bg! - ag!) * t)
   const bl2 = Math.round(ab! + (bb! - ab!) * t)
   return `rgb(${r},${g},${bl2})`
+}
+
+function signedNoise(x: number, y: number, salt: number): number {
+  const n = Math.sin(x * 12.9898 + y * 78.233 + salt * 37.719) * 43758.5453
+  return (n - Math.floor(n)) * 2 - 1
 }

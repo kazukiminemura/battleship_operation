@@ -4,12 +4,14 @@ import { InputAdapter } from './game/input/adapter'
 import { FixedTicker } from './game/simulation/ticker'
 import { combatStep } from './game/simulation/combat'
 import { createRngStreams } from './game/simulation/random'
-import { createInitialState, STATIC_DATA } from './game/data/masterdata'
+import { createInitialState, STATIC_DATA, type PlayerShipType } from './game/data/masterdata'
 import type { CombatState, ShipEntity, WeaponType } from './game/simulation/types'
 import { WORLD_SIZE } from './game/simulation/movement'
 import { SoundSystem } from './game/audio/sounds'
+import { StartScreen } from './game/ui/startscreen'
 
 const BASE_SEED = 12345
+type GameMode = 'start' | 'combat'
 
 function main(): void {
   const canvas = document.getElementById('game-canvas') as HTMLCanvasElement
@@ -18,20 +20,45 @@ function main(): void {
   const renderer = new CanvasRenderer(canvas)
   const hud      = new HUD(canvas)
   const input    = new InputAdapter(canvas, renderer)
-  const rng      = createRngStreams(BASE_SEED)
+  const start    = new StartScreen(canvas)
+  let rng        = createRngStreams(BASE_SEED)
   const sound    = new SoundSystem()
 
-  let state: CombatState = createInitialState()
+  let mode: GameMode = 'start'
+  let selectedShip: PlayerShipType = 'destroyer'
+  let state: CombatState = createInitialState(selectedShip)
+  start.attach()
+
+  const beginCombat = (shipType: PlayerShipType): void => {
+    selectedShip = shipType
+    state = createInitialState(selectedShip)
+    rng = createRngStreams(BASE_SEED)
+    sound.reset()
+    mode = 'combat'
+    start.detach()
+  }
+
+  const returnToStart = (): void => {
+    mode = 'start'
+    start.attach()
+    sound.reset()
+  }
 
   window.addEventListener('keydown', (e) => {
-    if (e.code === 'KeyR' && state.missionResult !== 'none') {
-      state = createInitialState()
-      sound.reset()
+    if (e.code === 'KeyR' && mode === 'combat') {
+      returnToStart()
     }
   })
 
-  // HUD click regions (capture phase, before fire-weapon handler)
+  // Start screen and HUD click regions (capture phase, before fire-weapon handler)
   canvas.addEventListener('click', (e) => {
+    if (mode === 'start') {
+      const shipType = start.checkClick(e)
+      if (shipType) beginCombat(shipType)
+      e.stopPropagation()
+      return
+    }
+
     const rect = canvas.getBoundingClientRect()
     const cx = e.clientX - rect.left
     const cy = e.clientY - rect.top
@@ -53,11 +80,17 @@ function main(): void {
 
   const ticker = new FixedTicker({
     onTick: (tick) => {
+      if (mode !== 'combat') return
       if (state.missionResult !== 'none') return
       const commands = input.pollCommands(tick)
       state = combatStep(state, commands, rng, STATIC_DATA)
     },
     onRender: (_alpha) => {
+      if (mode === 'start') {
+        start.render()
+        return
+      }
+
       // Camera follows player
       const player = state.entities.get('ship.player')
       if (player && player.kind === 'ship' && !player.destroyed) {
