@@ -43,6 +43,8 @@ export interface ProjectileEntity {
   weaponType: WeaponType
   damage: number
   lifetime: number
+  initialLifetime: number
+  maxHeight: number
   destroyed: boolean
 }
 

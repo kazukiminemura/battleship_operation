@@ -9,14 +9,15 @@ export interface WeaponConfig {
   lifetime: number
   cooldown: number
   hitRadius: number
-  maxRange: number  // speed × lifetime = effective range
+  maxRange: number
+  maxHeight: number  // arc peak in world units (0 = flat/torpedo)
 }
 
 export const WEAPON_CONFIGS: Record<WeaponType, WeaponConfig> = {
-  gun:     { speed: 20, damageMin: 30,  damageMax: 50,  lifetime: 60,  cooldown: 15, hitRadius: 12, maxRange: 1200 },
-  torpedo: { speed: 8,  damageMin: 80,  damageMax: 120, lifetime: 150, cooldown: 60, hitRadius: 20, maxRange: 1200 },
-  aa:      { speed: 25, damageMin: 15,  damageMax: 25,  lifetime: 40,  cooldown: 8,  hitRadius: 10, maxRange: 1000 },
-  missile: { speed: 12, damageMin: 60,  damageMax: 90,  lifetime: 200, cooldown: 90, hitRadius: 25, maxRange: 2400 },
+  gun:     { speed: 20, damageMin: 30,  damageMax: 50,  lifetime: 60,  cooldown: 15, hitRadius: 12, maxRange: 1200, maxHeight: 220  },
+  torpedo: { speed: 8,  damageMin: 80,  damageMax: 120, lifetime: 150, cooldown: 60, hitRadius: 20, maxRange: 1200, maxHeight: 0    },
+  aa:      { speed: 25, damageMin: 15,  damageMax: 25,  lifetime: 40,  cooldown: 8,  hitRadius: 10, maxRange: 1000, maxHeight: 130  },
+  missile: { speed: 12, damageMin: 60,  damageMax: 90,  lifetime: 200, cooldown: 90, hitRadius: 25, maxRange: 2400, maxHeight: 450  },
 }
 
 let projectileCounter = 0
@@ -76,6 +77,8 @@ export function fireWeapon(
     weaponType,
     damage,
     lifetime: cfg.lifetime,
+    initialLifetime: cfg.lifetime,
+    maxHeight: cfg.maxHeight,
     destroyed: false,
   }
 

@@ -1,6 +1,6 @@
 import type { CombatState, ShipEntity, Command, SpeedLevel } from './types'
 
-export const WORLD_SIZE = 5000
+export const WORLD_SIZE = 10000
 export const KNOTS_PER_UNIT = 10  // 1 game unit/tick = 10 knots for display
 
 // speed level order from slowest to fastest

@@ -23,6 +23,8 @@ export class CanvasRenderer {
   private ctx: CanvasRenderingContext2D
   private canvas: HTMLCanvasElement
   private iso: IsoParams = { scale: 0.08, ox: 0, oy: 0 }
+  private camX = 5000
+  private camY = 5000
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas
@@ -33,6 +35,11 @@ export class CanvasRenderer {
     window.addEventListener('resize', () => this.resize())
   }
 
+  setCamera(x: number, y: number): void {
+    this.camX = x
+    this.camY = y
+  }
+
   private resize(): void {
     this.canvas.width = window.innerWidth
     this.canvas.height = window.innerHeight
@@ -41,22 +48,24 @@ export class CanvasRenderer {
 
   private recalcIso(): void {
     const W = this.canvas.width
-    const H = this.canvas.height - HUD_TOP - HUD_BOTTOM
-    // diamond width = 2*WORLD_SIZE*scale, height = WORLD_SIZE*scale
-    const scale = Math.min(W / (2 * WORLD_SIZE), H / WORLD_SIZE) * 0.96
+    const contentH = this.canvas.height - HUD_TOP - HUD_BOTTOM
+    // Fixed zoom: show ~4000 world units horizontally
+    const scale = Math.min(W / 4000, contentH / 2000)
     this.iso = {
       scale,
-      ox: W / 2,                                          // world(0,0) → center of diamond top
-      oy: HUD_TOP + (H - WORLD_SIZE * scale) / 2,
+      ox: W / 2,
+      oy: HUD_TOP + contentH / 2,
     }
   }
 
-  // World → screen (isometric: x-axis goes right+down, y-axis goes left+down)
+  // World → screen (camera-relative isometric)
   w2s(wx: number, wy: number): [number, number] {
     const { scale, ox, oy } = this.iso
+    const rx = wx - this.camX
+    const ry = wy - this.camY
     return [
-      ox + (wx - wy) * scale,
-      oy + (wx + wy) * scale * 0.5,
+      ox + (rx - ry) * scale,
+      oy + (rx + ry) * scale * 0.5,
     ]
   }
 
@@ -66,8 +75,8 @@ export class CanvasRenderer {
     const dx = sx - ox
     const dy = sy - oy
     return [
-      (dx / scale + dy / (scale * 0.5)) / 2,
-      (dy / (scale * 0.5) - dx / scale) / 2,
+      (dx / scale + dy / (scale * 0.5)) / 2 + this.camX,
+      (dy / (scale * 0.5) - dx / scale) / 2 + this.camY,
     ]
   }
 
@@ -101,6 +110,11 @@ export class CanvasRenderer {
 
   private renderOcean(): void {
     const { ctx } = this
+    // Full canvas background (ocean beyond world bounds)
+    ctx.fillStyle = '#04111f'
+    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height)
+
+    // World diamond fill
     const corners = [
       this.w2s(0, 0),
       this.w2s(WORLD_SIZE, 0),
@@ -131,8 +145,8 @@ export class CanvasRenderer {
     const { ctx } = this
     ctx.strokeStyle = 'rgba(16,56,100,0.45)'
     ctx.lineWidth = 0.6
-    const step = 500
-    for (let i = step; i < WORLD_SIZE; i += step) {
+    const step = 1000
+    for (let i = 0; i <= WORLD_SIZE; i += step) {
       const [ax, ay] = this.w2s(i, 0)
       const [bx, by] = this.w2s(i, WORLD_SIZE)
       ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke()
@@ -300,7 +314,14 @@ export class CanvasRenderer {
     const { ctx, iso } = this
     const [sx, sy] = this.w2s(proj.pos.x, proj.pos.y)
 
+    // parabolic arc: sin-curve from 0 → peak → 0 over lifetime
+    const progress = proj.initialLifetime > 0
+      ? (proj.initialLifetime - proj.lifetime) / proj.initialLifetime
+      : 0
+    const arcPx = proj.maxHeight * Math.sin(Math.PI * progress) * iso.scale
+
     if (proj.weaponType === 'torpedo') {
+      // torpedoes stay flat (maxHeight=0), draw wake trail
       const [tx, ty] = this.w2s(proj.pos.x - proj.vel.x * 6, proj.pos.y - proj.vel.y * 6)
       ctx.beginPath()
       ctx.moveTo(sx, sy); ctx.lineTo(tx, ty)
@@ -312,21 +333,51 @@ export class CanvasRenderer {
       ctx.fillStyle = '#fb923c'
       ctx.fill()
     } else if (proj.weaponType === 'missile') {
-      // trail
-      const [tx, ty] = this.w2s(proj.pos.x - proj.vel.x * 5, proj.pos.y - proj.vel.y * 5)
+      const elevated = sy - arcPx
+      // shadow on ocean
       ctx.beginPath()
-      ctx.moveTo(sx, sy); ctx.lineTo(tx, ty)
-      ctx.strokeStyle = 'rgba(167,139,250,0.5)'
+      ctx.arc(sx, sy, 2.5 * iso.scale, 0, Math.PI * 2)
+      ctx.fillStyle = 'rgba(0,0,0,0.25)'
+      ctx.fill()
+      // vertical drop line
+      if (arcPx > 2) {
+        ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx, elevated)
+        ctx.strokeStyle = 'rgba(196,181,253,0.2)'
+        ctx.lineWidth = 0.8
+        ctx.stroke()
+      }
+      // smoke trail (to previous position)
+      const [tx, ty] = this.w2s(proj.pos.x - proj.vel.x * 5, proj.pos.y - proj.vel.y * 5)
+      const trailProgress = Math.max(0, progress - 0.08)
+      const trailArcPx = proj.maxHeight * Math.sin(Math.PI * trailProgress) * iso.scale
+      ctx.beginPath()
+      ctx.moveTo(sx, elevated); ctx.lineTo(tx, ty - trailArcPx)
+      ctx.strokeStyle = 'rgba(167,139,250,0.45)'
       ctx.lineWidth = 2
       ctx.stroke()
+      // projectile dot
       ctx.beginPath()
-      ctx.arc(sx, sy, 4 * iso.scale, 0, Math.PI * 2)
+      ctx.arc(sx, elevated, 4 * iso.scale, 0, Math.PI * 2)
       ctx.fillStyle = '#c4b5fd'
       ctx.fill()
     } else {
-      const r = proj.weaponType === 'gun' ? 2.5 : 2
+      // gun or aa: arcing shell
+      const elevated = sy - arcPx
+      const r = proj.weaponType === 'gun' ? 2.5 : 1.8
+      // shadow
       ctx.beginPath()
-      ctx.arc(sx, sy, r * iso.scale, 0, Math.PI * 2)
+      ctx.arc(sx, sy, r * 0.7 * iso.scale, 0, Math.PI * 2)
+      ctx.fillStyle = 'rgba(0,0,0,0.25)'
+      ctx.fill()
+      // drop line
+      if (arcPx > 2) {
+        ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx, elevated)
+        ctx.strokeStyle = 'rgba(255,255,255,0.12)'
+        ctx.lineWidth = 0.6
+        ctx.stroke()
+      }
+      ctx.beginPath()
+      ctx.arc(sx, elevated, r * iso.scale, 0, Math.PI * 2)
       ctx.fillStyle = proj.weaponType === 'gun' ? '#fbbf24' : '#67e8f9'
       ctx.fill()
     }

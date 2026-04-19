@@ -93,7 +93,7 @@ export function createInitialState(): CombatState {
   const player: ShipEntity = {
     kind: 'ship',
     id: 'ship.player',
-    pos: { x: 2500, y: 4200, z: 0 },
+    pos: { x: 5000, y: 9200, z: 0 },
     vel: { x: 0, y: 0, z: 0 },
     angle: -Math.PI / 2,
     hp: 200, maxHp: 200,
@@ -112,23 +112,23 @@ export function createInitialState(): CombatState {
   entities.set(player.id, player)
 
   const destroyers: [string, number, number, number][] = [
-    ['ship.enemy.destroyer.01',  800,  800,  Math.PI / 2],
-    ['ship.enemy.destroyer.02', 1600,  600,  Math.PI / 2],
-    ['ship.enemy.destroyer.03', 2500,  500,  Math.PI / 2],
-    ['ship.enemy.destroyer.04', 3400,  700,  Math.PI / 2],
-    ['ship.enemy.destroyer.05', 4200,  900,  Math.PI],
-    ['ship.enemy.destroyer.06',  600, 2000,  0],
-    ['ship.enemy.destroyer.07', 4400, 2200,  Math.PI],
-    ['ship.enemy.destroyer.08', 1200, 3200,  Math.PI / 2],
+    ['ship.enemy.destroyer.01',  1500,  1200,  Math.PI / 2],
+    ['ship.enemy.destroyer.02',  3500,   900,  Math.PI / 2],
+    ['ship.enemy.destroyer.03',  5000,  1000,  Math.PI / 2],
+    ['ship.enemy.destroyer.04',  6800,  1100,  Math.PI / 2],
+    ['ship.enemy.destroyer.05',  8800,  1600,  Math.PI],
+    ['ship.enemy.destroyer.06',  1000,  4500,  0],
+    ['ship.enemy.destroyer.07',  9200,  4000,  Math.PI],
+    ['ship.enemy.destroyer.08',  2800,  7000,  Math.PI / 2],
   ]
   for (const [id, x, y, angle] of destroyers) {
     entities.set(id, makeDestroyer(id, x, y, angle))
   }
 
   const cruisers: [string, number, number, number][] = [
-    ['ship.enemy.cruiser.01', 2500,  300,  Math.PI / 2],
-    ['ship.enemy.cruiser.02', 1000, 1800,  0],
-    ['ship.enemy.cruiser.03', 4000, 1500,  Math.PI],
+    ['ship.enemy.cruiser.01',  5000,   700,  Math.PI / 2],
+    ['ship.enemy.cruiser.02',  2200,  3200,  0],
+    ['ship.enemy.cruiser.03',  8200,  3000,  Math.PI],
   ]
   for (const [id, x, y, angle] of cruisers) {
     entities.set(id, makeCruiser(id, x, y, angle))

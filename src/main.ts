@@ -7,6 +7,7 @@ import { createRngStreams } from './game/simulation/random'
 import { createInitialState, STATIC_DATA } from './game/data/masterdata'
 import type { CombatState, ShipEntity, WeaponType } from './game/simulation/types'
 import { WORLD_SIZE } from './game/simulation/movement'
+import { SoundSystem } from './game/audio/sounds'
 
 const BASE_SEED = 12345
 
@@ -18,12 +19,14 @@ function main(): void {
   const hud      = new HUD(canvas)
   const input    = new InputAdapter(canvas, renderer)
   const rng      = createRngStreams(BASE_SEED)
+  const sound    = new SoundSystem()
 
   let state: CombatState = createInitialState()
 
   window.addEventListener('keydown', (e) => {
     if (e.code === 'KeyR' && state.missionResult !== 'none') {
       state = createInitialState()
+      sound.reset()
     }
   })
 
@@ -55,8 +58,15 @@ function main(): void {
       state = combatStep(state, commands, rng, STATIC_DATA)
     },
     onRender: (_alpha) => {
+      // Camera follows player
+      const player = state.entities.get('ship.player')
+      if (player && player.kind === 'ship' && !player.destroyed) {
+        renderer.setCamera((player as ShipEntity).pos.x, (player as ShipEntity).pos.y)
+      }
+
       renderer.render(state, input.getWeaponMode())
       hud.render(state, input.getWeaponMode(), WORLD_SIZE)
+      sound.processEvents(state.eventLog, state.tick)
     },
   })
 
