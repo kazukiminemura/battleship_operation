@@ -1,0 +1,143 @@
+import type { ShipEntity, CombatState, Metrics } from '../simulation/types'
+
+export interface ShipTemplate {
+  id: string
+  hp: number
+  maxSpeed: number
+  turnRate: number
+  weapons: WeaponTemplate[]
+}
+
+export interface WeaponTemplate {
+  id: string
+  type: 'gun' | 'torpedo' | 'aa' | 'missile'
+  ammo: number
+}
+
+export interface StaticData {
+  ships: Record<string, ShipTemplate>
+  missionId: string
+}
+
+export const STATIC_DATA: StaticData = {
+  missionId: 'mission.mvp.open_water',
+  ships: {
+    'hull.destroyer.basic': {
+      id: 'hull.destroyer.basic',
+      hp: 200,
+      maxSpeed: 5,   // 50 kt
+      turnRate: 0.04,
+      weapons: [
+        { id: 'weapon.gun.127mm.single',    type: 'gun',     ammo: 60  },
+        { id: 'weapon.torpedo.533mm.basic', type: 'torpedo', ammo: 8   },
+        { id: 'weapon.aa.basic',            type: 'aa',      ammo: 200 },
+        { id: 'weapon.missile.basic',       type: 'missile', ammo: 6   },
+      ],
+    },
+    'hull.enemy.destroyer.basic': {
+      id: 'hull.enemy.destroyer.basic',
+      hp: 80,
+      maxSpeed: 3,   // 30 kt
+      turnRate: 0.05,
+      weapons: [
+        { id: 'weapon.gun.127mm.single', type: 'gun', ammo: 40 },
+      ],
+    },
+    'hull.cruiser.basic': {
+      id: 'hull.cruiser.basic',
+      hp: 150,
+      maxSpeed: 2.5, // 25 kt
+      turnRate: 0.03,
+      weapons: [
+        { id: 'weapon.gun.152mm.single',    type: 'gun',     ammo: 30 },
+        { id: 'weapon.torpedo.533mm.basic', type: 'torpedo', ammo: 12 },
+      ],
+    },
+  },
+}
+
+function makeDestroyer(id: string, x: number, y: number, angle: number): ShipEntity {
+  return {
+    kind: 'ship', id,
+    pos: { x, y, z: 0 }, vel: { x: 0, y: 0, z: 0 },
+    angle, hp: 80, maxHp: 80,
+    speed: 0, targetSpeed: 0, speedLevel: 'stop',
+    maxSpeed: 3, turnRate: 0.05,
+    weapons: [
+      { id: 'weapon.gun.127mm.single', type: 'gun', cooldownTick: 0, ammo: 40, maxAmmo: 40, autoFire: false },
+    ],
+    team: 'enemy', destroyed: false,
+    templateId: 'hull.enemy.destroyer.basic',
+  }
+}
+
+function makeCruiser(id: string, x: number, y: number, angle: number): ShipEntity {
+  return {
+    kind: 'ship', id,
+    pos: { x, y, z: 0 }, vel: { x: 0, y: 0, z: 0 },
+    angle, hp: 150, maxHp: 150,
+    speed: 0, targetSpeed: 0, speedLevel: 'stop',
+    maxSpeed: 2.5, turnRate: 0.03,
+    weapons: [
+      { id: 'weapon.gun.152mm.single',    type: 'gun',     cooldownTick: 0, ammo: 30, maxAmmo: 30, autoFire: false },
+      { id: 'weapon.torpedo.533mm.basic', type: 'torpedo', cooldownTick: 0, ammo: 12, maxAmmo: 12, autoFire: false },
+    ],
+    team: 'enemy', destroyed: false,
+    templateId: 'hull.cruiser.basic',
+  }
+}
+
+export function createInitialState(): CombatState {
+  const entities = new Map<string, ShipEntity>()
+
+  const player: ShipEntity = {
+    kind: 'ship',
+    id: 'ship.player',
+    pos: { x: 2500, y: 4200, z: 0 },
+    vel: { x: 0, y: 0, z: 0 },
+    angle: -Math.PI / 2,
+    hp: 200, maxHp: 200,
+    speed: 0, targetSpeed: 0, speedLevel: 'stop',
+    maxSpeed: 5,    // 50 kt
+    turnRate: 0.04,
+    weapons: [
+      { id: 'weapon.gun.127mm.single',    type: 'gun',     cooldownTick: 0, ammo: 60,  maxAmmo: 60,  autoFire: false },
+      { id: 'weapon.torpedo.533mm.basic', type: 'torpedo', cooldownTick: 0, ammo: 8,   maxAmmo: 8,   autoFire: false },
+      { id: 'weapon.aa.basic',            type: 'aa',      cooldownTick: 0, ammo: 200, maxAmmo: 200, autoFire: false },
+      { id: 'weapon.missile.basic',       type: 'missile', cooldownTick: 0, ammo: 6,   maxAmmo: 6,   autoFire: false },
+    ],
+    team: 'player', destroyed: false,
+    templateId: 'hull.destroyer.basic',
+  }
+  entities.set(player.id, player)
+
+  const destroyers: [string, number, number, number][] = [
+    ['ship.enemy.destroyer.01',  800,  800,  Math.PI / 2],
+    ['ship.enemy.destroyer.02', 1600,  600,  Math.PI / 2],
+    ['ship.enemy.destroyer.03', 2500,  500,  Math.PI / 2],
+    ['ship.enemy.destroyer.04', 3400,  700,  Math.PI / 2],
+    ['ship.enemy.destroyer.05', 4200,  900,  Math.PI],
+    ['ship.enemy.destroyer.06',  600, 2000,  0],
+    ['ship.enemy.destroyer.07', 4400, 2200,  Math.PI],
+    ['ship.enemy.destroyer.08', 1200, 3200,  Math.PI / 2],
+  ]
+  for (const [id, x, y, angle] of destroyers) {
+    entities.set(id, makeDestroyer(id, x, y, angle))
+  }
+
+  const cruisers: [string, number, number, number][] = [
+    ['ship.enemy.cruiser.01', 2500,  300,  Math.PI / 2],
+    ['ship.enemy.cruiser.02', 1000, 1800,  0],
+    ['ship.enemy.cruiser.03', 4000, 1500,  Math.PI],
+  ]
+  for (const [id, x, y, angle] of cruisers) {
+    entities.set(id, makeCruiser(id, x, y, angle))
+  }
+
+  const metrics: Metrics = {
+    result: 'none', durationTicks: 0, playerDamageTaken: 0, playerAmmoSpent: 0,
+    hitCountByWeapon: {}, shotCountByWeapon: {}, damageByWeapon: {}, enemiesDestroyed: 0,
+  }
+
+  return { tick: 0, entities: entities as Map<string, import('../simulation/types').Entity>, eventLog: [], missionResult: 'none', metrics }
+}

@@ -1,0 +1,98 @@
+import type { CombatState, ShipEntity, Command, SpeedLevel } from './types'
+
+export const WORLD_SIZE = 5000
+export const KNOTS_PER_UNIT = 10  // 1 game unit/tick = 10 knots for display
+
+// speed level order from slowest to fastest
+export const SPEED_LEVEL_ORDER: SpeedLevel[] = ['reverse', 'stop', 'slow', 'cruise', 'full']
+
+// target speed (game units/tick) for each level
+// full = 5 units/tick → displayed as 50 kt
+export const SPEED_LEVEL_TARGET: Record<SpeedLevel, number> = {
+  full:    5.0,
+  cruise:  3.5,
+  slow:    1.5,
+  stop:    0.0,
+  reverse: -1.5,
+}
+
+export const SPEED_LEVEL_LABEL: Record<SpeedLevel, string> = {
+  full:    '全速力',
+  cruise:  '巡航',
+  slow:    '微速',
+  stop:    '停止',
+  reverse: '後退',
+}
+
+// acceleration toward targetSpeed per tick
+const ACCEL_RATE = 0.08
+
+export function stepMovement(state: CombatState, dt = 1): CombatState {
+  const entities = new Map(state.entities)
+
+  for (const [id, entity] of entities) {
+    if (entity.kind !== 'ship' || entity.destroyed) continue
+
+    const ship = entity as ShipEntity
+
+    // accelerate speed toward targetSpeed
+    const diff = ship.targetSpeed - ship.speed
+    const step = Math.min(Math.abs(diff), ACCEL_RATE) * Math.sign(diff)
+    const newSpeed = Math.abs(diff) < 0.001 ? ship.targetSpeed : ship.speed + step
+
+    const vx = Math.cos(ship.angle) * newSpeed
+    const vy = Math.sin(ship.angle) * newSpeed
+
+    let px = ship.pos.x + vx * dt
+    let py = ship.pos.y + vy * dt
+    let finalSpeed = newSpeed
+
+    if (px < 0)          { px = 0;          finalSpeed = 0 }
+    if (px > WORLD_SIZE) { px = WORLD_SIZE;  finalSpeed = 0 }
+    if (py < 0)          { py = 0;           finalSpeed = 0 }
+    if (py > WORLD_SIZE) { py = WORLD_SIZE;  finalSpeed = 0 }
+
+    entities.set(id, {
+      ...ship,
+      speed: finalSpeed,
+      vel: { x: Math.cos(ship.angle) * finalSpeed, y: Math.sin(ship.angle) * finalSpeed, z: 0 },
+      pos: { x: px, y: py, z: 0 },
+    })
+  }
+
+  return { ...state, entities }
+}
+
+export function applySpeedUpCommand(ship: ShipEntity): ShipEntity {
+  const idx = SPEED_LEVEL_ORDER.indexOf(ship.speedLevel)
+  const newIdx = Math.min(idx + 1, SPEED_LEVEL_ORDER.length - 1)
+  const newLevel = SPEED_LEVEL_ORDER[newIdx]!
+  return { ...ship, speedLevel: newLevel, targetSpeed: SPEED_LEVEL_TARGET[newLevel] }
+}
+
+export function applySpeedDownCommand(ship: ShipEntity): ShipEntity {
+  const idx = SPEED_LEVEL_ORDER.indexOf(ship.speedLevel)
+  const newIdx = Math.max(idx - 1, 0)
+  const newLevel = SPEED_LEVEL_ORDER[newIdx]!
+  return { ...ship, speedLevel: newLevel, targetSpeed: SPEED_LEVEL_TARGET[newLevel] }
+}
+
+export function applyRotateCommand(ship: ShipEntity, cmd: Command): ShipEntity {
+  if (cmd.type !== 'rotate') return ship
+  const delta = cmd.value ?? 0
+  const clamped = Math.max(-ship.turnRate, Math.min(ship.turnRate, delta))
+  const angle = ship.angle + clamped
+  return { ...ship, angle }
+}
+
+// used by AI: directly sets targetSpeed without changing speedLevel label
+export function applyMoveCommand(ship: ShipEntity, cmd: Command): ShipEntity {
+  if (cmd.type !== 'move') return ship
+  const speed = cmd.value ?? ship.maxSpeed
+  const clamped = Math.min(Math.abs(speed), ship.maxSpeed) * Math.sign(speed)
+  return { ...ship, targetSpeed: clamped }
+}
+
+export function applyStopCommand(ship: ShipEntity): ShipEntity {
+  return { ...ship, targetSpeed: 0, speedLevel: 'stop' }
+}

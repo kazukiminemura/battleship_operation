@@ -1,0 +1,74 @@
+import type { Command, Vec3 } from '../simulation/types'
+import type { WeaponMode } from '../ui/hud'
+import type { CanvasRenderer } from '../rendering/canvas'
+
+export class InputAdapter {
+  private commands: Command[] = []
+  private keys = new Set<string>()
+  private weaponMode: WeaponMode = 'gun'
+  private canvas: HTMLCanvasElement
+  private renderer: CanvasRenderer
+
+  constructor(canvas: HTMLCanvasElement, renderer: CanvasRenderer) {
+    this.canvas = canvas
+    this.renderer = renderer
+    this.bindEvents()
+  }
+
+  getWeaponMode(): WeaponMode {
+    return this.weaponMode
+  }
+
+  private bindEvents(): void {
+    window.addEventListener('keydown', (e) => {
+      this.keys.add(e.code)
+
+      if (e.code === 'Digit1') this.weaponMode = 'gun'
+      if (e.code === 'Digit2') this.weaponMode = 'torpedo'
+      if (e.code === 'Digit3') this.weaponMode = 'aa'
+      if (e.code === 'Digit4') this.weaponMode = 'missile'
+
+      if (!e.repeat) {
+        if (e.code === 'ArrowUp' || e.code === 'KeyW') {
+          this.commands.push({ tick: 0, actorId: 'ship.player', type: 'speed.up' })
+        } else if (e.code === 'ArrowDown' || e.code === 'KeyS') {
+          this.commands.push({ tick: 0, actorId: 'ship.player', type: 'speed.down' })
+        }
+      }
+    })
+    window.addEventListener('keyup', (e) => this.keys.delete(e.code))
+
+    this.canvas.addEventListener('click', (e) => {
+      const rect = this.canvas.getBoundingClientRect()
+      const cx = e.clientX - rect.left
+      const cy = e.clientY - rect.top
+      // use isometric inverse transform from renderer
+      const [wx, wy] = this.renderer.s2w(cx, cy)
+      const target: Vec3 = { x: wx, y: wy, z: 0 }
+
+      const cmdType =
+        this.weaponMode === 'gun'     ? 'fire.primary' :
+        this.weaponMode === 'torpedo' ? 'fire.torpedo'  :
+        this.weaponMode === 'aa'      ? 'fire.aa'       :
+                                        'fire.missile'
+
+      this.commands.push({ tick: 0, actorId: 'ship.player', type: cmdType, target })
+    })
+  }
+
+  pollCommands(tick: number): Command[] {
+    const cmds: Command[] = []
+
+    if (this.keys.has('ArrowLeft') || this.keys.has('KeyA')) {
+      cmds.push({ tick, actorId: 'ship.player', type: 'rotate', value: -0.04 })
+    }
+    if (this.keys.has('ArrowRight') || this.keys.has('KeyD')) {
+      cmds.push({ tick, actorId: 'ship.player', type: 'rotate', value: 0.04 })
+    }
+
+    const queued = this.commands.splice(0)
+    for (const cmd of queued) cmds.push({ ...cmd, tick })
+
+    return cmds
+  }
+}
