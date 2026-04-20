@@ -1,28 +1,10 @@
-import type { BuildingEntity, CombatEvent, CombatState, Entity, MapObstacle, ShipEntity, ProjectileEntity, SpeedLevel, Vec3, WeaponState, WeaponType } from '../simulation/types'
+import type { BuildingEntity, CombatEvent, CombatState, Entity, MapObstacle, ShipEntity, ProjectileEntity, Vec3, WeaponState, WeaponType } from '../simulation/types'
 import { isOnLand, WORLD_SIZE } from '../simulation/movement'
 import { getWeaponConfig } from '../simulation/weapon-strategies'
+import { renderShipExplosions } from './effects-renderer'
 import { renderProjectile as renderProjectileEntity } from './projectile-renderer'
-
-// Ship physical dimensions in world units (length, width, height)
-const SHIP_DIMS: Record<string, { l: number; w: number; h: number }> = {
-  'hull.destroyer.basic':       { l: 145, w: 30, h: 16 },
-  'hull.enemy.destroyer.basic': { l: 90,  w: 20, h: 11 },
-  'hull.cruiser.basic':         { l: 165, w: 36, h: 22 },
-  'hull.cruiser.player':        { l: 205, w: 48, h: 29 },
-  'hull.battleship.basic':      { l: 285, w: 68, h: 42 },
-  'hull.enemy.boss.dreadnought': { l: 340, w: 82, h: 54 },
-}
-
-type ShipShapeClass = 'destroyer' | 'cruiser' | 'battleship' | 'boss'
-
-const SHIP_SHAPES: Record<string, ShipShapeClass> = {
-  'hull.destroyer.basic': 'destroyer',
-  'hull.enemy.destroyer.basic': 'destroyer',
-  'hull.cruiser.basic': 'cruiser',
-  'hull.cruiser.player': 'cruiser',
-  'hull.battleship.basic': 'battleship',
-  'hull.enemy.boss.dreadnought': 'boss',
-}
+import { SHIP_DIMS, SHIP_SHAPES, type ShipShapeClass } from './ship-rendering-data'
+import { ShipWakeRenderer } from './wake-renderer'
 
 // Isometric projection parameters
 interface IsoParams {
@@ -34,17 +16,6 @@ interface IsoParams {
 const HUD_TOP    = 134
 const HUD_BOTTOM = 32
 
-interface ShipWakePoint {
-  x: number
-  y: number
-  angle: number
-  speed: number
-  speedRatio: number
-  speedLevel: SpeedLevel
-  turn: number
-  tick: number
-}
-
 export class CanvasRenderer {
   private ctx: CanvasRenderingContext2D
   private canvas: HTMLCanvasElement
@@ -54,10 +25,7 @@ export class CanvasRenderer {
   // イベントはシミュレーション毎ティック消去されるためレンダラー側で蓄積
   private effectLog: CombatEvent[] = []
   private effectKeys = new Set<string>()
-  private shipWakeHistory = new Map<string, ShipWakePoint[]>()
-  private static readonly WAKE_HISTORY = 55
-  private static readonly WAKE_RECORD_INTERVAL = 2
-  private wakeSprites: WakeSprites | null = null
+  private shipWakeRenderer = new ShipWakeRenderer()
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas
@@ -145,7 +113,7 @@ export class CanvasRenderer {
       .filter(e => e.kind === 'ship' && !(e as ShipEntity).destroyed) as ShipEntity[])
       .sort((a, b) => a.pos.y - b.pos.y)
 
-    this.updateShipWakes(ships, state.tick)
+    this.shipWakeRenderer.update(ships, state.tick)
 
     const projectiles = [...state.entities.values()]
       .filter(e => e.kind === 'projectile' && !(e as ProjectileEntity).destroyed) as ProjectileEntity[]
@@ -158,10 +126,10 @@ export class CanvasRenderer {
     for (const b of buildings)   this.renderBuilding(b)
     for (const p of projectiles) this.renderProjectile(p)
     this.renderMuzzleBursts(this.effectLog, state.tick)
-    this.renderShipWakes(ships, state.tick)
+    this.shipWakeRenderer.render(this.ctx, this.iso, this.w2s.bind(this), ships, state.tick)
     for (const s of ships)       this.renderShip(s, state.tick)
     this.renderLandDust(this.effectLog, state.tick, state.entities, state.mapObstacles)
-    this.renderShipExplosions(this.effectLog, state.tick, state.entities)
+    renderShipExplosions(this.ctx, this.iso, this.w2s.bind(this), this.effectLog, state.tick, state.entities)
 
     if (selectedWeapon && aimPoint) {
       const player = state.entities.get('ship.player') as ShipEntity | undefined
@@ -175,7 +143,6 @@ export class CanvasRenderer {
 
   private static readonly SPLASH_TICKS = 40
   private static readonly DUST_TICKS = 46
-  private static readonly EXPLOSION_TICKS = 50
 
   private renderWaterSplashes(events: CombatEvent[], tick: number, obstacles: readonly MapObstacle[]): void {
     const { ctx } = this
@@ -477,122 +444,6 @@ export class CanvasRenderer {
         ctx.arc(px, pyBase - lift, r, 0, Math.PI * 2)
         ctx.fillStyle = i % 3 === 0 ? `rgba(64,58,51,${alpha})` : `rgba(153,126,90,${alpha})`
         ctx.fill()
-      }
-    }
-  }
-
-  // ── ship explosions ───────────────────────────────────────────────────────
-
-  private renderShipExplosions(events: CombatEvent[], tick: number, entities: Map<string, Entity>): void {
-    const { ctx } = this
-    const D = CanvasRenderer.EXPLOSION_TICKS
-
-    for (const ev of events) {
-      if (ev.type !== 'weapon.hit' || !ev.position || !ev.targetId) continue
-      const target = entities.get(ev.targetId)
-      if (target?.kind !== 'ship') continue
-
-      const age = tick - ev.tick
-      if (age < 0 || age >= D) continue
-
-      const t = age / D
-      const pos = ev.position
-      const wtype = weaponTypeFromId(ev.weaponId)
-      const s = this.iso.scale
-      const [cx, cy] = this.w2s(pos.x, pos.y)
-      const maxR = impactWorldRadius(wtype) * (wtype === 'torpedo' ? 0.95 : 0.72)
-
-      // ── 1. 初期フラッシュ（白→橙→赤） ────────────────────────────────────
-      if (t < 0.22) {
-        const ft = t / 0.22
-        ctx.save()
-        ctx.translate(cx, cy)
-        ctx.scale(1.5, 0.65)
-        const flashR = maxR * s * (0.22 + ft * 1.10)
-        const flash = ctx.createRadialGradient(0, 0, 0, 0, 0, flashR)
-        flash.addColorStop(0,    `rgba(255,255,255,${(1 - ft) * 1.0})`)
-        flash.addColorStop(0.20, `rgba(255,240,180,${(1 - ft) * 0.95})`)
-        flash.addColorStop(0.50, `rgba(255,160,40,${(1 - ft) * 0.80})`)
-        flash.addColorStop(0.80, `rgba(220,60,20,${(1 - ft) * 0.50})`)
-        flash.addColorStop(1,    'rgba(180,40,10,0)')
-        ctx.beginPath()
-        ctx.arc(0, 0, flashR, 0, Math.PI * 2)
-        ctx.fillStyle = flash
-        ctx.fill()
-        ctx.restore()
-      }
-
-      // ── 2. 火球（中期まで残る）────────────────────────────────────────────
-      if (t < 0.50) {
-        const bt = t / 0.50
-        ctx.save()
-        ctx.translate(cx, cy)
-        ctx.scale(1.4, 0.60)
-        const ballR = maxR * s * (0.55 + bt * 0.35) * (1 - bt * 0.25)
-        const ball = ctx.createRadialGradient(0, 0, 0, 0, 0, Math.max(1, ballR))
-        ball.addColorStop(0,    `rgba(255,230,100,${(1 - bt) * 0.90})`)
-        ball.addColorStop(0.40, `rgba(255,110,20,${(1 - bt) * 0.82})`)
-        ball.addColorStop(0.78, `rgba(180,40,10,${(1 - bt) * 0.55})`)
-        ball.addColorStop(1,    'rgba(100,20,5,0)')
-        ctx.beginPath()
-        ctx.arc(0, 0, Math.max(1, ballR), 0, Math.PI * 2)
-        ctx.fillStyle = ball
-        ctx.fill()
-        ctx.restore()
-      }
-
-      // ── 3. 炎スパイク放射 ────────────────────────────────────────────────
-      const spikes = wtype === 'torpedo' ? 14 : wtype === 'secondary' ? 10 : 12
-      if (t < 0.40) {
-        const st = t / 0.40
-        ctx.save()
-        ctx.translate(cx, cy)
-        ctx.beginPath()
-        for (let i = 0; i < spikes; i++) {
-          const a = (i / spikes) * Math.PI * 2 + signedNoise(pos.x, pos.y, i + 301) * 0.18
-          const r1 = maxR * s * (0.18 + st * 0.22)
-          const r2 = maxR * s * (0.42 + st * (0.60 + Math.abs(signedNoise(pos.y, pos.x, i + 313)) * 0.28))
-          const x1 = Math.cos(a) * r1;  const y1 = Math.sin(a) * r1 * 0.58
-          const x2 = Math.cos(a) * r2;  const y2 = Math.sin(a) * r2 * 0.58
-          i === 0 ? ctx.moveTo(x1, y1) : ctx.lineTo(x1, y1)
-          ctx.lineTo(x2, y2)
-        }
-        ctx.closePath()
-        ctx.fillStyle = `rgba(255,140,40,${(1 - st) * 0.72})`
-        ctx.fill()
-        ctx.restore()
-      }
-
-      // ── 4. 煙パーティクル（中後期まで持続）──────────────────────────────
-      const smokeCount = wtype === 'torpedo' ? 24 : wtype === 'secondary' ? 16 : 20
-      for (let i = 0; i < smokeCount; i++) {
-        const n = Math.abs(signedNoise(pos.x, pos.y, i + 340))
-        const a = (i / smokeCount) * Math.PI * 2 + signedNoise(pos.y, pos.x, i + 353) * 0.8
-        const spread = maxR * (0.10 + n * 0.85) * Math.min(1, t * 1.8)
-        const [px, pyBase] = this.w2s(pos.x + Math.cos(a) * spread, pos.y + Math.sin(a) * spread)
-        const lift = maxR * s * (0.30 + n * 0.95) * Math.sin(Math.PI * Math.min(1, t * 1.1))
-        const r = Math.max(2.0, maxR * s * (0.034 + n * 0.072) * (1 - t * 0.15))
-        const alpha = Math.max(0, (1 - t) * (0.40 + n * 0.30))
-        ctx.beginPath()
-        ctx.arc(px, pyBase - lift, r, 0, Math.PI * 2)
-        ctx.fillStyle = t < 0.35
-          ? (i % 3 === 0 ? `rgba(200,120,30,${alpha})` : `rgba(160,80,20,${alpha * 0.85})`)
-          : (i % 4 === 0 ? `rgba(34,31,28,${alpha})`   : `rgba(80,70,62,${alpha * 0.82})`)
-        ctx.fill()
-      }
-
-      // ── 5. 衝撃波リング ──────────────────────────────────────────────────
-      if (t < 0.90) {
-        const rt = t / 0.90
-        ctx.save()
-        ctx.translate(cx, cy)
-        ctx.scale(1.55, 0.62)
-        ctx.beginPath()
-        ctx.arc(0, 0, maxR * s * (0.20 + rt * 1.20), 0, Math.PI * 2)
-        ctx.strokeStyle = `rgba(255,200,100,${(1 - rt) * 0.55})`
-        ctx.lineWidth = Math.max(0.8, maxR * s * 0.022 * (1 - rt))
-        ctx.stroke()
-        ctx.restore()
       }
     }
   }
@@ -914,138 +765,6 @@ export class CanvasRenderer {
     ctx.strokeStyle = lerpHex(top, '#ffffff', 0.25)
     ctx.lineWidth = 0.8
     ctx.stroke()
-  }
-
-  // ── ship wakes ─────────────────────────────────────────────────────────────
-
-  private updateShipWakes(ships: ShipEntity[], tick: number): void {
-    const alive = new Set<string>()
-    for (const ship of ships) {
-      alive.add(ship.id)
-      if (tick % CanvasRenderer.WAKE_RECORD_INTERVAL !== 0) continue
-      let hist = this.shipWakeHistory.get(ship.id)
-      if (!hist) { hist = []; this.shipWakeHistory.set(ship.id, hist) }
-      const previous = hist[hist.length - 1]
-      const turn = previous ? normalizeAngle(ship.angle - previous.angle) : 0
-      const speedRatio = ship.maxSpeed > 0 ? Math.min(1.35, Math.abs(ship.speed / ship.maxSpeed)) : 0
-      hist.push({
-        x: ship.pos.x,
-        y: ship.pos.y,
-        angle: ship.angle,
-        speed: ship.speed,
-        speedRatio,
-        speedLevel: ship.speedLevel,
-        turn,
-        tick,
-      })
-      if (hist.length > CanvasRenderer.WAKE_HISTORY) hist.shift()
-    }
-    for (const id of this.shipWakeHistory.keys()) {
-      if (!alive.has(id)) this.shipWakeHistory.delete(id)
-    }
-  }
-
-  private renderShipWakes(ships: ShipEntity[], tick: number): void {
-    const { ctx, iso } = this
-    if (!this.wakeSprites) this.wakeSprites = buildWakeSprites()
-    const sp = this.wakeSprites
-
-    for (const ship of ships) {
-      const dim = SHIP_DIMS[ship.templateId] ?? { l: 100, w: 22, h: 12 }
-      const hist = this.shipWakeHistory.get(ship.id)
-      const cosA = Math.cos(ship.angle)
-      const sinA = Math.sin(ship.angle)
-
-      // Screen-space forward direction angle for sprite rotation
-      const svx = (cosA - sinA) * iso.scale
-      const svy = (cosA + sinA) * iso.scale * 0.5
-      const screenAngle = Math.atan2(svy, svx)
-
-      // ── 1. Bow wave sprite ─────────────────────────────────────────────
-      const speedF = Math.min(1, ship.speed / 5)
-      if (speedF > 0.08) {
-        const bowX = ship.pos.x + cosA * dim.l * 0.50
-        const bowY = ship.pos.y + sinA * dim.l * 0.50
-        const [bsx, bsy] = this.w2s(bowX, bowY)
-        const sprW = dim.l * iso.scale * 1.05
-        const sprH = dim.w * iso.scale * 2.30
-
-        ctx.save()
-        ctx.translate(bsx, bsy)
-        ctx.rotate(screenAngle)
-        ctx.globalAlpha = speedF * 0.55
-        // Sprite apex is at right edge; draw so it aligns with bow position
-        ctx.drawImage(sp.bowWave, -sprW, -sprH / 2, sprW, sprH)
-        ctx.globalAlpha = 1
-        ctx.restore()
-      }
-
-      // ── 2. Wake trail foam sprites (from position history) ─────────────
-      if (hist && hist.length >= 2) {
-        const maxAge = CanvasRenderer.WAKE_HISTORY * CanvasRenderer.WAKE_RECORD_INTERVAL
-
-        for (let i = 0; i < hist.length; i++) {
-          const h = hist[i]!
-          const age = tick - h.tick
-          if (age <= 0 || age > maxAge) continue
-
-          const sf = Math.min(1, Math.max(Math.abs(h.speed) / 5, h.speedRatio * 0.85))
-          if (sf < 0.04) continue
-          const speedProfile = wakeSpeedProfile(h.speedLevel, sf)
-          if (speedProfile.alpha <= 0) continue
-
-          const t = age / maxAge
-          const phase = tick * 0.24 + i * 1.73 + ship.id.length
-          const shimmer = 0.72 + Math.sin(phase) * 0.28
-          const turnF = Math.min(1, Math.abs(h.turn) / 0.065)
-          const outsideSign = h.turn === 0 ? 0 : -Math.sign(h.turn)
-          const turnFalloff = Math.max(0, 1 - t * 1.35)
-          const outsideDrift = outsideSign * turnF * dim.w * (0.65 + t * 1.35) * turnFalloff
-          const alpha = (1 - t) * speedProfile.alpha * 0.46 * shimmer * (1 + turnF * 0.18)
-          const spread = dim.w * (0.30 + t * 1.75 + Math.sin(phase * 0.7) * 0.08) * speedProfile.spread * (1 + turnF * 0.22 * turnFalloff)
-          const drift = Math.sin(phase * 1.17) * dim.w * 0.16 * (1 - t)
-          const aftDrift = Math.cos(phase * 0.83) * dim.w * 0.08 * (1 - t)
-
-          const hCosA = Math.cos(h.angle)
-          const hSinA = Math.sin(h.angle)
-          const hSvx = (hCosA - hSinA) * iso.scale
-          const hSvy = (hCosA + hSinA) * iso.scale * 0.5
-          const hScreenAngle = Math.atan2(hSvy, hSvx)
-          const centerDrift = drift + outsideDrift
-          const sternX = h.x - hCosA * (dim.l * 0.48 + aftDrift) + hSinA * centerDrift
-          const sternY = h.y - hSinA * (dim.l * 0.48 + aftDrift) - hCosA * centerDrift
-
-          const [px, py] = this.w2s(sternX + hSinA * spread, sternY - hCosA * spread)
-          const [sx, sy] = this.w2s(sternX - hSinA * spread, sternY + hCosA * spread)
-
-          const foamSpr = t < 0.38 ? sp.foamLg : sp.foamSm
-          const pulse = 0.86 + Math.sin(phase * 1.9) * 0.14
-          const dotSize = Math.max(2, dim.w * iso.scale * (t < 0.38 ? 0.30 : 0.16) * (1 - t * 0.38) * pulse * speedProfile.size)
-          const portAlpha = alpha * (outsideSign > 0 ? 1 + turnF * 0.38 : 1 - turnF * 0.18)
-          const starboardAlpha = alpha * (outsideSign < 0 ? 1 + turnF * 0.38 : 1 - turnF * 0.18)
-
-          ctx.save()
-          ctx.globalAlpha = Math.max(0, portAlpha)
-          ctx.drawImage(foamSpr, px - dotSize / 2, py - dotSize / 2, dotSize, dotSize)
-          ctx.globalAlpha = Math.max(0, starboardAlpha)
-          ctx.drawImage(foamSpr, sx - dotSize / 2, sy - dotSize / 2, dotSize, dotSize)
-
-          // Stern wash sprite for the most recent positions
-          if (t < 0.28) {
-            const [cx2, cy2] = this.w2s(sternX, sternY)
-            const ct = t / 0.28
-            const washSize = Math.max(4, dim.w * iso.scale * (0.58 + Math.sin(phase * 2.1) * 0.08) * (1 - ct) * speedProfile.wash)
-            ctx.globalAlpha = (1 - ct) * speedProfile.alpha * 0.44
-            ctx.translate(cx2, cy2)
-            ctx.rotate(hScreenAngle + Math.sin(phase) * 0.18 + outsideSign * turnF * 0.26)
-            ctx.drawImage(sp.sternWash, -washSize / 2, -washSize / 2, washSize, washSize)
-          }
-
-          ctx.globalAlpha = 1
-          ctx.restore()
-        }
-      }
-    }
   }
 
   // ── ship ───────────────────────────────────────────────────────────────────
@@ -1486,129 +1205,6 @@ function weaponTypeFromId(weaponId: string | undefined): WeaponType {
   if (weaponId.includes('secondary')) return 'secondary'
   if (weaponId.includes('aa')) return 'aa'
   return 'gun'
-}
-
-function normalizeAngle(angle: number): number {
-  let a = angle
-  while (a > Math.PI) a -= Math.PI * 2
-  while (a < -Math.PI) a += Math.PI * 2
-  return a
-}
-
-function wakeSpeedProfile(level: SpeedLevel, speedRatio: number): { alpha: number; size: number; spread: number; wash: number } {
-  const moving = Math.max(0, speedRatio)
-  const levelProfile: Record<SpeedLevel, { alpha: number; size: number; spread: number; wash: number }> = {
-    full:    { alpha: 1.34, size: 1.22, spread: 1.26, wash: 1.32 },
-    cruise:  { alpha: 1.00, size: 1.00, spread: 1.00, wash: 1.00 },
-    slow:    { alpha: 0.58, size: 0.82, spread: 0.72, wash: 0.62 },
-    stop:    { alpha: 0.00, size: 0.00, spread: 0.00, wash: 0.00 },
-    reverse: { alpha: 0.34, size: 0.72, spread: 0.64, wash: 0.48 },
-  }
-  const profile = levelProfile[level]
-  const motion = 0.45 + moving * 0.65
-  return {
-    alpha: profile.alpha * motion,
-    size: profile.size * (0.80 + moving * 0.28),
-    spread: profile.spread * (0.82 + moving * 0.30),
-    wash: profile.wash * (0.78 + moving * 0.36),
-  }
-}
-
-// ── wake sprite generation ────────────────────────────────────────────────────
-
-interface WakeSprites {
-  bowWave: OffscreenCanvas    // 200×80, V-wave apex at right-center; trails to the left
-  foamLg: OffscreenCanvas     // 24×24 soft foam dot (recent trail)
-  foamSm: OffscreenCanvas     // 12×12 soft foam dot (older trail)
-  sternWash: OffscreenCanvas  // 56×56 stern turbulence cloud
-}
-
-function buildWakeSprites(): WakeSprites {
-  // ── bow wave (200×80) ──────────────────────────────────────────────────
-  const BW = 200, BH = 80
-  const bowOC = new OffscreenCanvas(BW, BH)
-  const bowCtx = bowOC.getContext('2d')!
-  const apexX = BW, apexY = BH / 2
-
-  for (const side of [-1, 1]) {
-    const grad = bowCtx.createLinearGradient(apexX, apexY, 0, apexY + side * BH * 0.46)
-    grad.addColorStop(0, 'rgba(255,255,255,0.64)')
-    grad.addColorStop(0.35, 'rgba(230,248,255,0.40)')
-    grad.addColorStop(1, 'rgba(200,240,255,0)')
-    bowCtx.beginPath()
-    for (let i = 0; i <= 22; i++) {
-      const t = i / 22
-      const x = apexX - BW * t
-      const y = apexY + side * BH * 0.34 * Math.pow(t, 1.45)
-      i === 0 ? bowCtx.moveTo(x, y) : bowCtx.lineTo(x, y)
-    }
-    bowCtx.strokeStyle = grad
-    bowCtx.lineWidth = Math.max(1.2, BH * 0.032)
-    bowCtx.lineCap = 'round'
-    bowCtx.stroke()
-
-    for (let i = 3; i <= 20; i += 2) {
-      const t = i / 22
-      const x = apexX - BW * t
-      const y = apexY + side * BH * 0.34 * Math.pow(t, 1.45)
-      const r = Math.max(0.5, BH * 0.018 * (1 - t * 0.5))
-      bowCtx.beginPath()
-      bowCtx.arc(x, y, r, 0, Math.PI * 2)
-      bowCtx.fillStyle = `rgba(255,255,255,${0.36 * (1 - t * 0.6)})`
-      bowCtx.fill()
-    }
-  }
-
-  const apexGrad = bowCtx.createRadialGradient(apexX, apexY, 0, apexX, apexY, BH * 0.32)
-  apexGrad.addColorStop(0, 'rgba(255,255,255,0.42)')
-  apexGrad.addColorStop(0.5, 'rgba(230,248,255,0.18)')
-  apexGrad.addColorStop(1, 'rgba(200,240,255,0)')
-  bowCtx.beginPath()
-  bowCtx.arc(apexX, apexY, BH * 0.32, 0, Math.PI * 2)
-  bowCtx.fillStyle = apexGrad
-  bowCtx.fill()
-
-  // ── large foam dot (24×24) ─────────────────────────────────────────────
-  const foamLgOC = new OffscreenCanvas(24, 24)
-  const flCtx = foamLgOC.getContext('2d')!
-  const flGrad = flCtx.createRadialGradient(12, 12, 0, 12, 12, 12)
-  flGrad.addColorStop(0, 'rgba(255,255,255,0.90)')
-  flGrad.addColorStop(0.45, 'rgba(220,245,255,0.60)')
-  flGrad.addColorStop(1, 'rgba(200,240,255,0)')
-  flCtx.beginPath(); flCtx.arc(12, 12, 12, 0, Math.PI * 2)
-  flCtx.fillStyle = flGrad; flCtx.fill()
-
-  // ── small foam dot (12×12) ─────────────────────────────────────────────
-  const foamSmOC = new OffscreenCanvas(12, 12)
-  const fsCtx = foamSmOC.getContext('2d')!
-  const fsGrad = fsCtx.createRadialGradient(6, 6, 0, 6, 6, 6)
-  fsGrad.addColorStop(0, 'rgba(255,255,255,0.88)')
-  fsGrad.addColorStop(0.5, 'rgba(210,242,255,0.55)')
-  fsGrad.addColorStop(1, 'rgba(200,240,255,0)')
-  fsCtx.beginPath(); fsCtx.arc(6, 6, 6, 0, Math.PI * 2)
-  fsCtx.fillStyle = fsGrad; fsCtx.fill()
-
-  // ── stern wash (56×56) ────────────────────────────────────────────────
-  const sternOC = new OffscreenCanvas(56, 56)
-  const stCtx = sternOC.getContext('2d')!
-  const stGrad = stCtx.createRadialGradient(28, 28, 0, 28, 28, 28)
-  stGrad.addColorStop(0, 'rgba(255,255,255,0.85)')
-  stGrad.addColorStop(0.30, 'rgba(220,248,255,0.60)')
-  stGrad.addColorStop(0.65, 'rgba(190,235,255,0.25)')
-  stGrad.addColorStop(1, 'rgba(180,230,255,0)')
-  stCtx.beginPath(); stCtx.arc(28, 28, 28, 0, Math.PI * 2)
-  stCtx.fillStyle = stGrad; stCtx.fill()
-  for (let i = 0; i < 8; i++) {
-    const a = (i / 8) * Math.PI * 2
-    stCtx.beginPath()
-    stCtx.moveTo(28, 28)
-    stCtx.lineTo(28 + Math.cos(a) * 22, 28 + Math.sin(a) * 22)
-    stCtx.strokeStyle = `rgba(255,255,255,${0.20 + (i % 3) * 0.06})`
-    stCtx.lineWidth = 1.2
-    stCtx.stroke()
-  }
-
-  return { bowWave: bowOC, foamLg: foamLgOC, foamSm: foamSmOC, sternWash: sternOC }
 }
 
 function combatEventEffectKey(ev: CombatEvent): string {

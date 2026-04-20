@@ -133,3 +133,21 @@
 - performance smoke
 - manual QA notes
 
+## Continuous Refactoring Gate
+
+機能追加と同じ扱いで、SOLID 原則に基づく構造改善を継続する。
+
+確認項目:
+
+- 新しい機能が既存の巨大 class へ直接追加されていない
+- 変更理由ごとに module が分かれている
+- rendering、audio、input が simulation に逆依存していない
+- strategy table または小さな interface で拡張できる
+- `npm run typecheck`, `npm run test`, `npm run build`, `npm run test:e2e` が通る
+
+優先候補:
+
+1. 水柱と陸上砂煙を `effects-renderer` へ移す
+2. 船体描画を `ship-renderer` へ移す
+3. `RenderContext` を定義して renderer module の引数を整理する
+4. event type と effect renderer の対応を registry 化する

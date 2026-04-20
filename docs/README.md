@@ -15,6 +15,7 @@
 - [product-brief.md](./product-brief.md): ゲームの体験目標、スコープ、主要ループ
 - [harness-engineering.md](./harness-engineering.md): ハーネスエンジニアリング方針
 - [simulation-contracts.md](./simulation-contracts.md): シミュレーションの決定性、tick、乱数、イベント契約
+- [solid-refactoring.md](./solid-refactoring.md): SOLID 原則に基づく責務分離とリファクタリング手順
 - [test-strategy.md](./test-strategy.md): テスト階層、CI、ゴールデンリプレイ、E2E
 - [data-and-fixtures.md](./data-and-fixtures.md): マスターデータ、fixture、シナリオデータ管理
 - [roadmap.md](./roadmap.md): 実装ロードマップと検証ゲート
@@ -26,4 +27,4 @@
 3. 兵装、艦船、ミッションはデータ駆動で定義する。
 4. テストは「楽しいか」だけでなく「壊れた場所を特定できるか」を重視する。
 5. Web ブラウザ差異、フレームレート差、入力遅延を前提にハーネスを用意する。
-
+6. SOLID 原則に基づき、変更理由ごとに module を分ける。

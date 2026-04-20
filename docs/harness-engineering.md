@@ -96,6 +96,8 @@ docs/
 
 ## 実装上の境界
 
+境界設計は [solid-refactoring.md](./solid-refactoring.md) の SOLID 方針に従う。特に大きくなりやすい rendering、audio、input は、ハーネスから観測しやすい小さな module に分ける。
+
 ### Pure Core
 
 戦闘計算、移動、命中判定、AI decision は可能な限り pure function に寄せる。
@@ -116,6 +118,14 @@ docs/
 ### Impure Shell
 
 ブラウザ API、描画、音、ネットワーク、ストレージ、時刻は shell 側に閉じ込める。テストでは fake adapter に差し替える。
+
+shell 側でも責務を混ぜない。例として rendering は以下のように分割する。
+
+- `CanvasRenderer`: 描画順序、camera、projection
+- `projectile-renderer`: 弾種ごとの見た目と軌道
+- `wake-renderer`: 航跡履歴と航跡描画
+- `effects-renderer`: 着弾、爆発、煙などの演出
+- `ship-rendering-data`: 見た目専用の艦寸法と形状分類
 
 ### Event Log First
 
@@ -144,4 +154,3 @@ UI は event log を見て演出できるが、勝敗判定は simulation state 
 - 主要データ変更時に balance report が生成される
 - E2E 失敗時に screenshot、trace、event log が残る
 - リリース候補は golden replay の差分レビューを通る
-
