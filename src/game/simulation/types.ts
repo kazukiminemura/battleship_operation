@@ -1,5 +1,15 @@
 export type Vec3 = { x: number; y: number; z: number }
 
+export const MAX_WEAPON_SLOTS = 8
+
+export interface MapObstacle {
+  id: string
+  x: number
+  y: number
+  rx: number
+  ry: number
+}
+
 export type WeaponType = 'gun' | 'secondary' | 'torpedo' | 'aa' | 'missile'
 
 export type EntityType = 'ship' | 'projectile' | 'torpedo' | 'objective' | 'building'
@@ -8,6 +18,7 @@ export type SpeedLevel = 'full' | 'cruise' | 'slow' | 'stop' | 'reverse'
 
 export interface WeaponState {
   id: string
+  name: string
   type: WeaponType
   cooldownTick: number
   ammo: number
@@ -40,6 +51,7 @@ export interface ProjectileEntity {
   pos: Vec3
   vel: Vec3
   ownerId: string
+  weaponId?: string
   weaponType: WeaponType
   damage: number
   lifetime: number
@@ -70,6 +82,10 @@ export type Entity = ShipEntity | ProjectileEntity | ObjectiveEntity | BuildingE
 
 export interface CombatState {
   tick: number
+  stage: number
+  stageName: string
+  maxStage: number
+  mapObstacles: MapObstacle[]
   entities: Map<string, Entity>
   eventLog: CombatEvent[]
   missionResult: 'none' | 'completed' | 'failed'
@@ -79,6 +95,7 @@ export interface CombatState {
 export type CommandType =
   | 'move' | 'rotate' | 'stop'
   | 'speed.up' | 'speed.down'
+  | 'fire.slot'
   | 'fire.primary' | 'fire.secondary' | 'fire.torpedo' | 'fire.aa' | 'fire.missile'
 
 export interface Command {
@@ -108,6 +125,7 @@ export interface CombatEvent {
   weaponId?: string
   damage?: number
   position?: Vec3
+  targetPosition?: Vec3
 }
 
 export interface Metrics {

@@ -1,6 +1,6 @@
 import type { CombatState, ShipEntity, Command } from './types'
 import type { SeededRandom } from './random'
-import { WEAPON_CONFIGS } from './weapon-strategies'
+import { getWeaponConfig, WEAPON_CONFIGS } from './weapon-strategies'
 
 // AI keeps this margin inside weapon maxRange before firing
 const RANGE_MARGIN = 0.85
@@ -34,13 +34,13 @@ export function generateAiCommands(state: CombatState, rng: SeededRandom): Comma
     }
 
     if (enemy.templateId === 'hull.enemy.destroyer.basic') {
-      const gunRange = WEAPON_CONFIGS.gun.maxRange * RANGE_MARGIN
+      const gun = enemy.weapons.find(w => w.type === 'gun')
+      const gunRange = gun ? getWeaponConfig(gun.id, gun.type).maxRange * RANGE_MARGIN : 0
 
       if (dist > gunRange) {
         commands.push({ tick: state.tick, actorId: enemy.id, type: 'move', value: enemy.maxSpeed })
       } else {
         commands.push({ tick: state.tick, actorId: enemy.id, type: 'stop' })
-        const gun = enemy.weapons.find(w => w.type === 'gun')
         if (gun && gun.cooldownTick === 0 && gun.ammo > 0) {
           const spread = rng.nextFloat(-30, 30)
           commands.push({
@@ -49,9 +49,9 @@ export function generateAiCommands(state: CombatState, rng: SeededRandom): Comma
           })
         }
       }
-    } else if (enemy.templateId === 'hull.cruiser.basic') {
+    } else if (enemy.templateId === 'hull.cruiser.basic' || enemy.templateId === 'hull.enemy.boss.dreadnought') {
       const torpRange    = WEAPON_CONFIGS.torpedo.maxRange * RANGE_MARGIN
-      const preferredDist = torpRange * 0.7  // preferred combat distance
+      const preferredDist = enemy.templateId === 'hull.enemy.boss.dreadnought' ? 1900 : torpRange * 0.7
 
       if (dist > preferredDist + 100) {
         commands.push({ tick: state.tick, actorId: enemy.id, type: 'move', value: enemy.maxSpeed })
@@ -61,32 +61,22 @@ export function generateAiCommands(state: CombatState, rng: SeededRandom): Comma
         commands.push({ tick: state.tick, actorId: enemy.id, type: 'stop' })
       }
 
-      if (dist <= torpRange) {
-        const torpedo = enemy.weapons.find(w => w.type === 'torpedo')
-        if (torpedo && torpedo.cooldownTick === 0 && torpedo.ammo > 0) {
+      for (let slot = 0; slot < enemy.weapons.length; slot++) {
+        const weapon = enemy.weapons[slot]!
+        if (weapon.cooldownTick > 0 || weapon.ammo <= 0) continue
+        const range = getWeaponConfig(weapon.id, weapon.type).maxRange * RANGE_MARGIN
+        if (dist > range) continue
+
+        if (weapon.type === 'torpedo') {
           commands.push({
-            tick: state.tick, actorId: enemy.id, type: 'fire.torpedo',
+            tick: state.tick, actorId: enemy.id, type: 'fire.slot', value: slot,
             target: { x: player.pos.x, y: player.pos.y, z: 0 },
           })
-        }
-      }
-      const gunRange = WEAPON_CONFIGS.gun.maxRange * RANGE_MARGIN
-      if (dist <= gunRange) {
-        const gun = enemy.weapons.find(w => w.type === 'gun')
-        if (gun && gun.cooldownTick === 0 && gun.ammo > 0) {
+        } else {
+          const spread = enemy.templateId === 'hull.enemy.boss.dreadnought' ? rng.nextFloat(-45, 45) : 0
           commands.push({
-            tick: state.tick, actorId: enemy.id, type: 'fire.primary',
-            target: { x: player.pos.x, y: player.pos.y, z: 0 },
-          })
-        }
-      }
-      const secRange = WEAPON_CONFIGS.secondary.maxRange * RANGE_MARGIN
-      if (dist <= secRange) {
-        const sec = enemy.weapons.find(w => w.type === 'secondary')
-        if (sec && sec.cooldownTick === 0 && sec.ammo > 0) {
-          commands.push({
-            tick: state.tick, actorId: enemy.id, type: 'fire.secondary',
-            target: { x: player.pos.x, y: player.pos.y, z: 0 },
+            tick: state.tick, actorId: enemy.id, type: 'fire.slot', value: slot,
+            target: { x: player.pos.x + spread, y: player.pos.y + spread, z: 0 },
           })
         }
       }

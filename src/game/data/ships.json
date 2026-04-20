@@ -2,52 +2,76 @@
   "hull.destroyer.basic": {
     "id": "hull.destroyer.basic",
     "hp": 420,
-    "maxSpeed": 5,
+    "maxSpeed": 6.25,
     "turnRate": 0.04,
     "weapons": [
-      { "id": "weapon.gun.127mm.twin",      "type": "gun",     "ammo": 220 },
-      { "id": "weapon.torpedo.533mm.basic", "type": "torpedo", "ammo": 24 }
+      { "id": "weapon.gun.127mm.twin",      "name": "12.7cm連装砲", "type": "gun",     "ammo": 220 },
+      { "id": "weapon.torpedo.533mm.basic", "name": "53.3cm魚雷",   "type": "torpedo", "ammo": 24 }
     ]
   },
   "hull.cruiser.player": {
     "id": "hull.cruiser.player",
     "hp": 760,
-    "maxSpeed": 3.5,
+    "maxSpeed": 4.4,
     "turnRate": 0.03,
     "weapons": [
-      { "id": "weapon.gun.152mm.twin",           "type": "gun",       "ammo": 240 },
-      { "id": "weapon.secondary.127mm.twin",     "type": "secondary", "ammo": 400 },
-      { "id": "weapon.torpedo.533mm.basic",      "type": "torpedo",   "ammo": 42 }
+      { "id": "weapon.gun.152mm.twin.forward",   "name": "15.2cm前部砲", "type": "gun",       "ammo": 160 },
+      { "id": "weapon.gun.152mm.twin.aft",       "name": "15.2cm後部砲", "type": "gun",       "ammo": 160 },
+      { "id": "weapon.secondary.127mm.twin",     "name": "12.7cm副砲",   "type": "secondary", "ammo": 400 },
+      { "id": "weapon.torpedo.533mm.basic",      "name": "53.3cm魚雷",   "type": "torpedo",   "ammo": 42 },
+      { "id": "weapon.aa.cruiser",               "name": "中対空砲",     "type": "aa",        "ammo": 900 },
+      { "id": "weapon.missile.cruiser.standard", "name": "艦対艦ミサイル", "type": "missile",   "ammo": 36 }
     ]
   },
   "hull.battleship.basic": {
     "id": "hull.battleship.basic",
     "hp": 1400,
-    "maxSpeed": 2,
+    "maxSpeed": 2.6,
     "turnRate": 0.02,
     "weapons": [
-      { "id": "weapon.gun.406mm.twin",           "type": "gun",       "ammo": 300 },
-      { "id": "weapon.secondary.152mm.twin",     "type": "secondary", "ammo": 500 },
-      { "id": "weapon.torpedo.533mm.basic",      "type": "torpedo",   "ammo": 56 }
+      { "id": "weapon.gun.406mm.twin.forward",        "name": "40.6cm前部砲",   "type": "gun",       "ammo": 180 },
+      { "id": "weapon.gun.406mm.twin.center",         "name": "40.6cm中央砲",   "type": "gun",       "ammo": 180 },
+      { "id": "weapon.gun.406mm.twin.aft",            "name": "40.6cm後部砲",   "type": "gun",       "ammo": 180 },
+      { "id": "weapon.secondary.152mm.twin.port",     "name": "15.2cm左舷副砲", "type": "secondary", "ammo": 260 },
+      { "id": "weapon.secondary.152mm.twin.starboard", "name": "15.2cm右舷副砲", "type": "secondary", "ammo": 260 },
+      { "id": "weapon.torpedo.533mm.basic",           "name": "53.3cm魚雷",     "type": "torpedo",   "ammo": 56 },
+      { "id": "weapon.aa.heavy",                      "name": "重対空砲",       "type": "aa",        "ammo": 1200 },
+      { "id": "weapon.missile.battleship.longrange",  "name": "長射程ミサイル", "type": "missile",   "ammo": 64 }
     ]
   },
   "hull.enemy.destroyer.basic": {
     "id": "hull.enemy.destroyer.basic",
     "hp": 80,
-    "maxSpeed": 3,
+    "maxSpeed": 3.75,
     "turnRate": 0.05,
     "weapons": [
-      { "id": "weapon.gun.127mm.twin", "type": "gun", "ammo": 40 }
+      { "id": "weapon.gun.127mm.twin", "name": "12.7cm連装砲", "type": "gun", "ammo": 40 }
     ]
   },
   "hull.cruiser.basic": {
     "id": "hull.cruiser.basic",
     "hp": 150,
-    "maxSpeed": 2.5,
+    "maxSpeed": 3.15,
     "turnRate": 0.03,
     "weapons": [
-      { "id": "weapon.gun.152mm.twin",      "type": "gun",     "ammo": 30 },
-      { "id": "weapon.torpedo.533mm.basic", "type": "torpedo", "ammo": 12 }
+      { "id": "weapon.gun.152mm.twin",      "name": "15.2cm連装砲", "type": "gun",     "ammo": 30 },
+      { "id": "weapon.torpedo.533mm.basic", "name": "53.3cm魚雷",   "type": "torpedo", "ammo": 12 }
+    ]
+  },
+  "hull.enemy.boss.dreadnought": {
+    "id": "hull.enemy.boss.dreadnought",
+    "hp": 3200,
+    "maxSpeed": 2.1,
+    "turnRate": 0.014,
+    "weapons": [
+      { "id": "weapon.boss.460mm.twin.forward",       "name": "46cm前部主砲",   "type": "gun",       "ammo": 240 },
+      { "id": "weapon.boss.460mm.twin.center",        "name": "46cm中央主砲",   "type": "gun",       "ammo": 240 },
+      { "id": "weapon.boss.460mm.twin.aft",           "name": "46cm後部主砲",   "type": "gun",       "ammo": 240 },
+      { "id": "weapon.secondary.152mm.twin.port",     "name": "15.2cm左舷副砲", "type": "secondary", "ammo": 360 },
+      { "id": "weapon.secondary.152mm.twin.starboard", "name": "15.2cm右舷副砲", "type": "secondary", "ammo": 360 },
+      { "id": "weapon.torpedo.533mm.basic",           "name": "53.3cm魚雷",     "type": "torpedo",   "ammo": 80 },
+      { "id": "weapon.aa.heavy",                      "name": "重対空砲",       "type": "aa",        "ammo": 1600 },
+      { "id": "weapon.missile.battleship.longrange",  "name": "長射程ミサイル", "type": "missile",   "ammo": 96 }
     ]
   }
 }

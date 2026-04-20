@@ -1,4 +1,4 @@
-import type { Command, Vec3 } from '../simulation/types'
+import { MAX_WEAPON_SLOTS, type Command, type Vec3 } from '../simulation/types'
 import type { WeaponMode } from '../ui/hud'
 import type { CanvasRenderer } from '../rendering/canvas'
 
@@ -10,7 +10,7 @@ export interface InputFeedback {
 export class InputAdapter {
   private commands: Command[] = []
   private keys = new Set<string>()
-  private weaponMode: WeaponMode = 'gun'
+  private weaponMode: WeaponMode = 0
   private aimPoint: Vec3 | null = null
   private canvas: HTMLCanvasElement
   private renderer: CanvasRenderer
@@ -31,13 +31,18 @@ export class InputAdapter {
     return this.aimPoint ? { ...this.aimPoint } : null
   }
 
+  releaseKey(code: string): void {
+    this.keys.delete(code)
+  }
+
   private bindEvents(): void {
     window.addEventListener('keydown', (e) => {
       this.keys.add(e.code)
 
-      if (e.code === 'Digit1') this.selectWeaponMode('gun')
-      if (e.code === 'Digit2') this.selectWeaponMode('secondary')
-      if (e.code === 'Digit3') this.selectWeaponMode('torpedo')
+      if (e.code.startsWith('Digit')) {
+        const slot = Number(e.code.slice(5)) - 1
+        if (slot >= 0 && slot < MAX_WEAPON_SLOTS) this.selectWeaponMode(slot)
+      }
 
       if (!e.repeat) {
         if (e.code === 'ArrowUp' || e.code === 'KeyW') {
@@ -71,12 +76,7 @@ export class InputAdapter {
       const [wx, wy] = this.renderer.s2w(cx, cy)
       const target: Vec3 = { x: wx, y: wy, z: 0 }
 
-      const cmdType =
-        this.weaponMode === 'gun'       ? 'fire.primary'   :
-        this.weaponMode === 'secondary' ? 'fire.secondary' :
-                                          'fire.torpedo'
-
-      this.commands.push({ tick: 0, actorId: 'ship.player', type: cmdType, target })
+      this.commands.push({ tick: 0, actorId: 'ship.player', type: 'fire.slot', value: this.weaponMode, target })
     })
   }
 
@@ -92,7 +92,7 @@ export class InputAdapter {
     if (this.keys.has('ArrowLeft') || this.keys.has('KeyA')) {
       cmds.push({ tick, actorId: 'ship.player', type: 'rotate', value: -0.04 })
     }
-    if (this.keys.has('ArrowRight') || this.keys.has('KeyD')) {
+    if (this.keys.has('ArrowRight') || this.keys.has('KeyE')) {
       cmds.push({ tick, actorId: 'ship.player', type: 'rotate', value: 0.04 })
     }
 

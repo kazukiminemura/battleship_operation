@@ -1,10 +1,10 @@
-import type { BuildingEntity, CombatState, Command, CommandType, ShipEntity, Vec3, WeaponType, CombatEvent } from './types'
+import type { BuildingEntity, CombatState, Command, ShipEntity, Vec3, WeaponType, CombatEvent } from './types'
 import type { RngStreams } from './random'
 import type { StaticData } from '../data/masterdata'
 import { stepMovement, applyMoveCommand, applySpeedUpCommand, applySpeedDownCommand, applyRotateCommand, applyStopCommand } from './movement'
-import { stepWeaponCooldowns, fireWeapon } from './weapons'
+import { stepWeaponCooldowns, fireWeapon, fireWeaponAtSlot } from './weapons'
 import { stepProjectiles } from './projectiles'
-import { WEAPON_CONFIGS } from './weapon-strategies'
+import { getWeaponConfig } from './weapon-strategies'
 import { generateAiCommands } from './ai'
 import { evaluateMission } from './mission'
 
@@ -77,15 +77,7 @@ function generateAutoFireCommands(state: CombatState): Command[] {
   ]
   if (targets.length === 0) return cmds
 
-  const WEAPON_CMD: Record<WeaponType, CommandType> = {
-    gun: 'fire.primary',
-    secondary: 'fire.secondary',
-    torpedo: 'fire.torpedo',
-    aa: 'fire.aa',
-    missile: 'fire.missile',
-  }
-
-  for (const weapon of player.weapons) {
+  for (const [weaponSlot, weapon] of player.weapons.entries()) {
     if (!weapon.autoFire || weapon.cooldownTick > 0 || weapon.ammo <= 0) continue
 
     const candidates = weapon.type === 'torpedo'
@@ -102,12 +94,13 @@ function generateAutoFireCommands(state: CombatState): Command[] {
       if (d < minDist) { minDist = d; nearest = target }
     }
 
-    const maxRange = WEAPON_CONFIGS[weapon.type].maxRange
+    const maxRange = getWeaponConfig(weapon.id, weapon.type).maxRange
     if (minDist > maxRange) continue   // target out of range
     cmds.push({
       tick: state.tick,
       actorId: 'ship.player',
-      type: WEAPON_CMD[weapon.type],
+      type: 'fire.slot',
+      value: weaponSlot,
       target: { ...nearest.pos },
     })
   }
@@ -149,6 +142,8 @@ function applyCommands(state: CombatState, commands: Command[], rng: RngStreams)
       const entities = new Map(s.entities)
       entities.set(ship.id, updated)
       s = { ...s, entities }
+    } else if (cmd.type === 'fire.slot') {
+      s = fireSlotAndTrack(s, cmd.actorId, cmd.value, cmd.target, ship.team, rng)
     } else if (cmd.type === 'fire.primary') {
       s = fireAndTrack(s, cmd.actorId, 'gun', cmd.target, ship.team, rng)
     } else if (cmd.type === 'fire.secondary') {
@@ -162,6 +157,38 @@ function applyCommands(state: CombatState, commands: Command[], rng: RngStreams)
     }
   }
 
+  return s
+}
+
+function fireSlotAndTrack(
+  s: CombatState,
+  actorId: string,
+  weaponSlot: number | undefined,
+  target: { x: number; y: number; z: number } | undefined,
+  team: 'player' | 'enemy',
+  rng: RngStreams
+): CombatState {
+  if (!target || weaponSlot === undefined) return s
+  const slot = Math.trunc(weaponSlot)
+  const weapon = getWeaponAtSlot(s, actorId, slot)
+  if (!weapon) return s
+
+  const before = countAmmoAtSlot(s, actorId, slot)
+  s = fireWeaponAtSlot(s, actorId, slot, target, rng.combat)
+  const after = countAmmoAtSlot(s, actorId, slot)
+  if (team === 'player' && after < before) {
+    s = {
+      ...s,
+      metrics: {
+        ...s.metrics,
+        playerAmmoSpent: s.metrics.playerAmmoSpent + 1,
+        shotCountByWeapon: {
+          ...s.metrics.shotCountByWeapon,
+          [weapon.id]: (s.metrics.shotCountByWeapon[weapon.id] ?? 0) + 1,
+        },
+      },
+    }
+  }
   return s
 }
 
@@ -191,6 +218,17 @@ function fireAndTrack(
     }
   }
   return s
+}
+
+function getWeaponAtSlot(state: CombatState, actorId: string, weaponSlot: number): ShipEntity['weapons'][number] | undefined {
+  const entity = state.entities.get(actorId)
+  if (!entity || entity.kind !== 'ship') return undefined
+  const ship = entity as ShipEntity
+  return ship.weapons[weaponSlot]
+}
+
+function countAmmoAtSlot(state: CombatState, actorId: string, weaponSlot: number): number {
+  return getWeaponAtSlot(state, actorId, weaponSlot)?.ammo ?? 0
 }
 
 function countAmmo(state: CombatState, actorId: string, weaponType: string): number {

@@ -1,8 +1,8 @@
-import type { CombatState, ShipEntity, Command, SpeedLevel } from './types'
+import type { CombatState, ShipEntity, Command, MapObstacle, SpeedLevel } from './types'
 
-export const WORLD_SIZE = 10000
+export const WORLD_SIZE = 16000
 export const KNOTS_PER_UNIT = 10  // 1 game unit/tick = 10 knots for display
-export const ISLAND_COLLIDER = { x: 5000, y: 5050, rx: 620, ry: 430 }
+export const ISLAND_COLLIDER: MapObstacle = { id: 'island.central', x: 5000, y: 5050, rx: 620, ry: 430 }
 
 // speed level order from slowest to fastest
 export const SPEED_LEVEL_ORDER: SpeedLevel[] = ['reverse', 'stop', 'slow', 'cruise', 'full']
@@ -25,7 +25,7 @@ export const SPEED_LEVEL_LABEL: Record<SpeedLevel, string> = {
 }
 
 // acceleration toward targetSpeed per tick
-const ACCEL_RATE = 0.08
+const ACCEL_RATE = 0.11
 const SHORE_PUSHOUT = 28
 
 export function stepMovement(state: CombatState, dt = 1): CombatState {
@@ -54,8 +54,8 @@ export function stepMovement(state: CombatState, dt = 1): CombatState {
     if (py < 0)          { py = 0;           finalSpeed = 0; finalTargetSpeed = 0 }
     if (py > WORLD_SIZE) { py = WORLD_SIZE;  finalSpeed = 0; finalTargetSpeed = 0 }
 
-    if (isOnLand(px, py)) {
-      const pushed = pushOutOfLand(px, py)
+    if (isOnLand(px, py, state.mapObstacles)) {
+      const pushed = pushOutOfLand(px, py, state.mapObstacles)
       px = pushed.x
       py = pushed.y
       finalSpeed = 0
@@ -74,24 +74,31 @@ export function stepMovement(state: CombatState, dt = 1): CombatState {
   return { ...state, entities }
 }
 
-export function isOnLand(x: number, y: number): boolean {
-  const nx = (x - ISLAND_COLLIDER.x) / ISLAND_COLLIDER.rx
-  const ny = (y - ISLAND_COLLIDER.y) / ISLAND_COLLIDER.ry
-  return nx * nx + ny * ny < 1
+export function isOnLand(x: number, y: number, obstacles: readonly MapObstacle[] = [ISLAND_COLLIDER]): boolean {
+  return findLandObstacle(x, y, obstacles) !== undefined
 }
 
-function pushOutOfLand(x: number, y: number): { x: number; y: number } {
-  const dx = x - ISLAND_COLLIDER.x
-  const dy = y - ISLAND_COLLIDER.y
+function pushOutOfLand(x: number, y: number, obstacles: readonly MapObstacle[]): { x: number; y: number } {
+  const land = findLandObstacle(x, y, obstacles) ?? ISLAND_COLLIDER
+  const dx = x - land.x
+  const dy = y - land.y
   if (Math.abs(dx) < 0.001 && Math.abs(dy) < 0.001) {
-    return { x: ISLAND_COLLIDER.x, y: ISLAND_COLLIDER.y + ISLAND_COLLIDER.ry + SHORE_PUSHOUT }
+    return { x: land.x, y: land.y + land.ry + SHORE_PUSHOUT }
   }
 
-  const angle = Math.atan2(dy / ISLAND_COLLIDER.ry, dx / ISLAND_COLLIDER.rx)
+  const angle = Math.atan2(dy / land.ry, dx / land.rx)
   return {
-    x: ISLAND_COLLIDER.x + Math.cos(angle) * (ISLAND_COLLIDER.rx + SHORE_PUSHOUT),
-    y: ISLAND_COLLIDER.y + Math.sin(angle) * (ISLAND_COLLIDER.ry + SHORE_PUSHOUT),
+    x: land.x + Math.cos(angle) * (land.rx + SHORE_PUSHOUT),
+    y: land.y + Math.sin(angle) * (land.ry + SHORE_PUSHOUT),
   }
+}
+
+function findLandObstacle(x: number, y: number, obstacles: readonly MapObstacle[]): MapObstacle | undefined {
+  return obstacles.find(obstacle => {
+    const nx = (x - obstacle.x) / obstacle.rx
+    const ny = (y - obstacle.y) / obstacle.ry
+    return nx * nx + ny * ny < 1
+  })
 }
 
 export function applySpeedUpCommand(ship: ShipEntity): ShipEntity {

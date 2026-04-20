@@ -17,9 +17,51 @@ export class SoundSystem {
   private lastProcessedTick = -1
   private explosionBuffers: Partial<Record<ExplosionSample, AudioBuffer>> = {}
   private explosionLoads: Partial<Record<ExplosionSample, Promise<AudioBuffer | null>>> = {}
+  private bgmEnabled = false
+  private bgmGain: GainNode | null = null
+  private bgmTimer: ReturnType<typeof setInterval> | null = null
+  private bgmStep = 0
+  private bgmMode: 'normal' | 'boss' = 'normal'
 
   reset(): void {
     this.lastProcessedTick = -1
+  }
+
+  isBgmEnabled(): boolean {
+    return this.bgmEnabled
+  }
+
+  setBgmEnabled(enabled: boolean, mode: 'normal' | 'boss' = this.bgmMode): void {
+    const previousMode = this.bgmMode
+    this.bgmMode = mode
+    if (enabled === this.bgmEnabled) {
+      if (enabled && previousMode !== mode) {
+        this.restartBgm()
+      } else if (enabled && !this.bgmTimer) {
+        this.startBgm()
+      }
+      return
+    }
+    this.bgmEnabled = enabled
+    if (enabled) {
+      this.startBgm()
+    } else {
+      this.stopBgm()
+    }
+  }
+
+  toggleBgm(): boolean {
+    this.setBgmEnabled(!this.bgmEnabled)
+    return this.bgmEnabled
+  }
+
+  setBgmMode(mode: 'normal' | 'boss'): void {
+    if (mode === this.bgmMode) return
+    this.bgmMode = mode
+    this.bgmStep = 0
+    if (this.bgmEnabled) {
+      this.restartBgm()
+    }
   }
 
   processEvents(events: CombatEvent[], currentTick: number): void {
@@ -88,6 +130,73 @@ export class SoundSystem {
   private dest(): AudioNode {
     this.getCtx()
     return this.bus!
+  }
+
+  private startBgm(): void {
+    const ctx = this.getCtx()
+    if (!this.bgmGain) {
+      this.bgmGain = ctx.createGain()
+      this.bgmGain.connect(this.dest())
+    }
+    this.bgmGain.gain.cancelScheduledValues(ctx.currentTime)
+    this.bgmGain.gain.setValueAtTime(0, ctx.currentTime)
+    this.bgmGain.gain.linearRampToValueAtTime(this.bgmMode === 'boss' ? 0.42 : 0.32, ctx.currentTime + 0.8)
+
+    void ctx.resume().then(() => this.scheduleBgmBar())
+    if (!this.bgmTimer) {
+      this.bgmTimer = setInterval(() => this.scheduleBgmBar(), 4000)
+    }
+  }
+
+  private restartBgm(): void {
+    this.stopBgm()
+    this.startBgm()
+  }
+
+  private stopBgm(): void {
+    if (this.bgmTimer) {
+      clearInterval(this.bgmTimer)
+      this.bgmTimer = null
+    }
+    if (!this.bgmGain || !this.actx) return
+    const now = this.actx.currentTime
+    this.bgmGain.gain.cancelScheduledValues(now)
+    this.bgmGain.gain.setValueAtTime(this.bgmGain.gain.value, now)
+    this.bgmGain.gain.linearRampToValueAtTime(0, now + 0.45)
+  }
+
+  private scheduleBgmBar(): void {
+    if (!this.bgmEnabled || !this.bgmGain) return
+    const ctx = this.getCtx()
+    const start = ctx.currentTime + 0.05
+    const rootProgression = this.bgmMode === 'boss' ? [41, 46, 49, 39] : [55, 49, 62, 46]
+    const root = rootProgression[this.bgmStep % rootProgression.length]!
+    this.bgmStep += 1
+    const padVolume = this.bgmMode === 'boss' ? 0.055 : 0.040
+
+    pulseTone(ctx, this.bgmGain, start, root * 2, padVolume, 3.8, 'triangle')
+    pulseTone(ctx, this.bgmGain, start + 0.04, root * 3, padVolume * 0.55, 3.5, 'sine')
+    pulseTone(ctx, this.bgmGain, start + 0.08, root * 4, padVolume * 0.42, 3.2, 'triangle')
+
+    const beatCount = this.bgmMode === 'boss' ? 16 : 8
+    const beatDur = this.bgmMode === 'boss' ? 0.25 : 0.5
+    for (let i = 0; i < beatCount; i++) {
+      const t = start + i * beatDur
+      const accent = i % 4 === 0 ? 0.090 : this.bgmMode === 'boss' ? 0.060 : 0.044
+      pulseTone(ctx, this.bgmGain, t, root, accent, 0.42, 'sine')
+      if (i % 2 === 0) pulseTone(ctx, this.bgmGain, t + 0.02, root * 2, this.bgmMode === 'boss' ? 0.046 : 0.032, 0.32, 'triangle')
+      if (this.bgmMode === 'boss' && i % 4 === 2) {
+        filteredNoise(ctx, this.bgmGain, t + 0.01, 0.040, 'bandpass', 900, 1.2, 0.004, 0.090)
+      }
+    }
+
+    const motif = this.bgmMode === 'boss' ? [0, 3, 7, 10, 12, 10, 7, 3, 0, -2, 0, 3, 7, 10, 12, 15] : [0, 7, 10, 12, 10, 7, 5, 3]
+    for (let i = 0; i < motif.length; i++) {
+      const freq = root * 4 * Math.pow(2, motif[i]! / 12)
+      pulseTone(ctx, this.bgmGain, start + i * beatDur + 0.08, freq, this.bgmMode === 'boss' ? 0.038 : 0.026, 0.20, 'triangle')
+    }
+
+    sweepTone(ctx, this.bgmGain, start, root * (this.bgmMode === 'boss' ? 2.2 : 1.5), root * 1.05, this.bgmMode === 'boss' ? 0.060 : 0.038, 3.8)
   }
 
   private playFired(type: WeaponSoundClass): void {

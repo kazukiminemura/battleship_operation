@@ -1,7 +1,7 @@
 import type { BuildingEntity, CombatEvent, CombatState, ProjectileEntity, ShipEntity } from './types'
 import type { SeededRandom } from './random'
 import { applyDamage, checkDestroyed } from './damage'
-import { getWeaponStrategy } from './weapon-strategies'
+import { getWeaponConfig, getWeaponStrategy } from './weapon-strategies'
 
 export function stepProjectiles(state: CombatState, _rng: SeededRandom): CombatState {
   const entities = new Map(state.entities)
@@ -19,44 +19,45 @@ export function stepProjectiles(state: CombatState, _rng: SeededRandom): CombatS
   for (const [id, entity] of entities) {
     if (entity.kind !== 'projectile' || entity.destroyed) continue
 
-    let proj = advanceProjectile(entity as ProjectileEntity)
-
-    if (proj.lifetime <= 0) {
-      events.push(makeMissEvent(state.tick, proj))
-      entities.set(id, { ...proj, destroyed: true })
-      continue
-    }
+    const prevProj = entity as ProjectileEntity
+    let proj = advanceProjectile(prevProj)
 
     const strategy = getWeaponStrategy(proj.weaponType)
+    const config = getWeaponConfig(proj.weaponId ?? proj.weaponType, proj.weaponType)
+    const owner = entities.get(proj.ownerId)
+    const ownerTeam = owner?.kind === 'ship' ? owner.team : undefined
     let hit = false
 
     for (const ship of ships) {
-      const owner = entities.get(proj.ownerId)
-      if (owner && owner.kind === 'ship' && owner.team === ship.team) continue
-      if (!strategy.canDamageShip(ship)) continue
+      const currentShip = entities.get(ship.id)
+      if (!currentShip || currentShip.kind !== 'ship' || currentShip.destroyed) continue
+      if (ownerTeam && ownerTeam === currentShip.team) continue
+      if (!strategy.canDamageShip(currentShip)) continue
 
-      if (distance2d(ship.pos, proj.pos) < strategy.config.hitRadius) {
-        let updatedShip = applyDamage(ship, proj.damage)
+      const impact = segmentCircleImpact(prevProj.pos, proj.pos, currentShip.pos, config.hitRadius)
+      if (impact) {
+        const impactProj = { ...proj, pos: impact }
+        let updatedShip = applyDamage(currentShip, proj.damage)
         updatedShip = checkDestroyed(updatedShip)
 
         events.push(
-          makeHitEvent(state.tick, proj, ship.id),
-          makeDamageEvent(state.tick, proj, ship.id),
+          makeHitEvent(state.tick, impactProj, currentShip.id),
+          makeDamageEvent(state.tick, impactProj, currentShip.id),
         )
         metrics = recordWeaponHit(metrics, proj.weaponType, proj.damage)
 
-        if (ship.team === 'player') {
+        if (currentShip.team === 'player') {
           metrics = { ...metrics, playerDamageTaken: metrics.playerDamageTaken + proj.damage }
         }
 
-        if (updatedShip.destroyed && !ship.destroyed) {
-          events.push({ tick: state.tick, type: 'entity.destroyed', targetId: ship.id })
-          if (ship.team === 'enemy') {
+        if (updatedShip.destroyed && !currentShip.destroyed) {
+          events.push({ tick: state.tick, type: 'entity.destroyed', targetId: currentShip.id, position: { ...currentShip.pos } })
+          if (currentShip.team === 'enemy') {
             metrics = { ...metrics, enemiesDestroyed: metrics.enemiesDestroyed + 1 }
           }
         }
 
-        entities.set(ship.id, updatedShip)
+        entities.set(currentShip.id, updatedShip)
         proj = { ...proj, destroyed: true }
         hit = true
         break
@@ -65,30 +66,39 @@ export function stepProjectiles(state: CombatState, _rng: SeededRandom): CombatS
 
     if (!hit) {
       for (const building of buildings) {
-        const owner = entities.get(proj.ownerId)
-        const ownerTeam = owner?.kind === 'ship' ? owner.team : undefined
-        if (ownerTeam && building.team !== 'neutral' && ownerTeam === building.team) continue
-        if (!strategy.canTargetBuilding(building)) continue
+        const currentBuilding = entities.get(building.id)
+        if (!currentBuilding || currentBuilding.kind !== 'building' || currentBuilding.destroyed) continue
+        if (ownerTeam && currentBuilding.team !== 'neutral' && ownerTeam === currentBuilding.team) continue
+        if (!strategy.canTargetBuilding(currentBuilding)) continue
 
-        if (distance2d(building.pos, proj.pos) < strategy.buildingHitRadius(building)) {
-          let updatedBuilding = applyDamage(building, proj.damage)
+        const impact = segmentCircleImpact(prevProj.pos, proj.pos, currentBuilding.pos, Math.max(config.hitRadius, currentBuilding.radius))
+        if (impact) {
+          const impactProj = { ...proj, pos: impact }
+          let updatedBuilding = applyDamage(currentBuilding, proj.damage)
           updatedBuilding = checkDestroyed(updatedBuilding)
 
           events.push(
-            makeHitEvent(state.tick, proj, building.id),
-            makeDamageEvent(state.tick, proj, building.id),
+            makeHitEvent(state.tick, impactProj, currentBuilding.id),
+            makeDamageEvent(state.tick, impactProj, currentBuilding.id),
           )
           metrics = recordWeaponHit(metrics, proj.weaponType, proj.damage)
 
-          if (updatedBuilding.destroyed && !building.destroyed) {
-            events.push({ tick: state.tick, type: 'entity.destroyed', targetId: building.id, position: { ...building.pos } })
+          if (updatedBuilding.destroyed && !currentBuilding.destroyed) {
+            events.push({ tick: state.tick, type: 'entity.destroyed', targetId: currentBuilding.id, position: { ...currentBuilding.pos } })
           }
 
-          entities.set(building.id, updatedBuilding)
+          entities.set(currentBuilding.id, updatedBuilding)
           proj = { ...proj, destroyed: true }
+          hit = true
           break
         }
       }
+    }
+
+    if (!hit && proj.lifetime <= 0) {
+      events.push(makeMissEvent(state.tick, proj))
+      entities.set(id, { ...proj, destroyed: true })
+      continue
     }
 
     entities.set(id, proj)
@@ -110,7 +120,7 @@ function makeMissEvent(tick: number, proj: ProjectileEntity): CombatEvent {
     tick,
     type: 'weapon.missed',
     sourceId: proj.ownerId,
-    weaponId: proj.weaponType,
+    weaponId: proj.weaponId ?? proj.weaponType,
     position: { ...proj.pos },
   }
 }
@@ -123,7 +133,7 @@ function makeHitEvent(tick: number, proj: ProjectileEntity, targetId: string): C
     targetId,
     damage: proj.damage,
     position: { ...proj.pos },
-    weaponId: proj.weaponType,
+    weaponId: proj.weaponId ?? proj.weaponType,
   }
 }
 
@@ -159,4 +169,25 @@ function distance2d(a: { x: number; y: number }, b: { x: number; y: number }): n
   const dx = a.x - b.x
   const dy = a.y - b.y
   return Math.sqrt(dx * dx + dy * dy)
+}
+
+function segmentCircleImpact(
+  from: { x: number; y: number; z: number },
+  to: { x: number; y: number; z: number },
+  center: { x: number; y: number; z: number },
+  radius: number,
+): { x: number; y: number; z: number } | undefined {
+  const sx = to.x - from.x
+  const sy = to.y - from.y
+  const lenSq = sx * sx + sy * sy
+  const t = lenSq > 0
+    ? Math.max(0, Math.min(1, ((center.x - from.x) * sx + (center.y - from.y) * sy) / lenSq))
+    : 0
+  const impact = {
+    x: from.x + sx * t,
+    y: from.y + sy * t,
+    z: 0,
+  }
+
+  return distance2d(impact, center) <= radius ? impact : undefined
 }

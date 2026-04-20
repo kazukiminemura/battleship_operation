@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getWeaponStrategy, WEAPON_CONFIGS } from '../../src/game/simulation/weapon-strategies'
+import { getWeaponConfig, getWeaponStrategy, WEAPON_CONFIGS } from '../../src/game/simulation/weapon-strategies'
 import type { BuildingEntity } from '../../src/game/simulation/types'
 
 function building(team: BuildingEntity['team'] = 'enemy'): BuildingEntity {
@@ -32,5 +32,12 @@ describe('weapon strategies', () => {
   it('uses the larger of hit radius and building radius', () => {
     expect(getWeaponStrategy('aa').buildingHitRadius(building())).toBe(40)
     expect(getWeaponStrategy('missile').buildingHitRadius({ ...building(), radius: 5 })).toBe(25)
+  })
+
+  it('supports long-range battleship weapon overrides', () => {
+    expect(getWeaponConfig('weapon.gun.406mm.twin.forward', 'gun').maxRange)
+      .toBeGreaterThan(WEAPON_CONFIGS.gun.maxRange)
+    expect(getWeaponConfig('weapon.missile.battleship.longrange', 'missile').maxRange)
+      .toBeGreaterThan(WEAPON_CONFIGS.missile.maxRange)
   })
 })

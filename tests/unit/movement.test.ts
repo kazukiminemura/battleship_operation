@@ -29,7 +29,17 @@ function makeState(ships: ShipEntity[]): CombatState {
     result: 'none', durationTicks: 0, playerDamageTaken: 0, playerAmmoSpent: 0,
     hitCountByWeapon: {}, shotCountByWeapon: {}, damageByWeapon: {}, enemiesDestroyed: 0,
   }
-  return { tick: 0, entities, eventLog: [], missionResult: 'none', metrics }
+  return {
+    tick: 0,
+    stage: 1,
+    stageName: 'Test Stage',
+    maxStage: 10,
+    mapObstacles: [{ id: 'island.test', x: 5000, y: 5050, rx: 620, ry: 430 }],
+    entities,
+    eventLog: [],
+    missionResult: 'none',
+    metrics,
+  }
 }
 
 describe('stepMovement', () => {
@@ -106,13 +116,13 @@ describe('applySpeedUpCommand', () => {
   })
 
   it('sets full speed from the selected ship maxSpeed', () => {
-    const destroyer = applySpeedUpCommand(makeShip({ speedLevel: 'cruise', maxSpeed: 5 }))
-    const cruiser = applySpeedUpCommand(makeShip({ speedLevel: 'cruise', maxSpeed: 3.5 }))
-    const battleship = applySpeedUpCommand(makeShip({ speedLevel: 'cruise', maxSpeed: 2 }))
+    const destroyer = applySpeedUpCommand(makeShip({ speedLevel: 'cruise', maxSpeed: 6.25 }))
+    const cruiser = applySpeedUpCommand(makeShip({ speedLevel: 'cruise', maxSpeed: 4.4 }))
+    const battleship = applySpeedUpCommand(makeShip({ speedLevel: 'cruise', maxSpeed: 2.6 }))
 
-    expect(destroyer.targetSpeed).toBeCloseTo(5)
-    expect(cruiser.targetSpeed).toBeCloseTo(3.5)
-    expect(battleship.targetSpeed).toBeCloseTo(2)
+    expect(destroyer.targetSpeed).toBeCloseTo(6.25)
+    expect(cruiser.targetSpeed).toBeCloseTo(4.4)
+    expect(battleship.targetSpeed).toBeCloseTo(2.6)
   })
 
   it('stays at full when already at max', () => {

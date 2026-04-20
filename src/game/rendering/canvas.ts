@@ -1,6 +1,6 @@
-import type { BuildingEntity, CombatEvent, CombatState, Entity, ShipEntity, ProjectileEntity, Vec3, WeaponType } from '../simulation/types'
-import { ISLAND_COLLIDER, isOnLand, WORLD_SIZE } from '../simulation/movement'
-import { WEAPON_CONFIGS } from '../simulation/weapon-strategies'
+import type { BuildingEntity, CombatEvent, CombatState, Entity, MapObstacle, ShipEntity, ProjectileEntity, Vec3, WeaponState, WeaponType } from '../simulation/types'
+import { isOnLand, WORLD_SIZE } from '../simulation/movement'
+import { getWeaponConfig } from '../simulation/weapon-strategies'
 
 // Ship physical dimensions in world units (length, width, height)
 const SHIP_DIMS: Record<string, { l: number; w: number; h: number }> = {
@@ -9,6 +9,18 @@ const SHIP_DIMS: Record<string, { l: number; w: number; h: number }> = {
   'hull.cruiser.basic':         { l: 165, w: 36, h: 22 },
   'hull.cruiser.player':        { l: 205, w: 48, h: 29 },
   'hull.battleship.basic':      { l: 285, w: 68, h: 42 },
+  'hull.enemy.boss.dreadnought': { l: 340, w: 82, h: 54 },
+}
+
+type ShipShapeClass = 'destroyer' | 'cruiser' | 'battleship' | 'boss'
+
+const SHIP_SHAPES: Record<string, ShipShapeClass> = {
+  'hull.destroyer.basic': 'destroyer',
+  'hull.enemy.destroyer.basic': 'destroyer',
+  'hull.cruiser.basic': 'cruiser',
+  'hull.cruiser.player': 'cruiser',
+  'hull.battleship.basic': 'battleship',
+  'hull.enemy.boss.dreadnought': 'boss',
 }
 
 // Isometric projection parameters
@@ -18,7 +30,7 @@ interface IsoParams {
   oy: number
 }
 
-const HUD_TOP    = 100
+const HUD_TOP    = 134
 const HUD_BOTTOM = 32
 
 export class CanvasRenderer {
@@ -29,6 +41,7 @@ export class CanvasRenderer {
   private camY = 5000
   // イベントはシミュレーション毎ティック消去されるためレンダラー側で蓄積
   private effectLog: CombatEvent[] = []
+  private effectKeys = new Set<string>()
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas
@@ -84,21 +97,26 @@ export class CanvasRenderer {
     ]
   }
 
-  render(state: CombatState, selectedWeapon?: WeaponType, aimPoint?: Vec3 | null): void {
+  render(state: CombatState, selectedWeapon?: WeaponState, aimPoint?: Vec3 | null): void {
     this.recalcIso()
     const { ctx } = this
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height)
 
     // 毎ティック消去されるeventLogをレンダラー側で蓄積し、エフェクトを複数フレーム描画できるようにする
     for (const ev of state.eventLog) {
-      this.effectLog.push(ev)
+      const key = combatEventEffectKey(ev)
+      if (!this.effectKeys.has(key)) {
+        this.effectKeys.add(key)
+        this.effectLog.push(ev)
+      }
     }
     const MAX_EFFECT_AGE = 70
     this.effectLog = this.effectLog.filter(ev => state.tick - ev.tick < MAX_EFFECT_AGE)
+    this.effectKeys = new Set(this.effectLog.map(combatEventEffectKey))
 
     this.renderOcean()
     this.renderGrid()
-    this.renderIsland()
+    this.renderIslands(state.mapObstacles)
 
     // Range ellipse for selected weapon
     if (selectedWeapon) {
@@ -118,17 +136,17 @@ export class CanvasRenderer {
       .filter(e => e.kind === 'building') as BuildingEntity[])
       .sort((a, b) => a.pos.y - b.pos.y)
 
-    this.renderWaterSplashes(this.effectLog, state.tick)
+    this.renderWaterSplashes(this.effectLog, state.tick, state.mapObstacles)
     for (const b of buildings)   this.renderBuilding(b)
     for (const p of projectiles) this.renderProjectile(p)
     this.renderMuzzleBursts(this.effectLog, state.tick)
-    for (const s of ships)       this.renderShip(s)
-    this.renderLandDust(this.effectLog, state.tick, state.entities)
+    for (const s of ships)       this.renderShip(s, state.tick)
+    this.renderLandDust(this.effectLog, state.tick, state.entities, state.mapObstacles)
     this.renderShipExplosions(this.effectLog, state.tick, state.entities)
 
     if (selectedWeapon && aimPoint) {
       const player = state.entities.get('ship.player') as ShipEntity | undefined
-      if (player && !player.destroyed) this.renderAimPointer(player, selectedWeapon, aimPoint)
+      if (player && !player.destroyed) this.renderAimPointer(player, selectedWeapon, aimPoint, state.mapObstacles)
     }
 
     this.renderTacticalAtmosphere()
@@ -140,19 +158,19 @@ export class CanvasRenderer {
   private static readonly DUST_TICKS = 46
   private static readonly EXPLOSION_TICKS = 50
 
-  private renderWaterSplashes(events: CombatEvent[], tick: number): void {
+  private renderWaterSplashes(events: CombatEvent[], tick: number, obstacles: readonly MapObstacle[]): void {
     const { ctx } = this
     const D = CanvasRenderer.SPLASH_TICKS
 
     for (const ev of events) {
       if (ev.type !== 'weapon.missed' || !ev.position) continue
-      if (isOnLand(ev.position.x, ev.position.y)) continue
+      if (isOnLand(ev.position.x, ev.position.y, obstacles)) continue
       const age = tick - ev.tick
       if (age < 0 || age >= D) continue
 
       const t   = age / D
       const pos = ev.position
-      const wtype = (ev.weaponId ?? 'gun') as WeaponType
+      const wtype = weaponTypeFromId(ev.weaponId)
       const s   = this.iso.scale
       const [cx, cy] = this.w2s(pos.x, pos.y)
 
@@ -373,7 +391,7 @@ export class CanvasRenderer {
 
   // ── land dust ─────────────────────────────────────────────────────────────
 
-  private renderLandDust(events: CombatEvent[], tick: number, entities: Map<string, Entity>): void {
+  private renderLandDust(events: CombatEvent[], tick: number, entities: Map<string, Entity>, obstacles: readonly MapObstacle[]): void {
     const { ctx } = this
     const D = CanvasRenderer.DUST_TICKS
 
@@ -382,7 +400,7 @@ export class CanvasRenderer {
 
       const target = ev.targetId ? entities.get(ev.targetId) : undefined
       const isLandImpact =
-        (ev.type === 'weapon.missed' && isOnLand(ev.position.x, ev.position.y)) ||
+        (ev.type === 'weapon.missed' && isOnLand(ev.position.x, ev.position.y, obstacles)) ||
         (ev.type === 'weapon.hit' && target?.kind === 'building')
       if (!isLandImpact) continue
 
@@ -393,7 +411,7 @@ export class CanvasRenderer {
       const pos = ev.position
       const s = this.iso.scale
       const [cx, cy] = this.w2s(pos.x, pos.y)
-      const wtype = (ev.weaponId ?? 'gun') as WeaponType
+      const wtype = weaponTypeFromId(ev.weaponId)
       const maxR = impactWorldRadius(wtype) * 0.82
 
       if (t < 0.18) {
@@ -460,7 +478,7 @@ export class CanvasRenderer {
 
       const t = age / D
       const pos = ev.position
-      const wtype = (ev.weaponId ?? 'gun') as WeaponType
+      const wtype = weaponTypeFromId(ev.weaponId)
       const s = this.iso.scale
       const [cx, cy] = this.w2s(pos.x, pos.y)
       const maxR = impactWorldRadius(wtype) * (wtype === 'torpedo' ? 0.95 : 0.72)
@@ -571,6 +589,33 @@ export class CanvasRenderer {
 
       const t = age / D
       const [cx, cy] = this.w2s(ev.position.x, ev.position.y)
+      const isTorpedo = ev.weaponId?.includes('torpedo') ?? false
+      if (isTorpedo) {
+        const target = ev.targetPosition ?? { x: ev.position.x + 1, y: ev.position.y, z: 0 }
+        const dx = target.x - ev.position.x
+        const dy = target.y - ev.position.y
+        const len = Math.hypot(dx, dy) || 1
+        const wakeStart = this.w2s(ev.position.x - (dx / len) * 42, ev.position.y - (dy / len) * 42)
+        const wakeEnd = this.w2s(ev.position.x + (dx / len) * 28, ev.position.y + (dy / len) * 28)
+
+        ctx.save()
+        ctx.globalCompositeOperation = 'screen'
+        ctx.lineCap = 'round'
+        ctx.beginPath()
+        ctx.moveTo(wakeStart[0], wakeStart[1])
+        ctx.lineTo(wakeEnd[0], wakeEnd[1])
+        ctx.strokeStyle = `rgba(159,232,255,${(1 - t) * 0.82})`
+        ctx.lineWidth = Math.max(1.4, 8 * this.iso.scale * (1 - t * 0.25))
+        ctx.stroke()
+        ctx.beginPath()
+        ctx.ellipse(cx, cy, Math.max(2, 18 * this.iso.scale * (1 + t)), Math.max(1, 7 * this.iso.scale * (1 + t)), -Math.PI * 0.2, 0, Math.PI * 2)
+        ctx.strokeStyle = `rgba(221,250,255,${(1 - t) * 0.70})`
+        ctx.lineWidth = Math.max(0.8, 2.5 * this.iso.scale)
+        ctx.stroke()
+        ctx.restore()
+        continue
+      }
+
       const isMissile  = ev.weaponId?.includes('missile')   ?? false
       const isAa       = ev.weaponId?.includes('aa')        ?? false
       const isSecondary = ev.weaponId?.includes('secondary') ?? false
@@ -663,7 +708,11 @@ export class CanvasRenderer {
 
   // ── island and buildings ──────────────────────────────────────────────────
 
-  private renderIsland(): void {
+  private renderIslands(obstacles: readonly MapObstacle[]): void {
+    for (const obstacle of obstacles) this.renderIsland(obstacle)
+  }
+
+  private renderIsland(obstacle: MapObstacle): void {
     const { ctx } = this
     const steps = 72
     const shoreline: [number, number][] = []
@@ -672,20 +721,20 @@ export class CanvasRenderer {
 
     for (let i = 0; i < steps; i++) {
       const a = (i / steps) * Math.PI * 2
-      const n1 = signedNoise(ISLAND_COLLIDER.x, ISLAND_COLLIDER.y, i)
-      const n2 = signedNoise(ISLAND_COLLIDER.y, ISLAND_COLLIDER.x, i + 19)
+      const n1 = signedNoise(obstacle.x, obstacle.y, i)
+      const n2 = signedNoise(obstacle.y, obstacle.x, i + 19)
       const r = 1 + n1 * 0.08 + n2 * 0.04
       shoreline.push(this.w2s(
-        ISLAND_COLLIDER.x + Math.cos(a) * ISLAND_COLLIDER.rx * r,
-        ISLAND_COLLIDER.y + Math.sin(a) * ISLAND_COLLIDER.ry * r,
+        obstacle.x + Math.cos(a) * obstacle.rx * r,
+        obstacle.y + Math.sin(a) * obstacle.ry * r,
       ))
       beach.push(this.w2s(
-        ISLAND_COLLIDER.x + Math.cos(a) * ISLAND_COLLIDER.rx * 0.91 * r,
-        ISLAND_COLLIDER.y + Math.sin(a) * ISLAND_COLLIDER.ry * 0.91 * r,
+        obstacle.x + Math.cos(a) * obstacle.rx * 0.91 * r,
+        obstacle.y + Math.sin(a) * obstacle.ry * 0.91 * r,
       ))
       grass.push(this.w2s(
-        ISLAND_COLLIDER.x + Math.cos(a) * ISLAND_COLLIDER.rx * 0.74 * r,
-        ISLAND_COLLIDER.y + Math.sin(a) * ISLAND_COLLIDER.ry * 0.74 * r,
+        obstacle.x + Math.cos(a) * obstacle.rx * 0.74 * r,
+        obstacle.y + Math.sin(a) * obstacle.ry * 0.74 * r,
       ))
     }
 
@@ -713,8 +762,8 @@ export class CanvasRenderer {
 
     // Small elevation patches make the island read as land rather than a flat decal.
     for (let i = 0; i < 11; i++) {
-      const px = ISLAND_COLLIDER.x + signedNoise(ISLAND_COLLIDER.x, ISLAND_COLLIDER.y, i + 100) * ISLAND_COLLIDER.rx * 0.42
-      const py = ISLAND_COLLIDER.y + signedNoise(ISLAND_COLLIDER.y, ISLAND_COLLIDER.x, i + 130) * ISLAND_COLLIDER.ry * 0.34
+      const px = obstacle.x + signedNoise(obstacle.x, obstacle.y, i + 100) * obstacle.rx * 0.42
+      const py = obstacle.y + signedNoise(obstacle.y, obstacle.x, i + 130) * obstacle.ry * 0.34
       const [sx, sy] = this.w2s(px, py)
       ctx.save()
       ctx.translate(sx, sy)
@@ -729,8 +778,8 @@ export class CanvasRenderer {
     // Thin surf strokes around the coast.
     for (let i = 0; i < steps; i += 6) {
       const a = (i / steps) * Math.PI * 2
-      const [x0, y0] = this.w2s(ISLAND_COLLIDER.x + Math.cos(a) * ISLAND_COLLIDER.rx * 1.03, ISLAND_COLLIDER.y + Math.sin(a) * ISLAND_COLLIDER.ry * 1.03)
-      const [x1, y1] = this.w2s(ISLAND_COLLIDER.x + Math.cos(a + 0.10) * ISLAND_COLLIDER.rx * 1.03, ISLAND_COLLIDER.y + Math.sin(a + 0.10) * ISLAND_COLLIDER.ry * 1.03)
+      const [x0, y0] = this.w2s(obstacle.x + Math.cos(a) * obstacle.rx * 1.03, obstacle.y + Math.sin(a) * obstacle.ry * 1.03)
+      const [x1, y1] = this.w2s(obstacle.x + Math.cos(a + 0.10) * obstacle.rx * 1.03, obstacle.y + Math.sin(a + 0.10) * obstacle.ry * 1.03)
       ctx.beginPath()
       ctx.moveTo(x0, y0)
       ctx.lineTo(x1, y1)
@@ -850,30 +899,30 @@ export class CanvasRenderer {
 
   // ── ship ───────────────────────────────────────────────────────────────────
 
-  private renderShip(ship: ShipEntity): void {
+  private renderShip(ship: ShipEntity, tick: number): void {
     const { ctx, iso } = this
     const dim = SHIP_DIMS[ship.templateId] ?? { l: 100, w: 22, h: 12 }
+    const shape = SHIP_SHAPES[ship.templateId] ?? 'destroyer'
     const L = dim.l / 2
     const W = dim.w / 2
     const hPx = dim.h * iso.scale * 0.9   // hull height in screen pixels
 
     const cosA = Math.cos(ship.angle)
     const sinA = Math.sin(ship.angle)
-
-    // 4 deck corners in world space (CCW-ish in screen)
-    const wc: [number, number][] = [
-      [ship.pos.x + cosA * L + sinA * W, ship.pos.y + sinA * L - cosA * W],
-      [ship.pos.x + cosA * L - sinA * W, ship.pos.y + sinA * L + cosA * W],
-      [ship.pos.x - cosA * L - sinA * W, ship.pos.y - sinA * L + cosA * W],
-      [ship.pos.x - cosA * L + sinA * W, ship.pos.y - sinA * L - cosA * W],
+    const localToWorld = (lon: number, lat: number): [number, number] => [
+      ship.pos.x + cosA * lon + sinA * lat,
+      ship.pos.y + sinA * lon - cosA * lat,
     ]
+
+    const hullLocal = shipHullPoints(shape, L, W)
+    const wc = hullLocal.map(([lon, lat]) => localToWorld(lon, lat))
     const sc = wc.map(([x, y]) => this.w2s(x, y)) as [number, number][]
 
     // Signed area → determine winding (positive = CCW in screen with Y down)
     let area = 0
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < sc.length; i++) {
       const [x0, y0] = sc[i]!
-      const [x1, y1] = sc[(i + 1) % 4]!
+      const [x1, y1] = sc[(i + 1) % sc.length]!
       area += x0 * y1 - x1 * y0
     }
     const ccw = area > 0
@@ -889,7 +938,7 @@ export class CanvasRenderer {
     // 1. Shadow
     ctx.beginPath()
     ctx.moveTo(sc[0]![0] + 3, sc[0]![1] + 4)
-    for (let i = 1; i < 4; i++) ctx.lineTo(sc[i]![0] + 3, sc[i]![1] + 4)
+    for (let i = 1; i < sc.length; i++) ctx.lineTo(sc[i]![0] + 3, sc[i]![1] + 4)
     ctx.closePath()
     ctx.fillStyle = 'rgba(0,0,0,0.42)'
     ctx.fill()
@@ -909,8 +958,8 @@ export class CanvasRenderer {
     ctx.restore()
 
     // 2. Visible side faces
-    for (let i = 0; i < 4; i++) {
-      const j = (i + 1) % 4
+    for (let i = 0; i < sc.length; i++) {
+      const j = (i + 1) % sc.length
       const [x0, y0] = sc[i]!
       const [x1, y1] = sc[j]!
       // outward normal.y in screen space: CCW→(x0-x1), CW→(x1-x0)
@@ -932,7 +981,7 @@ export class CanvasRenderer {
     // 3. Top deck
     ctx.beginPath()
     ctx.moveTo(sc[0]![0], sc[0]![1] - hPx)
-    for (let i = 1; i < 4; i++) ctx.lineTo(sc[i]![0], sc[i]![1] - hPx)
+    for (let i = 1; i < sc.length; i++) ctx.lineTo(sc[i]![0], sc[i]![1] - hPx)
     ctx.closePath()
     ctx.fillStyle = topColor
     ctx.fill()
@@ -940,31 +989,21 @@ export class CanvasRenderer {
     ctx.lineWidth = 0.8
     ctx.stroke()
 
-    // 4. Bow tip
-    const [bowSx, bowSy] = this.w2s(
-      ship.pos.x + cosA * (L + dim.l * 0.12),
-      ship.pos.y + sinA * (L + dim.l * 0.12),
-    )
-    ctx.beginPath()
-    ctx.moveTo(sc[0]![0], sc[0]![1] - hPx * 0.7)
-    ctx.lineTo(sc[1]![0], sc[1]![1] - hPx * 0.7)
-    ctx.lineTo(bowSx, bowSy - hPx * 0.3)
-    ctx.closePath()
-    ctx.fillStyle = rimColor
-    ctx.fill()
+    this.renderDeckDetails(ship, shape, dim, hPx, topColor, rimColor, localToWorld, tick)
 
-    // 5. Superstructure (small box on center of deck)
+    // 4. Superstructure
     if (dim.h >= 13) {
-      const sL = dim.l * 0.18
-      const sW = dim.w * 0.45
+      const superSpec = superstructureSpec(shape, dim)
+      const sL = superSpec.l / 2
+      const sW = superSpec.w / 2
       const superWc: [number, number][] = [
-        [ship.pos.x + cosA * sL + sinA * sW, ship.pos.y + sinA * sL - cosA * sW],
-        [ship.pos.x + cosA * sL - sinA * sW, ship.pos.y + sinA * sL + cosA * sW],
-        [ship.pos.x - cosA * sL - sinA * sW, ship.pos.y - sinA * sL + cosA * sW],
-        [ship.pos.x - cosA * sL + sinA * sW, ship.pos.y - sinA * sL - cosA * sW],
+        localToWorld(superSpec.offset + sL, sW),
+        localToWorld(superSpec.offset + sL, -sW),
+        localToWorld(superSpec.offset - sL, -sW),
+        localToWorld(superSpec.offset - sL, sW),
       ]
       const ss = superWc.map(([x, y]) => this.w2s(x, y)) as [number, number][]
-      const sHpx = hPx * 0.6
+      const sHpx = hPx * superSpec.h
 
       ctx.beginPath()
       ctx.moveTo(ss[0]![0], ss[0]![1] - hPx)
@@ -1001,6 +1040,17 @@ export class CanvasRenderer {
       ctx.closePath()
       ctx.fillStyle = lerpHex(topColor, '#ffffff', 0.35)
       ctx.fill()
+
+      if (shape === 'battleship' || shape === 'boss') {
+        const mastBase = localToWorld(superSpec.offset, 0)
+        const [mx, my] = this.w2s(mastBase[0], mastBase[1])
+        ctx.strokeStyle = lerpHex(rimColor, '#ffffff', 0.35)
+        ctx.lineWidth = Math.max(1, 2 * iso.scale)
+        ctx.beginPath()
+        ctx.moveTo(mx, my - hPx - sHpx)
+        ctx.lineTo(mx, my - hPx - sHpx - dim.h * iso.scale * 0.75)
+        ctx.stroke()
+      }
     }
 
     // 6. Compact HP bar
@@ -1011,6 +1061,93 @@ export class CanvasRenderer {
     ctx.fillRect(cx - barW / 2 - 1, barY - 1, barW + 2, 6)
     ctx.fillStyle = hpRatio > 0.5 ? (isPlayer ? '#22c55e' : '#d8c94c') : hpRatio > 0.25 ? '#eab308' : '#ef4444'
     ctx.fillRect(cx - barW / 2, barY, barW * hpRatio, 4)
+  }
+
+  private renderDeckDetails(
+    ship: ShipEntity,
+    shape: ShipShapeClass,
+    dim: { l: number; w: number; h: number },
+    hPx: number,
+    topColor: string,
+    rimColor: string,
+    localToWorld: (lon: number, lat: number) => [number, number],
+    tick: number,
+  ): void {
+    const { ctx, iso } = this
+    const lineCount = shape === 'destroyer' ? 1 : shape === 'cruiser' ? 2 : 3
+    ctx.strokeStyle = 'rgba(226,232,240,0.20)'
+    ctx.lineWidth = Math.max(0.7, 1.5 * iso.scale)
+    for (let i = 0; i < lineCount; i++) {
+      const lat = (i - (lineCount - 1) / 2) * dim.w * 0.18
+      const [aX, aY] = localToWorld(-dim.l * 0.34, lat)
+      const [bX, bY] = localToWorld(dim.l * 0.34, lat)
+      const [sx, sy] = this.w2s(aX, aY)
+      const [ex, ey] = this.w2s(bX, bY)
+      ctx.beginPath()
+      ctx.moveTo(sx, sy - hPx - 1)
+      ctx.lineTo(ex, ey - hPx - 1)
+      ctx.stroke()
+    }
+
+    const turrets = turretLayout(shape, dim)
+    for (const turret of turrets) {
+      const [tx, ty] = localToWorld(turret.lon, turret.lat)
+      const [sx, sy] = this.w2s(tx, ty)
+      const r = Math.max(2.4, turret.radius * iso.scale)
+      ctx.save()
+      ctx.translate(sx, sy - hPx - r * 0.25)
+      ctx.scale(1.25, 0.62)
+      ctx.beginPath()
+      ctx.arc(0, 0, r, 0, Math.PI * 2)
+      ctx.fillStyle = lerpHex(topColor, '#ffffff', shape === 'boss' ? 0.42 : 0.30)
+      ctx.fill()
+      ctx.strokeStyle = rimColor
+      ctx.lineWidth = 0.7
+      ctx.stroke()
+      ctx.restore()
+
+      const aim = this.turretAimDirection(ship, { x: tx, y: ty, z: 0 }, tick, dim.l * 0.22)
+      const bx = tx + aim.x * dim.l * 0.12
+      const by = ty + aim.y * dim.l * 0.12
+      const [barrelX, barrelY] = this.w2s(bx, by)
+      ctx.beginPath()
+      ctx.moveTo(sx, sy - hPx - r * 0.35)
+      ctx.lineTo(barrelX, barrelY - hPx - r * 0.35)
+      ctx.strokeStyle = lerpHex(rimColor, '#ffffff', 0.25)
+      ctx.lineWidth = Math.max(0.8, turret.barrels * 0.55)
+      ctx.stroke()
+    }
+  }
+
+  private turretAimDirection(ship: ShipEntity, mount: Vec3, tick: number, maxMountDistance: number): { x: number; y: number } {
+    let best: CombatEvent | undefined
+    let bestScore = Number.POSITIVE_INFINITY
+
+    for (const ev of this.effectLog) {
+      if (ev.type !== 'weapon.fired' || ev.sourceId !== ship.id || !ev.position || !ev.targetPosition) continue
+      const age = tick - ev.tick
+      if (age < 0 || age > 70) continue
+
+      const dx = ev.position.x - mount.x
+      const dy = ev.position.y - mount.y
+      const distSq = dx * dx + dy * dy
+      if (distSq > maxMountDistance * maxMountDistance) continue
+
+      const score = distSq + age * 12
+      if (score < bestScore) {
+        best = ev
+        bestScore = score
+      }
+    }
+
+    if (best?.targetPosition) {
+      const dx = best.targetPosition.x - mount.x
+      const dy = best.targetPosition.y - mount.y
+      const len = Math.hypot(dx, dy)
+      if (len > 0) return { x: dx / len, y: dy / len }
+    }
+
+    return { x: Math.cos(ship.angle), y: Math.sin(ship.angle) }
   }
 
   // ── projectile ─────────────────────────────────────────────────────────────
@@ -1100,9 +1237,10 @@ export class CanvasRenderer {
 
   // ── range ellipse (isometric circle = ellipse) ─────────────────────────────
 
-  private renderRangeEllipse(player: ShipEntity, weaponType: WeaponType): void {
+  private renderRangeEllipse(player: ShipEntity, weapon: WeaponState): void {
     const { ctx } = this
-    const cfg = WEAPON_CONFIGS[weaponType]
+    const weaponType = weapon.type
+    const cfg = getWeaponConfig(weapon.id, weaponType)
     const R = cfg.maxRange
     const STEPS = 72
 
@@ -1138,14 +1276,15 @@ export class CanvasRenderer {
     ctx.setLineDash([])
   }
 
-  private renderAimPointer(player: ShipEntity, weaponType: WeaponType, aimPoint: Vec3): void {
+  private renderAimPointer(player: ShipEntity, weapon: WeaponState, aimPoint: Vec3, obstacles: readonly MapObstacle[]): void {
     const { ctx, iso } = this
-    const cfg = WEAPON_CONFIGS[weaponType]
+    const weaponType = weapon.type
+    const cfg = getWeaponConfig(weapon.id, weaponType)
     const dx = aimPoint.x - player.pos.x
     const dy = aimPoint.y - player.pos.y
     const dist = Math.sqrt(dx * dx + dy * dy)
     const inRange = dist <= cfg.maxRange
-    const blocked = weaponType === 'torpedo' && isOnLand(aimPoint.x, aimPoint.y)
+    const blocked = weaponType === 'torpedo' && isOnLand(aimPoint.x, aimPoint.y, obstacles)
     const color = !inRange || blocked ? '#ef4444' : '#f8fafc'
     const accent: Record<WeaponType, string> = {
       gun:       '#fbbf24',
@@ -1266,4 +1405,103 @@ function signedNoise(x: number, y: number, salt: number): number {
 
 function impactWorldRadius(type: WeaponType): number {
   return type === 'torpedo' ? 210 : type === 'missile' ? 185 : type === 'gun' ? 120 : type === 'secondary' ? 90 : 64
+}
+
+function weaponTypeFromId(weaponId: string | undefined): WeaponType {
+  if (!weaponId) return 'gun'
+  if (weaponId.includes('torpedo')) return 'torpedo'
+  if (weaponId.includes('missile')) return 'missile'
+  if (weaponId.includes('secondary')) return 'secondary'
+  if (weaponId.includes('aa')) return 'aa'
+  return 'gun'
+}
+
+function combatEventEffectKey(ev: CombatEvent): string {
+  const p = ev.position
+  const tp = ev.targetPosition
+  return [
+    ev.tick,
+    ev.type,
+    ev.sourceId ?? '',
+    ev.targetId ?? '',
+    ev.weaponId ?? '',
+    p ? `${Math.round(p.x * 10)},${Math.round(p.y * 10)},${Math.round(p.z * 10)}` : '',
+    tp ? `${Math.round(tp.x * 10)},${Math.round(tp.y * 10)},${Math.round(tp.z * 10)}` : '',
+  ].join('|')
+}
+
+function shipHullPoints(shape: ShipShapeClass, l: number, w: number): [number, number][] {
+  if (shape === 'destroyer') {
+    return [
+      [l, 0],
+      [l * 0.66, -w * 0.78],
+      [-l * 0.74, -w],
+      [-l, -w * 0.42],
+      [-l, w * 0.42],
+      [-l * 0.74, w],
+      [l * 0.66, w * 0.78],
+    ]
+  }
+  if (shape === 'cruiser') {
+    return [
+      [l, 0],
+      [l * 0.78, -w * 0.85],
+      [l * 0.18, -w],
+      [-l * 0.78, -w * 0.88],
+      [-l, -w * 0.55],
+      [-l, w * 0.55],
+      [-l * 0.78, w * 0.88],
+      [l * 0.18, w],
+      [l * 0.78, w * 0.85],
+    ]
+  }
+  const sternWidth = shape === 'boss' ? 0.78 : 0.62
+  return [
+    [l, 0],
+    [l * 0.88, -w * 0.62],
+    [l * 0.40, -w],
+    [-l * 0.72, -w],
+    [-l, -w * sternWidth],
+    [-l, w * sternWidth],
+    [-l * 0.72, w],
+    [l * 0.40, w],
+    [l * 0.88, w * 0.62],
+  ]
+}
+
+function superstructureSpec(shape: ShipShapeClass, dim: { l: number; w: number; h: number }): { offset: number; l: number; w: number; h: number } {
+  if (shape === 'destroyer') return { offset: -dim.l * 0.03, l: dim.l * 0.22, w: dim.w * 0.46, h: 0.42 }
+  if (shape === 'cruiser') return { offset: -dim.l * 0.02, l: dim.l * 0.25, w: dim.w * 0.54, h: 0.58 }
+  if (shape === 'boss') return { offset: -dim.l * 0.04, l: dim.l * 0.34, w: dim.w * 0.62, h: 0.82 }
+  return { offset: -dim.l * 0.03, l: dim.l * 0.30, w: dim.w * 0.58, h: 0.70 }
+}
+
+function turretLayout(shape: ShipShapeClass, dim: { l: number; w: number }): Array<{ lon: number; lat: number; radius: number; barrels: number }> {
+  if (shape === 'destroyer') {
+    return [
+      { lon: dim.l * 0.26, lat: 0, radius: dim.w * 0.20, barrels: 1 },
+    ]
+  }
+  if (shape === 'cruiser') {
+    return [
+      { lon: dim.l * 0.27, lat: 0, radius: dim.w * 0.18, barrels: 2 },
+      { lon: -dim.l * 0.28, lat: 0, radius: dim.w * 0.18, barrels: 2 },
+    ]
+  }
+  if (shape === 'boss') {
+    return [
+      { lon: dim.l * 0.34, lat: 0, radius: dim.w * 0.19, barrels: 3 },
+      { lon: dim.l * 0.12, lat: 0, radius: dim.w * 0.18, barrels: 3 },
+      { lon: -dim.l * 0.34, lat: 0, radius: dim.w * 0.19, barrels: 3 },
+      { lon: -dim.l * 0.08, lat: -dim.w * 0.28, radius: dim.w * 0.12, barrels: 2 },
+      { lon: -dim.l * 0.08, lat: dim.w * 0.28, radius: dim.w * 0.12, barrels: 2 },
+    ]
+  }
+  return [
+    { lon: dim.l * 0.34, lat: 0, radius: dim.w * 0.18, barrels: 2 },
+    { lon: dim.l * 0.10, lat: 0, radius: dim.w * 0.17, barrels: 2 },
+    { lon: -dim.l * 0.32, lat: 0, radius: dim.w * 0.18, barrels: 2 },
+    { lon: -dim.l * 0.08, lat: dim.w * 0.28, radius: dim.w * 0.12, barrels: 2 },
+    { lon: -dim.l * 0.08, lat: -dim.w * 0.28, radius: dim.w * 0.12, barrels: 2 },
+  ]
 }

@@ -36,8 +36,18 @@ export const GUN_PROFILES: Record<string, GunProfile> = {
   // 主砲 (gun)
   'weapon.gun.127mm.twin': { caliber: 127, barrelLength: 38, shellType: 'HE' }, // 5"/38 駆逐艦主砲 連装
   'weapon.gun.152mm.twin': { caliber: 152, barrelLength: 55, shellType: 'AP' }, // 6"/55 巡洋艦主砲 連装
+  'weapon.gun.152mm.twin.forward': { caliber: 152, barrelLength: 55, shellType: 'AP' },
+  'weapon.gun.152mm.twin.aft': { caliber: 152, barrelLength: 55, shellType: 'AP' },
   'weapon.gun.406mm.twin': { caliber: 406, barrelLength: 45, shellType: 'AP' }, // 16"/45 戦艦主砲 連装
+  'weapon.gun.406mm.twin.forward': { caliber: 406, barrelLength: 45, shellType: 'AP' },
+  'weapon.gun.406mm.twin.center': { caliber: 406, barrelLength: 45, shellType: 'AP' },
+  'weapon.gun.406mm.twin.aft': { caliber: 406, barrelLength: 45, shellType: 'AP' },
+  'weapon.boss.460mm.twin.forward': { caliber: 460, barrelLength: 45, shellType: 'AP' },
+  'weapon.boss.460mm.twin.center': { caliber: 460, barrelLength: 45, shellType: 'AP' },
+  'weapon.boss.460mm.twin.aft': { caliber: 460, barrelLength: 45, shellType: 'AP' },
   // 副砲 (secondary)
   'weapon.secondary.127mm.twin': { caliber: 127, barrelLength: 38, shellType: 'HE' }, // 5"/38 連装副砲
   'weapon.secondary.152mm.twin': { caliber: 152, barrelLength: 55, shellType: 'AP' }, // 6"/55 連装副砲
+  'weapon.secondary.152mm.twin.port': { caliber: 152, barrelLength: 55, shellType: 'AP' },
+  'weapon.secondary.152mm.twin.starboard': { caliber: 152, barrelLength: 55, shellType: 'AP' },
 }

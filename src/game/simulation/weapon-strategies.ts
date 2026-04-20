@@ -11,6 +11,8 @@ export interface WeaponConfig {
   maxHeight: number
 }
 
+type WeaponConfigOverride = Partial<WeaponConfig>
+
 export interface WeaponStrategy {
   readonly type: WeaponType
   readonly config: WeaponConfig
@@ -87,6 +89,43 @@ export const WEAPON_CONFIGS: Record<WeaponType, WeaponConfig> = {
   missile: WEAPON_STRATEGIES.missile.config,
 }
 
+const WEAPON_CONFIG_OVERRIDES: Record<string, WeaponConfigOverride> = {
+  'weapon.gun.406mm.twin.forward': {
+    speed: 24, damageMin: 85, damageMax: 130, lifetime: 100, cooldown: 24, hitRadius: 18, maxRange: 2200, maxHeight: 430,
+  },
+  'weapon.gun.406mm.twin.center': {
+    speed: 24, damageMin: 85, damageMax: 130, lifetime: 100, cooldown: 24, hitRadius: 18, maxRange: 2200, maxHeight: 430,
+  },
+  'weapon.gun.406mm.twin.aft': {
+    speed: 24, damageMin: 85, damageMax: 130, lifetime: 100, cooldown: 24, hitRadius: 18, maxRange: 2200, maxHeight: 430,
+  },
+  'weapon.secondary.152mm.twin.port': {
+    speed: 24, damageMin: 28, damageMax: 45, lifetime: 75, cooldown: 12, hitRadius: 14, maxRange: 1300, maxHeight: 240,
+  },
+  'weapon.secondary.152mm.twin.starboard': {
+    speed: 24, damageMin: 28, damageMax: 45, lifetime: 75, cooldown: 12, hitRadius: 14, maxRange: 1300, maxHeight: 240,
+  },
+  'weapon.missile.cruiser.standard': {
+    speed: 13, damageMin: 55, damageMax: 85, lifetime: 180, cooldown: 80, hitRadius: 24, maxRange: 2200, maxHeight: 420,
+  },
+  'weapon.missile.battleship.longrange': {
+    speed: 14, damageMin: 80, damageMax: 120, lifetime: 240, cooldown: 110, hitRadius: 30, maxRange: 3200, maxHeight: 560,
+  },
+  'weapon.boss.460mm.twin.forward': {
+    speed: 25, damageMin: 110, damageMax: 165, lifetime: 120, cooldown: 28, hitRadius: 22, maxRange: 2600, maxHeight: 520,
+  },
+  'weapon.boss.460mm.twin.center': {
+    speed: 25, damageMin: 110, damageMax: 165, lifetime: 120, cooldown: 28, hitRadius: 22, maxRange: 2600, maxHeight: 520,
+  },
+  'weapon.boss.460mm.twin.aft': {
+    speed: 25, damageMin: 110, damageMax: 165, lifetime: 120, cooldown: 28, hitRadius: 22, maxRange: 2600, maxHeight: 520,
+  },
+}
+
 export function getWeaponStrategy(type: WeaponType): WeaponStrategy {
   return WEAPON_STRATEGIES[type]
+}
+
+export function getWeaponConfig(weaponId: string, type: WeaponType): WeaponConfig {
+  return { ...WEAPON_CONFIGS[type], ...WEAPON_CONFIG_OVERRIDES[weaponId] }
 }
