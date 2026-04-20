@@ -1,7 +1,13 @@
 import type { CombatState, ShipEntity, WeaponType, SpeedLevel } from '../simulation/types'
 import { SPEED_LEVEL_LABEL, SPEED_LEVEL_ORDER, KNOTS_PER_UNIT } from '../simulation/movement'
+import {
+  HULL_SECTION_LABELS,
+  HULL_SECTION_ORDER,
+  durabilityColor,
+  estimateHullSections,
+} from './hullstatus'
 
-export type WeaponMode = 'gun' | 'torpedo' | 'aa' | 'missile'
+export type WeaponMode = 'gun' | 'secondary' | 'torpedo'
 
 export interface ClickRegion {
   id: string          // 'toggle:<weaponType>' | 'toggle-all'
@@ -12,30 +18,18 @@ export interface ClickRegion {
 }
 
 const WEAPON_LABELS: Record<WeaponMode, string> = {
-  gun: 'GUN',
-  torpedo: 'TORP',
-  aa: 'AA',
-  missile: 'MISL',
+  gun: '主砲',
+  secondary: '副砲',
+  torpedo: '魚雷',
 }
 
 const WEAPON_KEYS: Record<WeaponMode, string> = {
   gun: '1',
-  torpedo: '2',
-  aa: '3',
-  missile: '4',
+  secondary: '2',
+  torpedo: '3',
 }
 
-const WEAPON_ORDER: WeaponMode[] = ['gun', 'torpedo', 'aa', 'missile']
-const HULL_SECTION_ORDER = ['bow', 'stern', 'superstructure', 'deck'] as const
-
-type HullSection = typeof HULL_SECTION_ORDER[number]
-
-const HULL_SECTION_LABELS: Record<HullSection, string> = {
-  bow: '船首',
-  stern: '船尾',
-  superstructure: '船楼',
-  deck: '甲板',
-}
+const WEAPON_ORDER: WeaponMode[] = ['gun', 'secondary', 'torpedo']
 
 const RADAR_SIZE = 160   // px, radar panel side length
 const RADAR_PAD  = 12
@@ -335,7 +329,7 @@ export class HUD {
     ctx.fillStyle = '#475569'
     ctx.font = '11px monospace'
     ctx.fillText(
-      '↑/W: 増速  ↓/S: 減速  ←→/AD: 旋回  Click: 射撃  1-4: 兵装選択  AUTO/MAN: 自動切替',
+      '↑/W: 増速  ↓/S: 減速  ←→/AD: 旋回  Click: 射撃  1:主砲 2:副砲 3:魚雷  AUTO/MAN: 自動切替',
       12,
       y + 18
     )
@@ -363,25 +357,7 @@ export class HUD {
 }
 
 const COOLDOWN_MAX: Record<WeaponType, number> = {
-  gun: 15, torpedo: 60, aa: 8, missile: 90,
-}
-
-function estimateHullSections(ship: ShipEntity): Record<HullSection, number> {
-  const hpRatio = clamp01(ship.hp / ship.maxHp)
-  return {
-    bow: clamp01(hpRatio * 1.08 - 0.04),
-    stern: clamp01(hpRatio * 1.02 - 0.02),
-    superstructure: clamp01(hpRatio * 0.94 + 0.03),
-    deck: clamp01(hpRatio * 0.98),
-  }
-}
-
-function durabilityColor(ratio: number): string {
-  return ratio > 0.55 ? '#22c55e' : ratio > 0.28 ? '#eab308' : '#ef4444'
-}
-
-function clamp01(value: number): number {
-  return Math.max(0, Math.min(1, value))
+  gun: 15, secondary: 10, torpedo: 60, aa: 8, missile: 90,
 }
 
 function roundRect(

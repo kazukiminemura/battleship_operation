@@ -1,9 +1,8 @@
-import type { CombatEvent } from '../simulation/types'
+import type { CombatEvent, WeaponType } from '../simulation/types'
 import surfaceExplosionUrl from '../../assets/audio/soundeffect-lab/bomb4.mp3?url'
 import heavyExplosionUrl from '../../assets/audio/soundeffect-lab/big-explosion1.mp3?url'
+import { inferWeaponSoundClass, inferWeaponType, type WeaponSoundClass } from './weapon-audio'
 
-type WeaponType = 'gun' | 'torpedo' | 'aa' | 'missile'
-type WeaponSoundClass = 'machineGun' | 'cannon' | 'missile' | 'laser' | 'torpedo'
 type ExplosionSample = keyof typeof EXPLOSION_SAMPLE_URLS
 type SpeedDirection = 'up' | 'down'
 
@@ -43,6 +42,7 @@ export class SoundSystem {
     const now = ctx.currentTime
     const baseFreq: Record<WeaponType, number> = {
       gun: 310,
+      secondary: 360,
       torpedo: 230,
       aa: 420,
       missile: 270,
@@ -241,22 +241,6 @@ export class SoundSystem {
       sineDecay   (ctx, dst, now + 0.005, 55, 0.20 * volScale,          0.010, 0.300)
     }
   }
-}
-
-function inferWeaponType(weaponId: string): WeaponType {
-  if (weaponId === 'torpedo' || weaponId.includes('torpedo')) return 'torpedo'
-  if (weaponId === 'aa'      || weaponId.includes('aa'))      return 'aa'
-  if (weaponId === 'missile' || weaponId.includes('missile')) return 'missile'
-  return 'gun'
-}
-
-function inferWeaponSoundClass(weaponId: string): WeaponSoundClass {
-  const id = weaponId.toLowerCase()
-  if (id.includes('torpedo')) return 'torpedo'
-  if (id.includes('missile') || id.includes('rocket')) return 'missile'
-  if (id.includes('laser') || id.includes('beam')) return 'laser'
-  if (id.includes('aa') || id.includes('machine') || id.includes('mg')) return 'machineGun'
-  return 'cannon'
 }
 
 // White noise through a biquad filter with envelope

@@ -25,7 +25,7 @@ describe('combatStep', () => {
     expect(next.eventLog.some(e =>
       e.type === 'weapon.fired' &&
       e.sourceId === 'ship.player' &&
-      e.weaponId === 'weapon.gun.127mm.single'
+      e.weaponId === 'weapon.gun.127mm.twin'
     )).toBe(true)
   })
 })

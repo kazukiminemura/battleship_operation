@@ -36,9 +36,8 @@ export class InputAdapter {
       this.keys.add(e.code)
 
       if (e.code === 'Digit1') this.selectWeaponMode('gun')
-      if (e.code === 'Digit2') this.selectWeaponMode('torpedo')
-      if (e.code === 'Digit3') this.selectWeaponMode('aa')
-      if (e.code === 'Digit4') this.selectWeaponMode('missile')
+      if (e.code === 'Digit2') this.selectWeaponMode('secondary')
+      if (e.code === 'Digit3') this.selectWeaponMode('torpedo')
 
       if (!e.repeat) {
         if (e.code === 'ArrowUp' || e.code === 'KeyW') {
@@ -73,10 +72,9 @@ export class InputAdapter {
       const target: Vec3 = { x: wx, y: wy, z: 0 }
 
       const cmdType =
-        this.weaponMode === 'gun'     ? 'fire.primary' :
-        this.weaponMode === 'torpedo' ? 'fire.torpedo'  :
-        this.weaponMode === 'aa'      ? 'fire.aa'       :
-                                        'fire.missile'
+        this.weaponMode === 'gun'       ? 'fire.primary'   :
+        this.weaponMode === 'secondary' ? 'fire.secondary' :
+                                          'fire.torpedo'
 
       this.commands.push({ tick: 0, actorId: 'ship.player', type: cmdType, target })
     })

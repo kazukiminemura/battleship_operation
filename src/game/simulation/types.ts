@@ -1,6 +1,6 @@
 export type Vec3 = { x: number; y: number; z: number }
 
-export type WeaponType = 'gun' | 'torpedo' | 'aa' | 'missile'
+export type WeaponType = 'gun' | 'secondary' | 'torpedo' | 'aa' | 'missile'
 
 export type EntityType = 'ship' | 'projectile' | 'torpedo' | 'objective' | 'building'
 
@@ -79,7 +79,7 @@ export interface CombatState {
 export type CommandType =
   | 'move' | 'rotate' | 'stop'
   | 'speed.up' | 'speed.down'
-  | 'fire.primary' | 'fire.torpedo' | 'fire.aa' | 'fire.missile'
+  | 'fire.primary' | 'fire.secondary' | 'fire.torpedo' | 'fire.aa' | 'fire.missile'
 
 export interface Command {
   tick: number

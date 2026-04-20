@@ -1,6 +1,6 @@
 import type { CombatState, ShipEntity, Command } from './types'
 import type { SeededRandom } from './random'
-import { WEAPON_CONFIGS } from './weapons'
+import { WEAPON_CONFIGS } from './weapon-strategies'
 
 // AI keeps this margin inside weapon maxRange before firing
 const RANGE_MARGIN = 0.85
@@ -76,6 +76,16 @@ export function generateAiCommands(state: CombatState, rng: SeededRandom): Comma
         if (gun && gun.cooldownTick === 0 && gun.ammo > 0) {
           commands.push({
             tick: state.tick, actorId: enemy.id, type: 'fire.primary',
+            target: { x: player.pos.x, y: player.pos.y, z: 0 },
+          })
+        }
+      }
+      const secRange = WEAPON_CONFIGS.secondary.maxRange * RANGE_MARGIN
+      if (dist <= secRange) {
+        const sec = enemy.weapons.find(w => w.type === 'secondary')
+        if (sec && sec.cooldownTick === 0 && sec.ammo > 0) {
+          commands.push({
+            tick: state.tick, actorId: enemy.id, type: 'fire.secondary',
             target: { x: player.pos.x, y: player.pos.y, z: 0 },
           })
         }

@@ -1,6 +1,6 @@
-import type { BuildingEntity, CombatState, ShipEntity, ProjectileEntity, Vec3, WeaponType } from '../simulation/types'
+import type { BuildingEntity, CombatEvent, CombatState, Entity, ShipEntity, ProjectileEntity, Vec3, WeaponType } from '../simulation/types'
 import { ISLAND_COLLIDER, isOnLand, WORLD_SIZE } from '../simulation/movement'
-import { WEAPON_CONFIGS } from '../simulation/weapons'
+import { WEAPON_CONFIGS } from '../simulation/weapon-strategies'
 
 // Ship physical dimensions in world units (length, width, height)
 const SHIP_DIMS: Record<string, { l: number; w: number; h: number }> = {
@@ -27,6 +27,8 @@ export class CanvasRenderer {
   private iso: IsoParams = { scale: 0.08, ox: 0, oy: 0 }
   private camX = 5000
   private camY = 5000
+  // イベントはシミュレーション毎ティック消去されるためレンダラー側で蓄積
+  private effectLog: CombatEvent[] = []
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas
@@ -87,6 +89,13 @@ export class CanvasRenderer {
     const { ctx } = this
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height)
 
+    // 毎ティック消去されるeventLogをレンダラー側で蓄積し、エフェクトを複数フレーム描画できるようにする
+    for (const ev of state.eventLog) {
+      this.effectLog.push(ev)
+    }
+    const MAX_EFFECT_AGE = 70
+    this.effectLog = this.effectLog.filter(ev => state.tick - ev.tick < MAX_EFFECT_AGE)
+
     this.renderOcean()
     this.renderGrid()
     this.renderIsland()
@@ -109,13 +118,13 @@ export class CanvasRenderer {
       .filter(e => e.kind === 'building') as BuildingEntity[])
       .sort((a, b) => a.pos.y - b.pos.y)
 
-    this.renderWaterSplashes(state)
+    this.renderWaterSplashes(this.effectLog, state.tick)
     for (const b of buildings)   this.renderBuilding(b)
     for (const p of projectiles) this.renderProjectile(p)
-    this.renderMuzzleBursts(state)
+    this.renderMuzzleBursts(this.effectLog, state.tick)
     for (const s of ships)       this.renderShip(s)
-    this.renderLandDust(state)
-    this.renderShipExplosions(state)
+    this.renderLandDust(this.effectLog, state.tick, state.entities)
+    this.renderShipExplosions(this.effectLog, state.tick, state.entities)
 
     if (selectedWeapon && aimPoint) {
       const player = state.entities.get('ship.player') as ShipEntity | undefined
@@ -129,16 +138,16 @@ export class CanvasRenderer {
 
   private static readonly SPLASH_TICKS = 40
   private static readonly DUST_TICKS = 46
-  private static readonly EXPLOSION_TICKS = 34
+  private static readonly EXPLOSION_TICKS = 50
 
-  private renderWaterSplashes(state: CombatState): void {
+  private renderWaterSplashes(events: CombatEvent[], tick: number): void {
     const { ctx } = this
     const D = CanvasRenderer.SPLASH_TICKS
 
-    for (const ev of state.eventLog) {
+    for (const ev of events) {
       if (ev.type !== 'weapon.missed' || !ev.position) continue
       if (isOnLand(ev.position.x, ev.position.y)) continue
-      const age = state.tick - ev.tick
+      const age = tick - ev.tick
       if (age < 0 || age >= D) continue
 
       const t   = age / D
@@ -148,8 +157,8 @@ export class CanvasRenderer {
       const [cx, cy] = this.w2s(pos.x, pos.y)
 
       // Weapon-specific sizing (world units)
-      const maxR = wtype === 'torpedo' ? 190 : wtype === 'missile' ? 150 : wtype === 'gun' ? 85 : 42
-      const N    = wtype === 'torpedo' ? 22  : wtype === 'missile' ? 16  : wtype === 'gun' ? 12 : 7
+      const maxR = wtype === 'torpedo' ? 190 : wtype === 'missile' ? 150 : wtype === 'gun' ? 85 : wtype === 'secondary' ? 65 : 42
+      const N    = wtype === 'torpedo' ? 22  : wtype === 'missile' ? 16  : wtype === 'gun' ? 12 : wtype === 'secondary' ? 9 : 7
       const ringColor =
         wtype === 'torpedo' ? '100,195,255' :
         wtype === 'missile' ? '180,215,255' : '170,228,255'
@@ -364,20 +373,20 @@ export class CanvasRenderer {
 
   // ── land dust ─────────────────────────────────────────────────────────────
 
-  private renderLandDust(state: CombatState): void {
+  private renderLandDust(events: CombatEvent[], tick: number, entities: Map<string, Entity>): void {
     const { ctx } = this
     const D = CanvasRenderer.DUST_TICKS
 
-    for (const ev of state.eventLog) {
+    for (const ev of events) {
       if (!ev.position) continue
 
-      const target = ev.targetId ? state.entities.get(ev.targetId) : undefined
+      const target = ev.targetId ? entities.get(ev.targetId) : undefined
       const isLandImpact =
         (ev.type === 'weapon.missed' && isOnLand(ev.position.x, ev.position.y)) ||
         (ev.type === 'weapon.hit' && target?.kind === 'building')
       if (!isLandImpact) continue
 
-      const age = state.tick - ev.tick
+      const age = tick - ev.tick
       if (age < 0 || age >= D) continue
 
       const t = age / D
@@ -418,7 +427,7 @@ export class CanvasRenderer {
       ctx.fill()
       ctx.restore()
 
-      const puffCount = wtype === 'missile' ? 22 : wtype === 'torpedo' ? 16 : wtype === 'gun' ? 14 : 8
+      const puffCount = wtype === 'missile' ? 22 : wtype === 'torpedo' ? 16 : wtype === 'gun' ? 14 : wtype === 'secondary' ? 11 : 8
       for (let i = 0; i < puffCount; i++) {
         const n = Math.abs(signedNoise(pos.x, pos.y, i + 190))
         const a = (i / puffCount) * Math.PI * 2 + signedNoise(pos.y, pos.x, i + 203) * 0.65
@@ -437,16 +446,16 @@ export class CanvasRenderer {
 
   // ── ship explosions ───────────────────────────────────────────────────────
 
-  private renderShipExplosions(state: CombatState): void {
+  private renderShipExplosions(events: CombatEvent[], tick: number, entities: Map<string, Entity>): void {
     const { ctx } = this
     const D = CanvasRenderer.EXPLOSION_TICKS
 
-    for (const ev of state.eventLog) {
+    for (const ev of events) {
       if (ev.type !== 'weapon.hit' || !ev.position || !ev.targetId) continue
-      const target = state.entities.get(ev.targetId)
+      const target = entities.get(ev.targetId)
       if (target?.kind !== 'ship') continue
 
-      const age = state.tick - ev.tick
+      const age = tick - ev.tick
       if (age < 0 || age >= D) continue
 
       const t = age / D
@@ -456,17 +465,19 @@ export class CanvasRenderer {
       const [cx, cy] = this.w2s(pos.x, pos.y)
       const maxR = impactWorldRadius(wtype) * (wtype === 'torpedo' ? 0.95 : 0.72)
 
-      if (t < 0.28) {
-        const ft = t / 0.28
+      // ── 1. 初期フラッシュ（白→橙→赤） ────────────────────────────────────
+      if (t < 0.22) {
+        const ft = t / 0.22
         ctx.save()
         ctx.translate(cx, cy)
-        ctx.scale(1.35, 0.62)
-        const flashR = maxR * s * (0.18 + ft * 0.86)
+        ctx.scale(1.5, 0.65)
+        const flashR = maxR * s * (0.22 + ft * 1.10)
         const flash = ctx.createRadialGradient(0, 0, 0, 0, 0, flashR)
-        flash.addColorStop(0, `rgba(255,255,240,${(1 - ft) * 0.98})`)
-        flash.addColorStop(0.30, `rgba(255,202,74,${(1 - ft) * 0.86})`)
-        flash.addColorStop(0.68, `rgba(248,88,36,${(1 - ft) * 0.55})`)
-        flash.addColorStop(1, 'rgba(248,88,36,0)')
+        flash.addColorStop(0,    `rgba(255,255,255,${(1 - ft) * 1.0})`)
+        flash.addColorStop(0.20, `rgba(255,240,180,${(1 - ft) * 0.95})`)
+        flash.addColorStop(0.50, `rgba(255,160,40,${(1 - ft) * 0.80})`)
+        flash.addColorStop(0.80, `rgba(220,60,20,${(1 - ft) * 0.50})`)
+        flash.addColorStop(1,    'rgba(180,40,10,0)')
         ctx.beginPath()
         ctx.arc(0, 0, flashR, 0, Math.PI * 2)
         ctx.fillStyle = flash
@@ -474,73 +485,96 @@ export class CanvasRenderer {
         ctx.restore()
       }
 
-      const spikes = wtype === 'missile' ? 16 : wtype === 'torpedo' ? 12 : 10
-      if (t < 0.42) {
-        const st = t / 0.42
+      // ── 2. 火球（中期まで残る）────────────────────────────────────────────
+      if (t < 0.50) {
+        const bt = t / 0.50
         ctx.save()
         ctx.translate(cx, cy)
+        ctx.scale(1.4, 0.60)
+        const ballR = maxR * s * (0.55 + bt * 0.35) * (1 - bt * 0.25)
+        const ball = ctx.createRadialGradient(0, 0, 0, 0, 0, Math.max(1, ballR))
+        ball.addColorStop(0,    `rgba(255,230,100,${(1 - bt) * 0.90})`)
+        ball.addColorStop(0.40, `rgba(255,110,20,${(1 - bt) * 0.82})`)
+        ball.addColorStop(0.78, `rgba(180,40,10,${(1 - bt) * 0.55})`)
+        ball.addColorStop(1,    'rgba(100,20,5,0)')
         ctx.beginPath()
-        for (let i = 0; i < spikes; i++) {
-          const a = (i / spikes) * Math.PI * 2 + signedNoise(pos.x, pos.y, i + 301) * 0.16
-          const r1 = maxR * s * (0.16 + st * 0.20)
-          const r2 = maxR * s * (0.38 + st * (0.55 + Math.abs(signedNoise(pos.y, pos.x, i + 313)) * 0.24))
-          const x1 = Math.cos(a) * r1
-          const y1 = Math.sin(a) * r1 * 0.58
-          const x2 = Math.cos(a) * r2
-          const y2 = Math.sin(a) * r2 * 0.58
-          i === 0 ? ctx.moveTo(x1, y1) : ctx.lineTo(x1, y1)
-          ctx.lineTo(x2, y2)
-        }
-        ctx.closePath()
-        ctx.fillStyle = `rgba(255,126,32,${(1 - st) * 0.68})`
+        ctx.arc(0, 0, Math.max(1, ballR), 0, Math.PI * 2)
+        ctx.fillStyle = ball
         ctx.fill()
         ctx.restore()
       }
 
-      const smokeCount = wtype === 'missile' ? 24 : wtype === 'torpedo' ? 20 : 16
+      // ── 3. 炎スパイク放射 ────────────────────────────────────────────────
+      const spikes = wtype === 'torpedo' ? 14 : wtype === 'secondary' ? 10 : 12
+      if (t < 0.40) {
+        const st = t / 0.40
+        ctx.save()
+        ctx.translate(cx, cy)
+        ctx.beginPath()
+        for (let i = 0; i < spikes; i++) {
+          const a = (i / spikes) * Math.PI * 2 + signedNoise(pos.x, pos.y, i + 301) * 0.18
+          const r1 = maxR * s * (0.18 + st * 0.22)
+          const r2 = maxR * s * (0.42 + st * (0.60 + Math.abs(signedNoise(pos.y, pos.x, i + 313)) * 0.28))
+          const x1 = Math.cos(a) * r1;  const y1 = Math.sin(a) * r1 * 0.58
+          const x2 = Math.cos(a) * r2;  const y2 = Math.sin(a) * r2 * 0.58
+          i === 0 ? ctx.moveTo(x1, y1) : ctx.lineTo(x1, y1)
+          ctx.lineTo(x2, y2)
+        }
+        ctx.closePath()
+        ctx.fillStyle = `rgba(255,140,40,${(1 - st) * 0.72})`
+        ctx.fill()
+        ctx.restore()
+      }
+
+      // ── 4. 煙パーティクル（中後期まで持続）──────────────────────────────
+      const smokeCount = wtype === 'torpedo' ? 24 : wtype === 'secondary' ? 16 : 20
       for (let i = 0; i < smokeCount; i++) {
         const n = Math.abs(signedNoise(pos.x, pos.y, i + 340))
         const a = (i / smokeCount) * Math.PI * 2 + signedNoise(pos.y, pos.x, i + 353) * 0.8
-        const spread = maxR * (0.08 + n * 0.78) * Math.min(1, t * 1.9)
+        const spread = maxR * (0.10 + n * 0.85) * Math.min(1, t * 1.8)
         const [px, pyBase] = this.w2s(pos.x + Math.cos(a) * spread, pos.y + Math.sin(a) * spread)
-        const lift = maxR * s * (0.25 + n * 0.82) * Math.sin(Math.PI * Math.min(1, t * 1.2))
-        const r = Math.max(1.8, maxR * s * (0.030 + n * 0.065) * (1 - t * 0.18))
-        const alpha = Math.max(0, (1 - t) * (0.35 + n * 0.28))
+        const lift = maxR * s * (0.30 + n * 0.95) * Math.sin(Math.PI * Math.min(1, t * 1.1))
+        const r = Math.max(2.0, maxR * s * (0.034 + n * 0.072) * (1 - t * 0.15))
+        const alpha = Math.max(0, (1 - t) * (0.40 + n * 0.30))
         ctx.beginPath()
         ctx.arc(px, pyBase - lift, r, 0, Math.PI * 2)
-        ctx.fillStyle = i % 4 === 0 ? `rgba(34,31,28,${alpha})` : `rgba(93,82,72,${alpha * 0.82})`
+        ctx.fillStyle = t < 0.35
+          ? (i % 3 === 0 ? `rgba(200,120,30,${alpha})` : `rgba(160,80,20,${alpha * 0.85})`)
+          : (i % 4 === 0 ? `rgba(34,31,28,${alpha})`   : `rgba(80,70,62,${alpha * 0.82})`)
         ctx.fill()
       }
 
-      if (t < 0.85) {
-        const rt = t / 0.85
+      // ── 5. 衝撃波リング ──────────────────────────────────────────────────
+      if (t < 0.90) {
+        const rt = t / 0.90
         ctx.save()
         ctx.translate(cx, cy)
         ctx.scale(1.55, 0.62)
         ctx.beginPath()
-        ctx.arc(0, 0, maxR * s * (0.18 + rt * 1.05), 0, Math.PI * 2)
-        ctx.strokeStyle = `rgba(255,211,128,${(1 - rt) * 0.52})`
-        ctx.lineWidth = Math.max(0.8, maxR * s * 0.020 * (1 - rt))
+        ctx.arc(0, 0, maxR * s * (0.20 + rt * 1.20), 0, Math.PI * 2)
+        ctx.strokeStyle = `rgba(255,200,100,${(1 - rt) * 0.55})`
+        ctx.lineWidth = Math.max(0.8, maxR * s * 0.022 * (1 - rt))
         ctx.stroke()
         ctx.restore()
       }
     }
   }
 
-  private renderMuzzleBursts(state: CombatState): void {
+  private renderMuzzleBursts(events: CombatEvent[], tick: number): void {
     const { ctx } = this
     const D = 9
 
-    for (const ev of state.eventLog) {
+    for (const ev of events) {
       if (ev.type !== 'weapon.fired' || !ev.position) continue
-      const age = state.tick - ev.tick
+      const age = tick - ev.tick
       if (age < 0 || age >= D) continue
 
       const t = age / D
       const [cx, cy] = this.w2s(ev.position.x, ev.position.y)
-      const isMissile = ev.weaponId?.includes('missile') ?? false
-      const isAa = ev.weaponId?.includes('aa') ?? false
-      const r = (isMissile ? 38 : isAa ? 18 : 28) * this.iso.scale * (1 + t * 1.5)
+      const isMissile  = ev.weaponId?.includes('missile')   ?? false
+      const isAa       = ev.weaponId?.includes('aa')        ?? false
+      const isSecondary = ev.weaponId?.includes('secondary') ?? false
+      const r = (isMissile ? 38 : isAa ? 18 : isSecondary ? 22 : 28) * this.iso.scale * (1 + t * 1.5)
 
       ctx.save()
       ctx.translate(cx, cy)
@@ -1032,9 +1066,9 @@ export class CanvasRenderer {
       ctx.fillStyle = '#ffe66d'
       ctx.fill()
     } else {
-      // gun or aa: arcing shell
+      // gun / secondary / aa: arcing shell
       const elevated = sy - arcPx
-      const r = proj.weaponType === 'gun' ? 2.5 : 1.8
+      const r = (proj.weaponType === 'gun' || proj.weaponType === 'secondary') ? 2.5 : 1.8
       const [tx, tyBase] = this.w2s(proj.pos.x - proj.vel.x * 4.8, proj.pos.y - proj.vel.y * 4.8)
       const previousProgress = Math.max(0, progress - 0.12)
       const previousArcPx = proj.maxHeight * Math.sin(Math.PI * previousProgress) * iso.scale
@@ -1053,12 +1087,13 @@ export class CanvasRenderer {
       ctx.beginPath()
       ctx.moveTo(tx, tyBase - previousArcPx)
       ctx.lineTo(sx, elevated)
-      ctx.strokeStyle = proj.weaponType === 'gun' ? 'rgba(255,232,91,0.72)' : 'rgba(235,246,118,0.58)'
-      ctx.lineWidth = proj.weaponType === 'gun' ? 1.4 : 1.0
+      const isGunType = proj.weaponType === 'gun' || proj.weaponType === 'secondary'
+      ctx.strokeStyle = isGunType ? 'rgba(255,232,91,0.72)' : 'rgba(235,246,118,0.58)'
+      ctx.lineWidth = isGunType ? 1.4 : 1.0
       ctx.stroke()
       ctx.beginPath()
       ctx.arc(sx, elevated, Math.max(1.2, r * iso.scale), 0, Math.PI * 2)
-      ctx.fillStyle = proj.weaponType === 'gun' ? '#ffe66d' : '#dff76b'
+      ctx.fillStyle = isGunType ? '#ffe66d' : '#dff76b'
       ctx.fill()
     }
   }
@@ -1080,16 +1115,18 @@ export class CanvasRenderer {
     ctx.closePath()
 
     const fills: Record<WeaponType, string> = {
-      gun:     'rgba(251,191,36,0.06)',
-      torpedo: 'rgba(249,115,22,0.06)',
-      aa:      'rgba(103,232,249,0.06)',
-      missile: 'rgba(167,139,250,0.06)',
+      gun:       'rgba(251,191,36,0.06)',
+      secondary: 'rgba(250,204,21,0.06)',
+      torpedo:   'rgba(249,115,22,0.06)',
+      aa:        'rgba(103,232,249,0.06)',
+      missile:   'rgba(167,139,250,0.06)',
     }
     const strokes: Record<WeaponType, string> = {
-      gun:     'rgba(251,191,36,0.45)',
-      torpedo: 'rgba(249,115,22,0.45)',
-      aa:      'rgba(103,232,249,0.45)',
-      missile: 'rgba(167,139,250,0.45)',
+      gun:       'rgba(251,191,36,0.45)',
+      secondary: 'rgba(250,204,21,0.40)',
+      torpedo:   'rgba(249,115,22,0.45)',
+      aa:        'rgba(103,232,249,0.45)',
+      missile:   'rgba(167,139,250,0.45)',
     }
 
     ctx.fillStyle = fills[weaponType]
@@ -1111,10 +1148,11 @@ export class CanvasRenderer {
     const blocked = weaponType === 'torpedo' && isOnLand(aimPoint.x, aimPoint.y)
     const color = !inRange || blocked ? '#ef4444' : '#f8fafc'
     const accent: Record<WeaponType, string> = {
-      gun: '#fbbf24',
-      torpedo: '#fb923c',
-      aa: '#67e8f9',
-      missile: '#c4b5fd',
+      gun:       '#fbbf24',
+      secondary: '#facc15',
+      torpedo:   '#fb923c',
+      aa:        '#67e8f9',
+      missile:   '#c4b5fd',
     }
     const [sx, sy] = this.w2s(aimPoint.x, aimPoint.y)
     const [px, py] = this.w2s(player.pos.x, player.pos.y)
@@ -1227,5 +1265,5 @@ function signedNoise(x: number, y: number, salt: number): number {
 }
 
 function impactWorldRadius(type: WeaponType): number {
-  return type === 'torpedo' ? 210 : type === 'missile' ? 185 : type === 'gun' ? 120 : 64
+  return type === 'torpedo' ? 210 : type === 'missile' ? 185 : type === 'gun' ? 120 : type === 'secondary' ? 90 : 64
 }

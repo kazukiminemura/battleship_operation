@@ -1,0 +1,53 @@
+{
+  "hull.destroyer.basic": {
+    "id": "hull.destroyer.basic",
+    "hp": 420,
+    "maxSpeed": 5,
+    "turnRate": 0.04,
+    "weapons": [
+      { "id": "weapon.gun.127mm.twin",      "type": "gun",     "ammo": 220 },
+      { "id": "weapon.torpedo.533mm.basic", "type": "torpedo", "ammo": 24 }
+    ]
+  },
+  "hull.cruiser.player": {
+    "id": "hull.cruiser.player",
+    "hp": 760,
+    "maxSpeed": 3.5,
+    "turnRate": 0.03,
+    "weapons": [
+      { "id": "weapon.gun.152mm.twin",           "type": "gun",       "ammo": 240 },
+      { "id": "weapon.secondary.127mm.twin",     "type": "secondary", "ammo": 400 },
+      { "id": "weapon.torpedo.533mm.basic",      "type": "torpedo",   "ammo": 42 }
+    ]
+  },
+  "hull.battleship.basic": {
+    "id": "hull.battleship.basic",
+    "hp": 1400,
+    "maxSpeed": 2,
+    "turnRate": 0.02,
+    "weapons": [
+      { "id": "weapon.gun.406mm.twin",           "type": "gun",       "ammo": 300 },
+      { "id": "weapon.secondary.152mm.twin",     "type": "secondary", "ammo": 500 },
+      { "id": "weapon.torpedo.533mm.basic",      "type": "torpedo",   "ammo": 56 }
+    ]
+  },
+  "hull.enemy.destroyer.basic": {
+    "id": "hull.enemy.destroyer.basic",
+    "hp": 80,
+    "maxSpeed": 3,
+    "turnRate": 0.05,
+    "weapons": [
+      { "id": "weapon.gun.127mm.twin", "type": "gun", "ammo": 40 }
+    ]
+  },
+  "hull.cruiser.basic": {
+    "id": "hull.cruiser.basic",
+    "hp": 150,
+    "maxSpeed": 2.5,
+    "turnRate": 0.03,
+    "weapons": [
+      { "id": "weapon.gun.152mm.twin",      "type": "gun",     "ammo": 30 },
+      { "id": "weapon.torpedo.533mm.basic", "type": "torpedo", "ammo": 12 }
+    ]
+  }
+}

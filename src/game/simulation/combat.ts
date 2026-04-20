@@ -2,7 +2,9 @@ import type { BuildingEntity, CombatState, Command, CommandType, ShipEntity, Vec
 import type { RngStreams } from './random'
 import type { StaticData } from '../data/masterdata'
 import { stepMovement, applyMoveCommand, applySpeedUpCommand, applySpeedDownCommand, applyRotateCommand, applyStopCommand } from './movement'
-import { stepWeaponCooldowns, fireWeapon, stepProjectiles, WEAPON_CONFIGS } from './weapons'
+import { stepWeaponCooldowns, fireWeapon } from './weapons'
+import { stepProjectiles } from './projectiles'
+import { WEAPON_CONFIGS } from './weapon-strategies'
 import { generateAiCommands } from './ai'
 import { evaluateMission } from './mission'
 
@@ -77,6 +79,7 @@ function generateAutoFireCommands(state: CombatState): Command[] {
 
   const WEAPON_CMD: Record<WeaponType, CommandType> = {
     gun: 'fire.primary',
+    secondary: 'fire.secondary',
     torpedo: 'fire.torpedo',
     aa: 'fire.aa',
     missile: 'fire.missile',
@@ -148,6 +151,8 @@ function applyCommands(state: CombatState, commands: Command[], rng: RngStreams)
       s = { ...s, entities }
     } else if (cmd.type === 'fire.primary') {
       s = fireAndTrack(s, cmd.actorId, 'gun', cmd.target, ship.team, rng)
+    } else if (cmd.type === 'fire.secondary') {
+      s = fireAndTrack(s, cmd.actorId, 'secondary', cmd.target, ship.team, rng)
     } else if (cmd.type === 'fire.torpedo') {
       s = fireAndTrack(s, cmd.actorId, 'torpedo', cmd.target, ship.team, rng)
     } else if (cmd.type === 'fire.aa') {
