@@ -1,5 +1,5 @@
 import type { CombatState, ShipEntity, WeaponType, SpeedLevel } from '../simulation/types'
-import { SPEED_LEVEL_LABEL, SPEED_LEVEL_ORDER, SPEED_LEVEL_TARGET, KNOTS_PER_UNIT } from '../simulation/movement'
+import { SPEED_LEVEL_LABEL, SPEED_LEVEL_ORDER, KNOTS_PER_UNIT } from '../simulation/movement'
 
 export type WeaponMode = 'gun' | 'torpedo' | 'aa' | 'missile'
 
@@ -26,6 +26,16 @@ const WEAPON_KEYS: Record<WeaponMode, string> = {
 }
 
 const WEAPON_ORDER: WeaponMode[] = ['gun', 'torpedo', 'aa', 'missile']
+const HULL_SECTION_ORDER = ['bow', 'stern', 'superstructure', 'deck'] as const
+
+type HullSection = typeof HULL_SECTION_ORDER[number]
+
+const HULL_SECTION_LABELS: Record<HullSection, string> = {
+  bow: '船首',
+  stern: '船尾',
+  superstructure: '船楼',
+  deck: '甲板',
+}
 
 const RADAR_SIZE = 160   // px, radar panel side length
 const RADAR_PAD  = 12
@@ -62,7 +72,7 @@ export class HUD {
 
   private renderTopBar(player: ShipEntity, weaponMode: WeaponMode): void {
     const { ctx, canvas } = this
-    const barH = 68
+    const barH = 96
     const pad = 12
 
     ctx.fillStyle = 'rgba(0,0,0,0.68)'
@@ -83,6 +93,7 @@ export class HUD {
 
     // speed level + knots
     this.renderSpeedIndicator(player, pad, 50)
+    this.renderHullSectionStatus(player, pad, 75)
 
     // weapon slots
     const slotW = 126
@@ -162,6 +173,37 @@ export class HUD {
     ctx.textAlign = 'left'
 
     this.clickRegions.push({ id: 'toggle-all', x: allBtnX, y: allBtnY, w: allBtnW, h: allBtnH })
+  }
+
+  private renderHullSectionStatus(player: ShipEntity, x: number, y: number): void {
+    const { ctx } = this
+    const sections = estimateHullSections(player)
+    const cellW = 68
+    const rowH = 11
+
+    ctx.font = '9px monospace'
+    for (let i = 0; i < HULL_SECTION_ORDER.length; i++) {
+      const section = HULL_SECTION_ORDER[i]!
+      const col = i % 2
+      const row = Math.floor(i / 2)
+      const sx = x + col * (cellW + 5)
+      const sy = y + row * rowH
+      const ratio = sections[section]
+
+      ctx.fillStyle = '#94a3b8'
+      ctx.fillText(HULL_SECTION_LABELS[section], sx, sy + 7)
+
+      const barX = sx + 27
+      const barY = sy + 2
+      const barW = 36
+      ctx.fillStyle = '#1e293b'
+      ctx.fillRect(barX, barY, barW, 5)
+      ctx.fillStyle = durabilityColor(ratio)
+      ctx.fillRect(barX, barY, barW * ratio, 5)
+      ctx.strokeStyle = 'rgba(148,163,184,0.25)'
+      ctx.lineWidth = 0.5
+      ctx.strokeRect(barX + 0.5, barY + 0.5, barW - 1, 4)
+    }
   }
 
   private renderSpeedIndicator(player: ShipEntity, x: number, y: number): void {
@@ -322,6 +364,24 @@ export class HUD {
 
 const COOLDOWN_MAX: Record<WeaponType, number> = {
   gun: 15, torpedo: 60, aa: 8, missile: 90,
+}
+
+function estimateHullSections(ship: ShipEntity): Record<HullSection, number> {
+  const hpRatio = clamp01(ship.hp / ship.maxHp)
+  return {
+    bow: clamp01(hpRatio * 1.08 - 0.04),
+    stern: clamp01(hpRatio * 1.02 - 0.02),
+    superstructure: clamp01(hpRatio * 0.94 + 0.03),
+    deck: clamp01(hpRatio * 0.98),
+  }
+}
+
+function durabilityColor(ratio: number): string {
+  return ratio > 0.55 ? '#22c55e' : ratio > 0.28 ? '#eab308' : '#ef4444'
+}
+
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value))
 }
 
 function roundRect(

@@ -17,14 +17,21 @@ function main(): void {
   const canvas = document.getElementById('game-canvas') as HTMLCanvasElement
   if (!canvas) throw new Error('canvas#game-canvas not found')
 
+  let mode: GameMode = 'start'
   const renderer = new CanvasRenderer(canvas)
   const hud      = new HUD(canvas)
-  const input    = new InputAdapter(canvas, renderer)
   const start    = new StartScreen(canvas)
-  let rng        = createRngStreams(BASE_SEED)
   const sound    = new SoundSystem()
+  const input    = new InputAdapter(canvas, renderer, {
+    onWeaponSelected: (weaponMode) => {
+      if (mode === 'combat') sound.playWeaponSelected(weaponMode)
+    },
+    onSpeedChanged: (direction) => {
+      if (mode === 'combat') sound.playSpeedChange(direction)
+    },
+  })
+  let rng        = createRngStreams(BASE_SEED)
 
-  let mode: GameMode = 'start'
   let selectedShip: PlayerShipType = 'destroyer'
   let state: CombatState = createInitialState(selectedShip)
   start.attach()

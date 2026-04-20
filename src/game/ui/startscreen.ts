@@ -17,20 +17,20 @@ const OPTIONS: ShipOption[] = [
   {
     type: 'destroyer', nameJP: '駆逐艦', nameEN: 'Destroyer',
     desc: '高速・軽武装',
-    hp: 200, maxHp: 600, speedKt: 50, maxSpeedKt: 50, firepower: 2,
-    weapons: ['127mm砲 ×60', '魚雷 ×8', 'AA ×200', 'ミサイル ×6'],
+    hp: 420, maxHp: 1400, speedKt: 50, maxSpeedKt: 50, firepower: 2,
+    weapons: ['127mm砲 ×220', '魚雷 ×24', 'AA ×800', 'ミサイル ×24'],
   },
   {
     type: 'cruiser', nameJP: '巡洋艦', nameEN: 'Cruiser',
     desc: '均衡型・万能',
-    hp: 350, maxHp: 600, speedKt: 35, maxSpeedKt: 50, firepower: 3,
-    weapons: ['152mm砲 ×80', '魚雷 ×16', 'AA ×300', 'ミサイル ×12'],
+    hp: 760, maxHp: 1400, speedKt: 35, maxSpeedKt: 50, firepower: 3,
+    weapons: ['152mm砲 ×280', '魚雷 ×42', 'AA ×1000', 'ミサイル ×42'],
   },
   {
     type: 'battleship', nameJP: '戦艦', nameEN: 'Battleship',
     desc: '重装甲・重火力',
-    hp: 600, maxHp: 600, speedKt: 20, maxSpeedKt: 50, firepower: 5,
-    weapons: ['406mm砲 ×120', '魚雷 ×20', 'AA ×400', 'ミサイル ×20'],
+    hp: 1400, maxHp: 1400, speedKt: 20, maxSpeedKt: 50, firepower: 5,
+    weapons: ['406mm砲 ×420', '魚雷 ×56', 'AA ×1400', 'ミサイル ×64'],
   },
 ]
 

@@ -26,32 +26,32 @@ export const STATIC_DATA: StaticData = {
   ships: {
     'hull.destroyer.basic': {
       id: 'hull.destroyer.basic',
-      hp: 200, maxSpeed: 5, turnRate: 0.04,
+      hp: 420, maxSpeed: 5, turnRate: 0.04,
       weapons: [
-        { id: 'weapon.gun.127mm.single',    type: 'gun',     ammo: 60  },
-        { id: 'weapon.torpedo.533mm.basic', type: 'torpedo', ammo: 8   },
-        { id: 'weapon.aa.basic',            type: 'aa',      ammo: 200 },
-        { id: 'weapon.missile.basic',       type: 'missile', ammo: 6   },
+        { id: 'weapon.gun.127mm.single',    type: 'gun',     ammo: 220 },
+        { id: 'weapon.torpedo.533mm.basic', type: 'torpedo', ammo: 24  },
+        { id: 'weapon.aa.basic',            type: 'aa',      ammo: 800 },
+        { id: 'weapon.missile.basic',       type: 'missile', ammo: 24  },
       ],
     },
     'hull.cruiser.player': {
       id: 'hull.cruiser.player',
-      hp: 350, maxSpeed: 3.5, turnRate: 0.03,
+      hp: 760, maxSpeed: 3.5, turnRate: 0.03,
       weapons: [
-        { id: 'weapon.gun.152mm.single',    type: 'gun',     ammo: 80  },
-        { id: 'weapon.torpedo.533mm.basic', type: 'torpedo', ammo: 16  },
-        { id: 'weapon.aa.basic',            type: 'aa',      ammo: 300 },
-        { id: 'weapon.missile.basic',       type: 'missile', ammo: 12  },
+        { id: 'weapon.gun.152mm.single',    type: 'gun',     ammo: 280 },
+        { id: 'weapon.torpedo.533mm.basic', type: 'torpedo', ammo: 42  },
+        { id: 'weapon.aa.basic',            type: 'aa',      ammo: 1000 },
+        { id: 'weapon.missile.basic',       type: 'missile', ammo: 42  },
       ],
     },
     'hull.battleship.basic': {
       id: 'hull.battleship.basic',
-      hp: 600, maxSpeed: 2.0, turnRate: 0.02,
+      hp: 1400, maxSpeed: 2.0, turnRate: 0.02,
       weapons: [
-        { id: 'weapon.gun.406mm.single',    type: 'gun',     ammo: 120 },
-        { id: 'weapon.torpedo.533mm.basic', type: 'torpedo', ammo: 20  },
-        { id: 'weapon.aa.basic',            type: 'aa',      ammo: 400 },
-        { id: 'weapon.missile.basic',       type: 'missile', ammo: 20  },
+        { id: 'weapon.gun.406mm.single',    type: 'gun',     ammo: 420 },
+        { id: 'weapon.torpedo.533mm.basic', type: 'torpedo', ammo: 56  },
+        { id: 'weapon.aa.basic',            type: 'aa',      ammo: 1400 },
+        { id: 'weapon.missile.basic',       type: 'missile', ammo: 64  },
       ],
     },
     'hull.enemy.destroyer.basic': {
@@ -81,37 +81,37 @@ function makePlayerShip(type: PlayerShipType): ShipEntity {
   }
   if (type === 'cruiser') {
     return {
-      ...base, hp: 350, maxHp: 350, maxSpeed: 3.5, turnRate: 0.03,
+      ...base, hp: 760, maxHp: 760, maxSpeed: 3.5, turnRate: 0.03,
       templateId: 'hull.cruiser.player',
       weapons: [
-        { id: 'weapon.gun.152mm.single',    type: 'gun',     cooldownTick: 0, ammo: 80,  maxAmmo: 80,  autoFire: false },
-        { id: 'weapon.torpedo.533mm.basic', type: 'torpedo', cooldownTick: 0, ammo: 16,  maxAmmo: 16,  autoFire: false },
-        { id: 'weapon.aa.basic',            type: 'aa',      cooldownTick: 0, ammo: 300, maxAmmo: 300, autoFire: false },
-        { id: 'weapon.missile.basic',       type: 'missile', cooldownTick: 0, ammo: 12,  maxAmmo: 12,  autoFire: false },
+        { id: 'weapon.gun.152mm.single',    type: 'gun',     cooldownTick: 0, ammo: 280,  maxAmmo: 280,  autoFire: false },
+        { id: 'weapon.torpedo.533mm.basic', type: 'torpedo', cooldownTick: 0, ammo: 42,   maxAmmo: 42,   autoFire: false },
+        { id: 'weapon.aa.basic',            type: 'aa',      cooldownTick: 0, ammo: 1000, maxAmmo: 1000, autoFire: false },
+        { id: 'weapon.missile.basic',       type: 'missile', cooldownTick: 0, ammo: 42,   maxAmmo: 42,   autoFire: false },
       ],
     }
   }
   if (type === 'battleship') {
     return {
-      ...base, hp: 600, maxHp: 600, maxSpeed: 2.0, turnRate: 0.02,
+      ...base, hp: 1400, maxHp: 1400, maxSpeed: 2.0, turnRate: 0.02,
       templateId: 'hull.battleship.basic',
       weapons: [
-        { id: 'weapon.gun.406mm.single',    type: 'gun',     cooldownTick: 0, ammo: 120, maxAmmo: 120, autoFire: false },
-        { id: 'weapon.torpedo.533mm.basic', type: 'torpedo', cooldownTick: 0, ammo: 20,  maxAmmo: 20,  autoFire: false },
-        { id: 'weapon.aa.basic',            type: 'aa',      cooldownTick: 0, ammo: 400, maxAmmo: 400, autoFire: false },
-        { id: 'weapon.missile.basic',       type: 'missile', cooldownTick: 0, ammo: 20,  maxAmmo: 20,  autoFire: false },
+        { id: 'weapon.gun.406mm.single',    type: 'gun',     cooldownTick: 0, ammo: 420,  maxAmmo: 420,  autoFire: false },
+        { id: 'weapon.torpedo.533mm.basic', type: 'torpedo', cooldownTick: 0, ammo: 56,   maxAmmo: 56,   autoFire: false },
+        { id: 'weapon.aa.basic',            type: 'aa',      cooldownTick: 0, ammo: 1400, maxAmmo: 1400, autoFire: false },
+        { id: 'weapon.missile.basic',       type: 'missile', cooldownTick: 0, ammo: 64,   maxAmmo: 64,   autoFire: false },
       ],
     }
   }
   // destroyer (default)
   return {
-    ...base, hp: 200, maxHp: 200, maxSpeed: 5.0, turnRate: 0.04,
+    ...base, hp: 420, maxHp: 420, maxSpeed: 5.0, turnRate: 0.04,
     templateId: 'hull.destroyer.basic',
     weapons: [
-      { id: 'weapon.gun.127mm.single',    type: 'gun',     cooldownTick: 0, ammo: 60,  maxAmmo: 60,  autoFire: false },
-      { id: 'weapon.torpedo.533mm.basic', type: 'torpedo', cooldownTick: 0, ammo: 8,   maxAmmo: 8,   autoFire: false },
-      { id: 'weapon.aa.basic',            type: 'aa',      cooldownTick: 0, ammo: 200, maxAmmo: 200, autoFire: false },
-      { id: 'weapon.missile.basic',       type: 'missile', cooldownTick: 0, ammo: 6,   maxAmmo: 6,   autoFire: false },
+      { id: 'weapon.gun.127mm.single',    type: 'gun',     cooldownTick: 0, ammo: 220, maxAmmo: 220, autoFire: false },
+      { id: 'weapon.torpedo.533mm.basic', type: 'torpedo', cooldownTick: 0, ammo: 24,  maxAmmo: 24,  autoFire: false },
+      { id: 'weapon.aa.basic',            type: 'aa',      cooldownTick: 0, ammo: 800, maxAmmo: 800, autoFire: false },
+      { id: 'weapon.missile.basic',       type: 'missile', cooldownTick: 0, ammo: 24,  maxAmmo: 24,  autoFire: false },
     ],
   }
 }
@@ -174,6 +174,18 @@ export function createInitialState(playerType: PlayerShipType = 'destroyer'): Co
     ['ship.enemy.destroyer.06',  1000,  4500,  0],
     ['ship.enemy.destroyer.07',  9200,  4000,  Math.PI],
     ['ship.enemy.destroyer.08',  2800,  7000,  Math.PI / 2],
+    ['ship.enemy.destroyer.09',  1400,  2600,  Math.PI / 3],
+    ['ship.enemy.destroyer.10',  2600,  1800,  Math.PI / 2],
+    ['ship.enemy.destroyer.11',  4300,  2100,  Math.PI / 2],
+    ['ship.enemy.destroyer.12',  6100,  2200,  Math.PI / 2],
+    ['ship.enemy.destroyer.13',  7700,  2400,  Math.PI],
+    ['ship.enemy.destroyer.14',  9000,  2900,  Math.PI],
+    ['ship.enemy.destroyer.15',  1350,  6100,  0],
+    ['ship.enemy.destroyer.16',  3600,  6100, -Math.PI / 2],
+    ['ship.enemy.destroyer.17',  6500,  6500,  Math.PI],
+    ['ship.enemy.destroyer.18',  8500,  6100,  Math.PI],
+    ['ship.enemy.destroyer.19',  1800,  8300, -Math.PI / 4],
+    ['ship.enemy.destroyer.20',  7400,  8200, -Math.PI / 2],
   ]
   for (const [id, x, y, angle] of destroyers) entities.set(id, makeDestroyer(id, x, y, angle))
 
@@ -181,6 +193,11 @@ export function createInitialState(playerType: PlayerShipType = 'destroyer'): Co
     ['ship.enemy.cruiser.01',  5000,   700,  Math.PI / 2],
     ['ship.enemy.cruiser.02',  2200,  3200,  0],
     ['ship.enemy.cruiser.03',  8200,  3000,  Math.PI],
+    ['ship.enemy.cruiser.04',  3900,  3550,  Math.PI / 2],
+    ['ship.enemy.cruiser.05',  6500,  3600,  Math.PI],
+    ['ship.enemy.cruiser.06',  2300,  5400,  0],
+    ['ship.enemy.cruiser.07',  7700,  5200,  Math.PI],
+    ['ship.enemy.cruiser.08',  5100,  7600, -Math.PI / 2],
   ]
   for (const [id, x, y, angle] of cruisers) entities.set(id, makeCruiser(id, x, y, angle))
 

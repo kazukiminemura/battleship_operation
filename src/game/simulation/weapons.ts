@@ -67,6 +67,7 @@ export function fireWeapon(
 
   const damage = rng.nextFloat(cfg.damageMin, cfg.damageMax)
   const projId = `proj.${actorId}.${weaponType}.${projectileCounter++}`
+  const flightTicks = Math.max(1, Math.ceil(dist / cfg.speed))
 
   const projectile: ProjectileEntity = {
     kind: 'projectile',
@@ -76,8 +77,8 @@ export function fireWeapon(
     ownerId: actorId,
     weaponType,
     damage,
-    lifetime: cfg.lifetime,
-    initialLifetime: cfg.lifetime,
+    lifetime: Math.min(cfg.lifetime, flightTicks),
+    initialLifetime: Math.min(cfg.lifetime, flightTicks),
     maxHeight: cfg.maxHeight,
     destroyed: false,
   }

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   stepMovement, applySpeedUpCommand, applySpeedDownCommand,
-  applyMoveCommand, applyRotateCommand, isOnLand, WORLD_SIZE, SPEED_LEVEL_TARGET,
+  applyMoveCommand, applyRotateCommand, isOnLand, WORLD_SIZE,
 } from '../../src/game/simulation/movement'
 import type { CombatState, ShipEntity, Metrics, SpeedLevel } from '../../src/game/simulation/types'
 
@@ -102,7 +102,17 @@ describe('applySpeedUpCommand', () => {
     const ship = makeShip({ speedLevel: 'stop' })
     const result = applySpeedUpCommand(ship)
     expect(result.speedLevel).toBe('slow')
-    expect(result.targetSpeed).toBe(SPEED_LEVEL_TARGET['slow'])
+    expect(result.targetSpeed).toBeCloseTo(ship.maxSpeed * 0.3)
+  })
+
+  it('sets full speed from the selected ship maxSpeed', () => {
+    const destroyer = applySpeedUpCommand(makeShip({ speedLevel: 'cruise', maxSpeed: 5 }))
+    const cruiser = applySpeedUpCommand(makeShip({ speedLevel: 'cruise', maxSpeed: 3.5 }))
+    const battleship = applySpeedUpCommand(makeShip({ speedLevel: 'cruise', maxSpeed: 2 }))
+
+    expect(destroyer.targetSpeed).toBeCloseTo(5)
+    expect(cruiser.targetSpeed).toBeCloseTo(3.5)
+    expect(battleship.targetSpeed).toBeCloseTo(2)
   })
 
   it('stays at full when already at max', () => {
@@ -127,7 +137,7 @@ describe('applySpeedDownCommand', () => {
     const ship = makeShip({ speedLevel: 'slow' })
     const result = applySpeedDownCommand(ship)
     expect(result.speedLevel).toBe('stop')
-    expect(result.targetSpeed).toBe(SPEED_LEVEL_TARGET['stop'])
+    expect(result.targetSpeed).toBe(0)
   })
 
   it('stays at reverse when already at min', () => {

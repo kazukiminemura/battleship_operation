@@ -7,14 +7,13 @@ export const ISLAND_COLLIDER = { x: 5000, y: 5050, rx: 620, ry: 430 }
 // speed level order from slowest to fastest
 export const SPEED_LEVEL_ORDER: SpeedLevel[] = ['reverse', 'stop', 'slow', 'cruise', 'full']
 
-// target speed (game units/tick) for each level
-// full = 5 units/tick → displayed as 50 kt
-export const SPEED_LEVEL_TARGET: Record<SpeedLevel, number> = {
-  full:    5.0,
-  cruise:  3.5,
-  slow:    1.5,
+// target speed ratio for each level. The actual target is based on ship.maxSpeed.
+export const SPEED_LEVEL_TARGET_RATIO: Record<SpeedLevel, number> = {
+  full:    1.0,
+  cruise:  0.7,
+  slow:    0.3,
   stop:    0.0,
-  reverse: -1.5,
+  reverse: -0.3,
 }
 
 export const SPEED_LEVEL_LABEL: Record<SpeedLevel, string> = {
@@ -99,14 +98,14 @@ export function applySpeedUpCommand(ship: ShipEntity): ShipEntity {
   const idx = SPEED_LEVEL_ORDER.indexOf(ship.speedLevel)
   const newIdx = Math.min(idx + 1, SPEED_LEVEL_ORDER.length - 1)
   const newLevel = SPEED_LEVEL_ORDER[newIdx]!
-  return { ...ship, speedLevel: newLevel, targetSpeed: SPEED_LEVEL_TARGET[newLevel] }
+  return { ...ship, speedLevel: newLevel, targetSpeed: targetSpeedForLevel(ship, newLevel) }
 }
 
 export function applySpeedDownCommand(ship: ShipEntity): ShipEntity {
   const idx = SPEED_LEVEL_ORDER.indexOf(ship.speedLevel)
   const newIdx = Math.max(idx - 1, 0)
   const newLevel = SPEED_LEVEL_ORDER[newIdx]!
-  return { ...ship, speedLevel: newLevel, targetSpeed: SPEED_LEVEL_TARGET[newLevel] }
+  return { ...ship, speedLevel: newLevel, targetSpeed: targetSpeedForLevel(ship, newLevel) }
 }
 
 export function applyRotateCommand(ship: ShipEntity, cmd: Command): ShipEntity {
@@ -127,4 +126,8 @@ export function applyMoveCommand(ship: ShipEntity, cmd: Command): ShipEntity {
 
 export function applyStopCommand(ship: ShipEntity): ShipEntity {
   return { ...ship, targetSpeed: 0, speedLevel: 'stop' }
+}
+
+export function targetSpeedForLevel(ship: ShipEntity, level: SpeedLevel): number {
+  return ship.maxSpeed * SPEED_LEVEL_TARGET_RATIO[level]
 }

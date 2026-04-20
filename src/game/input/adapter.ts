@@ -2,6 +2,11 @@ import type { Command, Vec3 } from '../simulation/types'
 import type { WeaponMode } from '../ui/hud'
 import type { CanvasRenderer } from '../rendering/canvas'
 
+export interface InputFeedback {
+  onWeaponSelected?: (weaponMode: WeaponMode) => void
+  onSpeedChanged?: (direction: 'up' | 'down') => void
+}
+
 export class InputAdapter {
   private commands: Command[] = []
   private keys = new Set<string>()
@@ -9,10 +14,12 @@ export class InputAdapter {
   private aimPoint: Vec3 | null = null
   private canvas: HTMLCanvasElement
   private renderer: CanvasRenderer
+  private feedback: InputFeedback
 
-  constructor(canvas: HTMLCanvasElement, renderer: CanvasRenderer) {
+  constructor(canvas: HTMLCanvasElement, renderer: CanvasRenderer, feedback: InputFeedback = {}) {
     this.canvas = canvas
     this.renderer = renderer
+    this.feedback = feedback
     this.bindEvents()
   }
 
@@ -28,16 +35,18 @@ export class InputAdapter {
     window.addEventListener('keydown', (e) => {
       this.keys.add(e.code)
 
-      if (e.code === 'Digit1') this.weaponMode = 'gun'
-      if (e.code === 'Digit2') this.weaponMode = 'torpedo'
-      if (e.code === 'Digit3') this.weaponMode = 'aa'
-      if (e.code === 'Digit4') this.weaponMode = 'missile'
+      if (e.code === 'Digit1') this.selectWeaponMode('gun')
+      if (e.code === 'Digit2') this.selectWeaponMode('torpedo')
+      if (e.code === 'Digit3') this.selectWeaponMode('aa')
+      if (e.code === 'Digit4') this.selectWeaponMode('missile')
 
       if (!e.repeat) {
         if (e.code === 'ArrowUp' || e.code === 'KeyW') {
           this.commands.push({ tick: 0, actorId: 'ship.player', type: 'speed.up' })
+          this.feedback.onSpeedChanged?.('up')
         } else if (e.code === 'ArrowDown' || e.code === 'KeyS') {
           this.commands.push({ tick: 0, actorId: 'ship.player', type: 'speed.down' })
+          this.feedback.onSpeedChanged?.('down')
         }
       }
     })
@@ -71,6 +80,12 @@ export class InputAdapter {
 
       this.commands.push({ tick: 0, actorId: 'ship.player', type: cmdType, target })
     })
+  }
+
+  private selectWeaponMode(weaponMode: WeaponMode): void {
+    if (this.weaponMode === weaponMode) return
+    this.weaponMode = weaponMode
+    this.feedback.onWeaponSelected?.(weaponMode)
   }
 
   pollCommands(tick: number): Command[] {

@@ -4,11 +4,11 @@ import { WEAPON_CONFIGS } from '../simulation/weapons'
 
 // Ship physical dimensions in world units (length, width, height)
 const SHIP_DIMS: Record<string, { l: number; w: number; h: number }> = {
-  'hull.destroyer.basic':       { l: 130, w: 28, h: 15 },
+  'hull.destroyer.basic':       { l: 145, w: 30, h: 16 },
   'hull.enemy.destroyer.basic': { l: 90,  w: 20, h: 11 },
   'hull.cruiser.basic':         { l: 165, w: 36, h: 22 },
-  'hull.cruiser.player':        { l: 190, w: 44, h: 27 },
-  'hull.battleship.basic':      { l: 255, w: 62, h: 38 },
+  'hull.cruiser.player':        { l: 205, w: 48, h: 29 },
+  'hull.battleship.basic':      { l: 285, w: 68, h: 42 },
 }
 
 // Isometric projection parameters
@@ -18,7 +18,7 @@ interface IsoParams {
   oy: number
 }
 
-const HUD_TOP    = 72
+const HUD_TOP    = 100
 const HUD_BOTTOM = 32
 
 export class CanvasRenderer {
@@ -51,8 +51,8 @@ export class CanvasRenderer {
   private recalcIso(): void {
     const W = this.canvas.width
     const contentH = this.canvas.height - HUD_TOP - HUD_BOTTOM
-    // Fixed zoom: show ~4000 world units horizontally
-    const scale = Math.min(W / 4000, contentH / 2000)
+    // Tactical zoom: keep ships small and show a wider battle area.
+    const scale = Math.min(W / 6200, contentH / 3500)
     this.iso = {
       scale,
       ox: W / 2,
@@ -109,27 +109,35 @@ export class CanvasRenderer {
       .filter(e => e.kind === 'building') as BuildingEntity[])
       .sort((a, b) => a.pos.y - b.pos.y)
 
-    this.renderSplashes(state)
+    this.renderWaterSplashes(state)
     for (const b of buildings)   this.renderBuilding(b)
     for (const p of projectiles) this.renderProjectile(p)
+    this.renderMuzzleBursts(state)
     for (const s of ships)       this.renderShip(s)
+    this.renderLandDust(state)
+    this.renderShipExplosions(state)
 
     if (selectedWeapon && aimPoint) {
       const player = state.entities.get('ship.player') as ShipEntity | undefined
       if (player && !player.destroyed) this.renderAimPointer(player, selectedWeapon, aimPoint)
     }
+
+    this.renderTacticalAtmosphere()
   }
 
   // ── water splashes ─────────────────────────────────────────────────────────
 
   private static readonly SPLASH_TICKS = 40
+  private static readonly DUST_TICKS = 46
+  private static readonly EXPLOSION_TICKS = 34
 
-  private renderSplashes(state: CombatState): void {
+  private renderWaterSplashes(state: CombatState): void {
     const { ctx } = this
     const D = CanvasRenderer.SPLASH_TICKS
 
     for (const ev of state.eventLog) {
       if (ev.type !== 'weapon.missed' || !ev.position) continue
+      if (isOnLand(ev.position.x, ev.position.y)) continue
       const age = state.tick - ev.tick
       if (age < 0 || age >= D) continue
 
@@ -354,11 +362,206 @@ export class CanvasRenderer {
     }
   }
 
+  // ── land dust ─────────────────────────────────────────────────────────────
+
+  private renderLandDust(state: CombatState): void {
+    const { ctx } = this
+    const D = CanvasRenderer.DUST_TICKS
+
+    for (const ev of state.eventLog) {
+      if (!ev.position) continue
+
+      const target = ev.targetId ? state.entities.get(ev.targetId) : undefined
+      const isLandImpact =
+        (ev.type === 'weapon.missed' && isOnLand(ev.position.x, ev.position.y)) ||
+        (ev.type === 'weapon.hit' && target?.kind === 'building')
+      if (!isLandImpact) continue
+
+      const age = state.tick - ev.tick
+      if (age < 0 || age >= D) continue
+
+      const t = age / D
+      const pos = ev.position
+      const s = this.iso.scale
+      const [cx, cy] = this.w2s(pos.x, pos.y)
+      const wtype = (ev.weaponId ?? 'gun') as WeaponType
+      const maxR = impactWorldRadius(wtype) * 0.82
+
+      if (t < 0.18) {
+        const ft = t / 0.18
+        ctx.save()
+        ctx.translate(cx, cy)
+        ctx.scale(1.35, 0.55)
+        const flashR = maxR * s * (0.18 + ft * 0.45)
+        const flash = ctx.createRadialGradient(0, 0, 0, 0, 0, flashR)
+        flash.addColorStop(0, `rgba(255,245,190,${(1 - ft) * 0.75})`)
+        flash.addColorStop(0.45, `rgba(232,154,74,${(1 - ft) * 0.32})`)
+        flash.addColorStop(1, 'rgba(232,154,74,0)')
+        ctx.beginPath()
+        ctx.arc(0, 0, flashR, 0, Math.PI * 2)
+        ctx.fillStyle = flash
+        ctx.fill()
+        ctx.restore()
+      }
+
+      ctx.save()
+      ctx.translate(cx, cy)
+      ctx.scale(1.48, 0.64)
+      const groundR = maxR * s * (0.20 + t * 0.90)
+      const ground = ctx.createRadialGradient(0, 0, 0, 0, 0, groundR)
+      ground.addColorStop(0, `rgba(96,74,48,${(1 - t) * 0.36})`)
+      ground.addColorStop(0.62, `rgba(148,112,75,${(1 - t) * 0.22})`)
+      ground.addColorStop(1, 'rgba(148,112,75,0)')
+      ctx.beginPath()
+      ctx.arc(0, 0, groundR, 0, Math.PI * 2)
+      ctx.fillStyle = ground
+      ctx.fill()
+      ctx.restore()
+
+      const puffCount = wtype === 'missile' ? 22 : wtype === 'torpedo' ? 16 : wtype === 'gun' ? 14 : 8
+      for (let i = 0; i < puffCount; i++) {
+        const n = Math.abs(signedNoise(pos.x, pos.y, i + 190))
+        const a = (i / puffCount) * Math.PI * 2 + signedNoise(pos.y, pos.x, i + 203) * 0.65
+        const spread = maxR * (0.10 + n * 0.88) * Math.min(1, t * 1.7)
+        const [px, pyBase] = this.w2s(pos.x + Math.cos(a) * spread, pos.y + Math.sin(a) * spread)
+        const lift = maxR * s * (0.18 + n * 0.62) * Math.sin(Math.PI * Math.min(1, t * 1.15))
+        const r = Math.max(1.4, maxR * s * (0.026 + n * 0.050) * (1 - t * 0.28))
+        const alpha = Math.max(0, (1 - t) * (0.28 + n * 0.24))
+        ctx.beginPath()
+        ctx.arc(px, pyBase - lift, r, 0, Math.PI * 2)
+        ctx.fillStyle = i % 3 === 0 ? `rgba(64,58,51,${alpha})` : `rgba(153,126,90,${alpha})`
+        ctx.fill()
+      }
+    }
+  }
+
+  // ── ship explosions ───────────────────────────────────────────────────────
+
+  private renderShipExplosions(state: CombatState): void {
+    const { ctx } = this
+    const D = CanvasRenderer.EXPLOSION_TICKS
+
+    for (const ev of state.eventLog) {
+      if (ev.type !== 'weapon.hit' || !ev.position || !ev.targetId) continue
+      const target = state.entities.get(ev.targetId)
+      if (target?.kind !== 'ship') continue
+
+      const age = state.tick - ev.tick
+      if (age < 0 || age >= D) continue
+
+      const t = age / D
+      const pos = ev.position
+      const wtype = (ev.weaponId ?? 'gun') as WeaponType
+      const s = this.iso.scale
+      const [cx, cy] = this.w2s(pos.x, pos.y)
+      const maxR = impactWorldRadius(wtype) * (wtype === 'torpedo' ? 0.95 : 0.72)
+
+      if (t < 0.28) {
+        const ft = t / 0.28
+        ctx.save()
+        ctx.translate(cx, cy)
+        ctx.scale(1.35, 0.62)
+        const flashR = maxR * s * (0.18 + ft * 0.86)
+        const flash = ctx.createRadialGradient(0, 0, 0, 0, 0, flashR)
+        flash.addColorStop(0, `rgba(255,255,240,${(1 - ft) * 0.98})`)
+        flash.addColorStop(0.30, `rgba(255,202,74,${(1 - ft) * 0.86})`)
+        flash.addColorStop(0.68, `rgba(248,88,36,${(1 - ft) * 0.55})`)
+        flash.addColorStop(1, 'rgba(248,88,36,0)')
+        ctx.beginPath()
+        ctx.arc(0, 0, flashR, 0, Math.PI * 2)
+        ctx.fillStyle = flash
+        ctx.fill()
+        ctx.restore()
+      }
+
+      const spikes = wtype === 'missile' ? 16 : wtype === 'torpedo' ? 12 : 10
+      if (t < 0.42) {
+        const st = t / 0.42
+        ctx.save()
+        ctx.translate(cx, cy)
+        ctx.beginPath()
+        for (let i = 0; i < spikes; i++) {
+          const a = (i / spikes) * Math.PI * 2 + signedNoise(pos.x, pos.y, i + 301) * 0.16
+          const r1 = maxR * s * (0.16 + st * 0.20)
+          const r2 = maxR * s * (0.38 + st * (0.55 + Math.abs(signedNoise(pos.y, pos.x, i + 313)) * 0.24))
+          const x1 = Math.cos(a) * r1
+          const y1 = Math.sin(a) * r1 * 0.58
+          const x2 = Math.cos(a) * r2
+          const y2 = Math.sin(a) * r2 * 0.58
+          i === 0 ? ctx.moveTo(x1, y1) : ctx.lineTo(x1, y1)
+          ctx.lineTo(x2, y2)
+        }
+        ctx.closePath()
+        ctx.fillStyle = `rgba(255,126,32,${(1 - st) * 0.68})`
+        ctx.fill()
+        ctx.restore()
+      }
+
+      const smokeCount = wtype === 'missile' ? 24 : wtype === 'torpedo' ? 20 : 16
+      for (let i = 0; i < smokeCount; i++) {
+        const n = Math.abs(signedNoise(pos.x, pos.y, i + 340))
+        const a = (i / smokeCount) * Math.PI * 2 + signedNoise(pos.y, pos.x, i + 353) * 0.8
+        const spread = maxR * (0.08 + n * 0.78) * Math.min(1, t * 1.9)
+        const [px, pyBase] = this.w2s(pos.x + Math.cos(a) * spread, pos.y + Math.sin(a) * spread)
+        const lift = maxR * s * (0.25 + n * 0.82) * Math.sin(Math.PI * Math.min(1, t * 1.2))
+        const r = Math.max(1.8, maxR * s * (0.030 + n * 0.065) * (1 - t * 0.18))
+        const alpha = Math.max(0, (1 - t) * (0.35 + n * 0.28))
+        ctx.beginPath()
+        ctx.arc(px, pyBase - lift, r, 0, Math.PI * 2)
+        ctx.fillStyle = i % 4 === 0 ? `rgba(34,31,28,${alpha})` : `rgba(93,82,72,${alpha * 0.82})`
+        ctx.fill()
+      }
+
+      if (t < 0.85) {
+        const rt = t / 0.85
+        ctx.save()
+        ctx.translate(cx, cy)
+        ctx.scale(1.55, 0.62)
+        ctx.beginPath()
+        ctx.arc(0, 0, maxR * s * (0.18 + rt * 1.05), 0, Math.PI * 2)
+        ctx.strokeStyle = `rgba(255,211,128,${(1 - rt) * 0.52})`
+        ctx.lineWidth = Math.max(0.8, maxR * s * 0.020 * (1 - rt))
+        ctx.stroke()
+        ctx.restore()
+      }
+    }
+  }
+
+  private renderMuzzleBursts(state: CombatState): void {
+    const { ctx } = this
+    const D = 9
+
+    for (const ev of state.eventLog) {
+      if (ev.type !== 'weapon.fired' || !ev.position) continue
+      const age = state.tick - ev.tick
+      if (age < 0 || age >= D) continue
+
+      const t = age / D
+      const [cx, cy] = this.w2s(ev.position.x, ev.position.y)
+      const isMissile = ev.weaponId?.includes('missile') ?? false
+      const isAa = ev.weaponId?.includes('aa') ?? false
+      const r = (isMissile ? 38 : isAa ? 18 : 28) * this.iso.scale * (1 + t * 1.5)
+
+      ctx.save()
+      ctx.translate(cx, cy)
+      ctx.scale(1.35, 0.55)
+      const flash = ctx.createRadialGradient(0, 0, 0, 0, 0, Math.max(3, r))
+      flash.addColorStop(0, `rgba(255,244,160,${(1 - t) * 0.95})`)
+      flash.addColorStop(0.42, `rgba(255,184,45,${(1 - t) * 0.55})`)
+      flash.addColorStop(1, 'rgba(255,184,45,0)')
+      ctx.beginPath()
+      ctx.arc(0, 0, Math.max(3, r), 0, Math.PI * 2)
+      ctx.fillStyle = flash
+      ctx.fill()
+      ctx.restore()
+    }
+  }
+
   // ── ocean ──────────────────────────────────────────────────────────────────
 
   private renderOcean(): void {
     const { ctx } = this
-    // Full canvas background (ocean beyond world bounds)
+    // Full canvas background, styled like a dim tactical sea chart.
     ctx.fillStyle = '#04111f'
     ctx.fillRect(0, 0, this.canvas.width, this.canvas.height)
 
@@ -378,22 +581,24 @@ export class CanvasRenderer {
     const [cx0, cy0] = corners[0]!
     const [cx2, cy2] = corners[2]!
     const grad = ctx.createLinearGradient(cx0, cy0, cx2, cy2)
-    grad.addColorStop(0, '#0d3f78')
-    grad.addColorStop(0.5, '#092e5a')
-    grad.addColorStop(1, '#061c38')
+    grad.addColorStop(0, '#0d4f8f')
+    grad.addColorStop(0.42, '#0a3669')
+    grad.addColorStop(1, '#061d3c')
     ctx.fillStyle = grad
     ctx.fill()
 
-    ctx.strokeStyle = '#1a5a8a'
-    ctx.lineWidth = 2
+    ctx.strokeStyle = 'rgba(102,194,255,0.24)'
+    ctx.lineWidth = 1.4
     ctx.stroke()
+
+    this.renderSurfaceGrain()
   }
 
   private renderGrid(): void {
     const { ctx } = this
-    ctx.strokeStyle = 'rgba(16,56,100,0.45)'
-    ctx.lineWidth = 0.6
-    const step = 1000
+    ctx.strokeStyle = 'rgba(120,210,255,0.11)'
+    ctx.lineWidth = 0.45
+    const step = 500
     for (let i = 0; i <= WORLD_SIZE; i += step) {
       const [ax, ay] = this.w2s(i, 0)
       const [bx, by] = this.w2s(i, WORLD_SIZE)
@@ -402,6 +607,24 @@ export class CanvasRenderer {
       const [dx, dy] = this.w2s(WORLD_SIZE, i)
       ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(dx, dy); ctx.stroke()
     }
+  }
+
+  private renderSurfaceGrain(): void {
+    const { ctx } = this
+    const count = Math.round((this.canvas.width * this.canvas.height) / 5200)
+
+    ctx.save()
+    ctx.globalCompositeOperation = 'screen'
+    for (let i = 0; i < count; i++) {
+      const nx = signedNoise(this.camX * 0.013, this.camY * 0.017, i + 500)
+      const ny = signedNoise(this.camY * 0.011, this.camX * 0.019, i + 900)
+      const x = (nx * 0.5 + 0.5) * this.canvas.width
+      const y = HUD_TOP + (ny * 0.5 + 0.5) * (this.canvas.height - HUD_TOP - HUD_BOTTOM)
+      const a = 0.025 + Math.abs(signedNoise(this.camX, this.camY, i + 1300)) * 0.055
+      ctx.fillStyle = i % 4 === 0 ? `rgba(164,225,255,${a})` : `rgba(80,170,220,${a})`
+      ctx.fillRect(x, y, i % 5 === 0 ? 2 : 1, 1)
+    }
+    ctx.restore()
   }
 
   // ── island and buildings ──────────────────────────────────────────────────
@@ -433,24 +656,24 @@ export class CanvasRenderer {
     }
 
     drawClosedPath(ctx, shoreline)
-    ctx.fillStyle = 'rgba(202,160,92,0.38)'
+    ctx.fillStyle = 'rgba(212,176,92,0.52)'
     ctx.fill()
-    ctx.strokeStyle = 'rgba(228,206,158,0.45)'
-    ctx.lineWidth = 2
+    ctx.strokeStyle = 'rgba(225,240,220,0.34)'
+    ctx.lineWidth = 1.2
     ctx.stroke()
 
     drawClosedPath(ctx, beach)
     const beachGrad = ctx.createLinearGradient(0, this.canvas.height * 0.35, 0, this.canvas.height * 0.72)
-    beachGrad.addColorStop(0, '#d2b36d')
-    beachGrad.addColorStop(1, '#8f7040')
+    beachGrad.addColorStop(0, '#d8bd73')
+    beachGrad.addColorStop(1, '#8c7441')
     ctx.fillStyle = beachGrad
     ctx.fill()
 
     drawClosedPath(ctx, grass)
     const grassGrad = ctx.createLinearGradient(0, this.canvas.height * 0.30, 0, this.canvas.height * 0.78)
-    grassGrad.addColorStop(0, '#4d7c3c')
-    grassGrad.addColorStop(0.55, '#2f5f35')
-    grassGrad.addColorStop(1, '#1f3f2d')
+    grassGrad.addColorStop(0, '#597f3d')
+    grassGrad.addColorStop(0.55, '#335f36')
+    grassGrad.addColorStop(1, '#1d3f2e')
     ctx.fillStyle = grassGrad
     ctx.fill()
 
@@ -464,7 +687,7 @@ export class CanvasRenderer {
       ctx.scale(1.5, 0.62)
       ctx.beginPath()
       ctx.arc(0, 0, (45 + Math.abs(signedNoise(px, py, i)) * 45) * this.iso.scale, 0, Math.PI * 2)
-      ctx.fillStyle = i % 3 === 0 ? 'rgba(79,96,55,0.35)' : 'rgba(38,77,44,0.30)'
+      ctx.fillStyle = i % 3 === 0 ? 'rgba(104,132,74,0.28)' : 'rgba(38,77,44,0.30)'
       ctx.fill()
       ctx.restore()
     }
@@ -477,8 +700,8 @@ export class CanvasRenderer {
       ctx.beginPath()
       ctx.moveTo(x0, y0)
       ctx.lineTo(x1, y1)
-      ctx.strokeStyle = 'rgba(220,245,255,0.28)'
-      ctx.lineWidth = 1
+      ctx.strokeStyle = 'rgba(220,245,255,0.26)'
+      ctx.lineWidth = 0.8
       ctx.stroke()
     }
   }
@@ -624,18 +847,32 @@ export class CanvasRenderer {
     const isPlayer  = ship.team === 'player'
     const isCruiser = ship.templateId === 'hull.cruiser.basic'
     const topColor  = isPlayer
-      ? (isCruiser ? '#1d4ed8' : '#2563eb')
-      : (isCruiser ? '#b91c1c' : '#dc2626')
-    const sideColor = isPlayer ? '#172554' : '#450a0a'
-    const rimColor  = isPlayer ? '#93c5fd' : '#fca5a5'
+      ? '#0b7663'
+      : (isCruiser ? '#9b7f1e' : '#6f6d1f')
+    const sideColor = isPlayer ? '#06352f' : '#2b2609'
+    const rimColor  = isPlayer ? '#18e0a5' : '#f5d64b'
 
     // 1. Shadow
     ctx.beginPath()
     ctx.moveTo(sc[0]![0] + 3, sc[0]![1] + 4)
     for (let i = 1; i < 4; i++) ctx.lineTo(sc[i]![0] + 3, sc[i]![1] + 4)
     ctx.closePath()
-    ctx.fillStyle = 'rgba(0,0,0,0.28)'
+    ctx.fillStyle = 'rgba(0,0,0,0.42)'
     ctx.fill()
+
+    const [cx, cy] = this.w2s(ship.pos.x, ship.pos.y)
+    ctx.save()
+    ctx.translate(cx, cy)
+    ctx.scale(1.7, 0.65)
+    const glowR = Math.max(5, dim.l * iso.scale * 0.26)
+    const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, glowR)
+    glow.addColorStop(0, isPlayer ? 'rgba(15,238,166,0.18)' : 'rgba(245,214,75,0.13)')
+    glow.addColorStop(1, 'rgba(0,0,0,0)')
+    ctx.beginPath()
+    ctx.arc(0, 0, glowR, 0, Math.PI * 2)
+    ctx.fillStyle = glow
+    ctx.fill()
+    ctx.restore()
 
     // 2. Visible side faces
     for (let i = 0; i < 4; i++) {
@@ -732,14 +969,13 @@ export class CanvasRenderer {
       ctx.fill()
     }
 
-    // 6. HP bar
-    const [cx, cy] = this.w2s(ship.pos.x, ship.pos.y)
+    // 6. Compact HP bar
     const barW = dim.l * iso.scale * 0.65
     const barY = cy - hPx - 11
     const hpRatio = ship.hp / ship.maxHp
     ctx.fillStyle = 'rgba(0,0,0,0.6)'
     ctx.fillRect(cx - barW / 2 - 1, barY - 1, barW + 2, 6)
-    ctx.fillStyle = hpRatio > 0.5 ? '#22c55e' : hpRatio > 0.25 ? '#eab308' : '#ef4444'
+    ctx.fillStyle = hpRatio > 0.5 ? (isPlayer ? '#22c55e' : '#d8c94c') : hpRatio > 0.25 ? '#eab308' : '#ef4444'
     ctx.fillRect(cx - barW / 2, barY, barW * hpRatio, 4)
   }
 
@@ -760,12 +996,12 @@ export class CanvasRenderer {
       const [tx, ty] = this.w2s(proj.pos.x - proj.vel.x * 6, proj.pos.y - proj.vel.y * 6)
       ctx.beginPath()
       ctx.moveTo(sx, sy); ctx.lineTo(tx, ty)
-      ctx.strokeStyle = '#f97316'
-      ctx.lineWidth = 3 * iso.scale
+      ctx.strokeStyle = 'rgba(245,214,75,0.80)'
+      ctx.lineWidth = Math.max(1, 3 * iso.scale)
       ctx.stroke()
       ctx.beginPath()
-      ctx.arc(sx, sy, 3 * iso.scale, 0, Math.PI * 2)
-      ctx.fillStyle = '#fb923c'
+      ctx.arc(sx, sy, Math.max(1.2, 3 * iso.scale), 0, Math.PI * 2)
+      ctx.fillStyle = '#f5d64b'
       ctx.fill()
     } else if (proj.weaponType === 'missile') {
       const elevated = sy - arcPx
@@ -787,18 +1023,21 @@ export class CanvasRenderer {
       const trailArcPx = proj.maxHeight * Math.sin(Math.PI * trailProgress) * iso.scale
       ctx.beginPath()
       ctx.moveTo(sx, elevated); ctx.lineTo(tx, ty - trailArcPx)
-      ctx.strokeStyle = 'rgba(167,139,250,0.45)'
-      ctx.lineWidth = 2
+      ctx.strokeStyle = 'rgba(245,214,75,0.62)'
+      ctx.lineWidth = 2.2
       ctx.stroke()
       // projectile dot
       ctx.beginPath()
-      ctx.arc(sx, elevated, 4 * iso.scale, 0, Math.PI * 2)
-      ctx.fillStyle = '#c4b5fd'
+      ctx.arc(sx, elevated, Math.max(1.6, 4 * iso.scale), 0, Math.PI * 2)
+      ctx.fillStyle = '#ffe66d'
       ctx.fill()
     } else {
       // gun or aa: arcing shell
       const elevated = sy - arcPx
       const r = proj.weaponType === 'gun' ? 2.5 : 1.8
+      const [tx, tyBase] = this.w2s(proj.pos.x - proj.vel.x * 4.8, proj.pos.y - proj.vel.y * 4.8)
+      const previousProgress = Math.max(0, progress - 0.12)
+      const previousArcPx = proj.maxHeight * Math.sin(Math.PI * previousProgress) * iso.scale
       // shadow
       ctx.beginPath()
       ctx.arc(sx, sy, r * 0.7 * iso.scale, 0, Math.PI * 2)
@@ -807,13 +1046,19 @@ export class CanvasRenderer {
       // drop line
       if (arcPx > 2) {
         ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx, elevated)
-        ctx.strokeStyle = 'rgba(255,255,255,0.12)'
+        ctx.strokeStyle = 'rgba(245,214,75,0.14)'
         ctx.lineWidth = 0.6
         ctx.stroke()
       }
       ctx.beginPath()
-      ctx.arc(sx, elevated, r * iso.scale, 0, Math.PI * 2)
-      ctx.fillStyle = proj.weaponType === 'gun' ? '#fbbf24' : '#67e8f9'
+      ctx.moveTo(tx, tyBase - previousArcPx)
+      ctx.lineTo(sx, elevated)
+      ctx.strokeStyle = proj.weaponType === 'gun' ? 'rgba(255,232,91,0.72)' : 'rgba(235,246,118,0.58)'
+      ctx.lineWidth = proj.weaponType === 'gun' ? 1.4 : 1.0
+      ctx.stroke()
+      ctx.beginPath()
+      ctx.arc(sx, elevated, Math.max(1.2, r * iso.scale), 0, Math.PI * 2)
+      ctx.fillStyle = proj.weaponType === 'gun' ? '#ffe66d' : '#dff76b'
       ctx.fill()
     }
   }
@@ -927,6 +1172,31 @@ export class CanvasRenderer {
 
     ctx.restore()
   }
+
+  private renderTacticalAtmosphere(): void {
+    const { ctx, canvas } = this
+    const cx = canvas.width / 2
+    const cy = HUD_TOP + (canvas.height - HUD_TOP - HUD_BOTTOM) / 2
+    const radius = Math.max(canvas.width, canvas.height) * 0.72
+
+    ctx.save()
+    ctx.globalCompositeOperation = 'multiply'
+    const vignette = ctx.createRadialGradient(cx, cy, radius * 0.18, cx, cy, radius)
+    vignette.addColorStop(0, 'rgba(255,255,255,0)')
+    vignette.addColorStop(0.62, 'rgba(116,86,19,0.10)')
+    vignette.addColorStop(1, 'rgba(0,0,0,0.55)')
+    ctx.fillStyle = vignette
+    ctx.fillRect(0, HUD_TOP, canvas.width, canvas.height - HUD_TOP - HUD_BOTTOM)
+    ctx.restore()
+
+    ctx.save()
+    ctx.globalCompositeOperation = 'screen'
+    ctx.fillStyle = 'rgba(246,203,65,0.045)'
+    for (let y = HUD_TOP; y < canvas.height - HUD_BOTTOM; y += 3) {
+      ctx.fillRect(0, y, canvas.width, 1)
+    }
+    ctx.restore()
+  }
 }
 
 // linear interpolate between two hex colors
@@ -954,4 +1224,8 @@ function drawClosedPath(ctx: CanvasRenderingContext2D, points: [number, number][
 function signedNoise(x: number, y: number, salt: number): number {
   const n = Math.sin(x * 12.9898 + y * 78.233 + salt * 37.719) * 43758.5453
   return (n - Math.floor(n)) * 2 - 1
+}
+
+function impactWorldRadius(type: WeaponType): number {
+  return type === 'torpedo' ? 210 : type === 'missile' ? 185 : type === 'gun' ? 120 : 64
 }

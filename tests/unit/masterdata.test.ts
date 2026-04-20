@@ -13,7 +13,7 @@ describe('createInitialState', () => {
 
     expect(player.templateId).toBe('hull.destroyer.basic')
     expect(player.maxSpeed).toBe(5)
-    expect(player.weapons.find(w => w.type === 'gun')?.ammo).toBe(60)
+    expect(player.weapons.find(w => w.type === 'gun')?.ammo).toBe(220)
   })
 
   it('creates each selectable player ship type with distinct stats', () => {
@@ -29,6 +29,15 @@ describe('createInitialState', () => {
     expect(cruiser.maxSpeed).toBeGreaterThan(battleship.maxSpeed)
     expect(battleship.maxHp).toBeGreaterThan(cruiser.maxHp)
     expect(cruiser.maxHp).toBeGreaterThan(destroyer.maxHp)
+  })
+
+  it('places a dense enemy fleet for arcade-style combat', () => {
+    const state = createInitialState()
+    const enemies = [...state.entities.values()].filter(
+      e => e.kind === 'ship' && (e as ShipEntity).team === 'enemy',
+    ) as ShipEntity[]
+
+    expect(enemies).toHaveLength(28)
   })
 
   it('places destructible buildings on the central island', () => {
