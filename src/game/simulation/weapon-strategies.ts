@@ -90,6 +90,75 @@ export const WEAPON_CONFIGS: Record<WeaponType, WeaponConfig> = {
 }
 
 const WEAPON_CONFIG_OVERRIDES: Record<string, WeaponConfigOverride> = {
+  // ── 駆逐艦 追加武器 ──────────────────────────────────────────────────
+  'weapon.gun.127mm.ap': {
+    speed: 23, damageMin: 45, damageMax: 72, lifetime: 68, cooldown: 18, hitRadius: 13, maxRange: 1380, maxHeight: 230,
+  },
+  'weapon.torpedo.610mm.dd': {
+    speed: 7, damageMin: 130, damageMax: 190, lifetime: 170, cooldown: 80, hitRadius: 22, maxRange: 1190, maxHeight: 0,
+  },
+  'weapon.aa.20mm.dd': {
+    speed: 30, damageMin: 7, damageMax: 13, lifetime: 32, cooldown: 4, hitRadius: 8, maxRange: 650, maxHeight: 95,
+  },
+  'weapon.missile.antiship.dd': {
+    speed: 11, damageMin: 50, damageMax: 80, lifetime: 160, cooldown: 75, hitRadius: 22, maxRange: 1760, maxHeight: 380,
+  },
+  'weapon.missile.sam.dd': {
+    speed: 19, damageMin: 30, damageMax: 50, lifetime: 95, cooldown: 48, hitRadius: 20, maxRange: 1805, maxHeight: 520,
+  },
+  // ── 巡洋艦 追加武器 ──────────────────────────────────────────────────
+  'weapon.gun.203mm.forward': {
+    speed: 22, damageMin: 60, damageMax: 95, lifetime: 90, cooldown: 22, hitRadius: 16, maxRange: 1980, maxHeight: 380,
+  },
+  'weapon.gun.203mm.aft': {
+    speed: 22, damageMin: 60, damageMax: 95, lifetime: 90, cooldown: 22, hitRadius: 16, maxRange: 1980, maxHeight: 380,
+  },
+  'weapon.secondary.100mm.cl': {
+    speed: 25, damageMin: 18, damageMax: 28, lifetime: 48, cooldown: 7, hitRadius: 11, maxRange: 960, maxHeight: 200,
+  },
+  'weapon.torpedo.610mm.cl': {
+    speed: 7, damageMin: 130, damageMax: 190, lifetime: 170, cooldown: 85, hitRadius: 22, maxRange: 1190, maxHeight: 0,
+  },
+  'weapon.aa.sam.cl': {
+    speed: 20, damageMin: 45, damageMax: 70, lifetime: 200, cooldown: 100, hitRadius: 28, maxRange: 3200, maxHeight: 620,
+  },
+  'weapon.missile.cruise.cl': {
+    speed: 10, damageMin: 90, damageMax: 140, lifetime: 320, cooldown: 140, hitRadius: 32, maxRange: 3200, maxHeight: 600,
+  },
+  // ── 戦艦 追加武器 ─────────────────────────────────────────────────────
+  'weapon.gun.406mm.he.forward': {
+    speed: 21, damageMin: 65, damageMax: 100, lifetime: 105, cooldown: 20, hitRadius: 20, maxRange: 2000, maxHeight: 400,
+  },
+  'weapon.gun.406mm.he.center': {
+    speed: 21, damageMin: 65, damageMax: 100, lifetime: 105, cooldown: 20, hitRadius: 20, maxRange: 2000, maxHeight: 400,
+  },
+  'weapon.gun.406mm.he.aft': {
+    speed: 21, damageMin: 65, damageMax: 100, lifetime: 105, cooldown: 20, hitRadius: 20, maxRange: 2000, maxHeight: 400,
+  },
+  'weapon.gun.460mm.forward': {
+    speed: 23, damageMin: 130, damageMax: 195, lifetime: 130, cooldown: 36, hitRadius: 24, maxRange: 2600, maxHeight: 580,
+  },
+  'weapon.gun.460mm.center': {
+    speed: 23, damageMin: 130, damageMax: 195, lifetime: 130, cooldown: 36, hitRadius: 24, maxRange: 2600, maxHeight: 580,
+  },
+  'weapon.gun.460mm.aft': {
+    speed: 23, damageMin: 130, damageMax: 195, lifetime: 130, cooldown: 36, hitRadius: 24, maxRange: 2600, maxHeight: 580,
+  },
+  'weapon.secondary.127mm.bb.port': {
+    speed: 24, damageMin: 22, damageMax: 35, lifetime: 58, cooldown: 9, hitRadius: 12, maxRange: 1000, maxHeight: 190,
+  },
+  'weapon.secondary.127mm.bb.starboard': {
+    speed: 24, damageMin: 22, damageMax: 35, lifetime: 58, cooldown: 9, hitRadius: 12, maxRange: 1000, maxHeight: 190,
+  },
+  'weapon.torpedo.610mm.bb': {
+    speed: 7, damageMin: 130, damageMax: 190, lifetime: 170, cooldown: 80, hitRadius: 22, maxRange: 1190, maxHeight: 0,
+  },
+  'weapon.aa.ciws.bb': {
+    speed: 36, damageMin: 10, damageMax: 18, lifetime: 26, cooldown: 4, hitRadius: 9, maxRange: 600, maxHeight: 160,
+  },
+  'weapon.missile.antiship.bb': {
+    speed: 12, damageMin: 65, damageMax: 95, lifetime: 190, cooldown: 90, hitRadius: 28, maxRange: 2280, maxHeight: 480,
+  },
   'weapon.gun.406mm.twin.forward': {
     speed: 24, damageMin: 85, damageMax: 130, lifetime: 100, cooldown: 24, hitRadius: 18, maxRange: 2200, maxHeight: 430,
   },

@@ -144,10 +144,18 @@ function makeBuilding(id: string, x: number, y: number, hp: number, radius: numb
   }
 }
 
-export function createInitialState(playerType: PlayerShipType = 'destroyer', stageNumber = 1): CombatState {
+export function createInitialState(
+  playerType: PlayerShipType = 'destroyer',
+  stageNumber = 1,
+  customLoadout?: WeaponTemplate[],
+): CombatState {
   const stage = getStageDefinition(stageNumber)
   const entities = new Map<string, Entity>()
-  entities.set('ship.player', makePlayerShip(playerType))
+  const playerShip = makePlayerShip(playerType)
+  const finalPlayer = customLoadout
+    ? { ...playerShip, weapons: customLoadout.slice(0, MAX_WEAPON_SLOTS).map(makeWeaponState) }
+    : playerShip
+  entities.set('ship.player', finalPlayer)
 
   for (const [index, x, y, angle] of makeEnemyFormation(stage.destroyers, 1200, 7200)) {
     const id = `ship.enemy.destroyer.${String(index + 1).padStart(2, '0')}`

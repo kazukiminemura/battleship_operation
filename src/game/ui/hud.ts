@@ -63,11 +63,8 @@ export class HUD {
     this.clickRegions = []
     this.renderTopBar(state, player, weaponMode, bgmEnabled)
     this.renderRadar(state, player, worldSize)
+    this.renderGlobalMap(state, player, worldSize)
     this.renderBottomBar()
-
-    if (state.missionResult !== 'none') {
-      this.renderResultOverlay(state)
-    }
   }
 
   private renderTopBar(state: CombatState, player: ShipEntity, weaponMode: WeaponMode, bgmEnabled: boolean): void {
@@ -532,6 +529,79 @@ export class HUD {
     ctx.textAlign = 'left'
   }
 
+  private renderGlobalMap(state: CombatState, player: ShipEntity, worldSize: number): void {
+    const { ctx, canvas } = this
+    const mSize = RADAR_SIZE
+    const mGap  = 6
+    const mX = canvas.width - RADAR_SIZE - RADAR_PAD - mGap - mSize
+    const mY = canvas.height - mSize - 30 - RADAR_PAD
+
+    ctx.fillStyle = 'rgba(0,10,20,0.82)'
+    ctx.strokeStyle = '#1e4a6a'
+    ctx.lineWidth = 1.5
+    roundRect(ctx, mX, mY, mSize, mSize, 6)
+    ctx.fill(); ctx.stroke()
+
+    ctx.save()
+    roundRect(ctx, mX, mY, mSize, mSize, 6)
+    ctx.clip()
+
+    const scale = mSize / worldSize
+    const toMap = (wx: number, wy: number): [number, number] => [
+      mX + wx * scale,
+      mY + wy * scale,
+    ]
+
+    // grid lines
+    ctx.strokeStyle = 'rgba(0,200,80,0.07)'
+    ctx.lineWidth = 0.5
+    const gridStep = worldSize / 4
+    for (let i = 1; i < 4; i++) {
+      const gx = mX + i * gridStep * scale
+      const gy = mY + i * gridStep * scale
+      ctx.beginPath(); ctx.moveTo(gx, mY); ctx.lineTo(gx, mY + mSize); ctx.stroke()
+      ctx.beginPath(); ctx.moveTo(mX, gy); ctx.lineTo(mX + mSize, gy); ctx.stroke()
+    }
+
+    // islands
+    for (const land of state.mapObstacles) {
+      const [lx, ly] = toMap(land.x, land.y)
+      const rx = land.rx * scale
+      const ry = land.ry * scale
+      ctx.beginPath()
+      ctx.ellipse(lx, ly, Math.max(rx, 1.5), Math.max(ry, 1.5), 0, 0, Math.PI * 2)
+      ctx.fillStyle = 'rgba(132,204,22,0.35)'
+      ctx.fill()
+      ctx.strokeStyle = 'rgba(190,242,100,0.55)'
+      ctx.lineWidth = 0.8
+      ctx.stroke()
+    }
+
+    // player blip
+    const [px, py] = toMap(player.pos.x, player.pos.y)
+    ctx.beginPath()
+    ctx.arc(px, py, 3.5, 0, Math.PI * 2)
+    ctx.fillStyle = '#60a5fa'
+    ctx.fill()
+
+    // heading tick
+    const tickLen = 7
+    ctx.beginPath()
+    ctx.moveTo(px, py)
+    ctx.lineTo(px + Math.cos(player.angle) * tickLen, py + Math.sin(player.angle) * tickLen)
+    ctx.strokeStyle = '#93c5fd'
+    ctx.lineWidth = 1.5
+    ctx.stroke()
+
+    ctx.restore()
+
+    ctx.fillStyle = 'rgba(0,200,80,0.6)'
+    ctx.font = '9px monospace'
+    ctx.textAlign = 'right'
+    ctx.fillText('MAP', mX + mSize - 4, mY + 12)
+    ctx.textAlign = 'left'
+  }
+
   private renderBottomBar(): void {
     const { ctx, canvas } = this
     const barH = 28
@@ -549,29 +619,6 @@ export class HUD {
     )
   }
 
-  private renderResultOverlay(state: CombatState): void {
-    const { ctx, canvas } = this
-    const result = state.missionResult
-
-    ctx.fillStyle = 'rgba(0,0,0,0.72)'
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
-
-    const text = result === 'completed' && state.stage === state.maxStage ? 'ALL STAGES CLEAR' :
-      result === 'completed' ? 'MISSION COMPLETE' : 'MISSION FAILED'
-    const color = result === 'completed' ? '#22c55e' : '#ef4444'
-
-    ctx.font = 'bold 60px monospace'
-    ctx.fillStyle = color
-    ctx.textAlign = 'center'
-    ctx.fillText(text, canvas.width / 2, canvas.height / 2)
-
-    ctx.font = '22px monospace'
-    ctx.fillStyle = '#cbd5e1'
-    const prompt = result === 'completed' && state.stage < state.maxStage ? 'Press Enter for next stage / R for ship select' :
-      result === 'completed' ? 'Press Enter or R for ship select' : 'Press R to restart'
-    ctx.fillText(prompt, canvas.width / 2, canvas.height / 2 + 54)
-    ctx.textAlign = 'left'
-  }
 }
 
 function roundRect(

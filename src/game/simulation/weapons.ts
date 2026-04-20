@@ -109,6 +109,8 @@ export function fireWeaponAtSlot(
       ownerId: actorId,
       weaponId: weapon.id,
       weaponType,
+      launchPos: { ...muzzle },
+      targetPos: { ...target },
       damage,
       lifetime: Math.min(cfg.lifetime, flightTicks),
       initialLifetime: Math.min(cfg.lifetime, flightTicks),

@@ -53,6 +53,8 @@ export interface ProjectileEntity {
   ownerId: string
   weaponId?: string
   weaponType: WeaponType
+  launchPos?: Vec3
+  targetPos?: Vec3
   damage: number
   lifetime: number
   initialLifetime: number

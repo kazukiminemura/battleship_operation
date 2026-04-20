@@ -9,9 +9,14 @@ import type { CombatState, ShipEntity, WeaponState } from './game/simulation/typ
 import { WORLD_SIZE } from './game/simulation/movement'
 import { SoundSystem } from './game/audio/sounds'
 import { StartScreen } from './game/ui/startscreen'
+import { DesignScreen } from './game/ui/designscreen'
+import { StageIntroScreen } from './game/ui/stageintroscreen'
+import { ResultsScreen } from './game/ui/resultsscreen'
+import type { WeaponTemplate } from './game/data/masterdata'
+import { getDefaultLoadout } from './game/data/weapon-catalog'
 
 const BASE_SEED = 12345
-type GameMode = 'start' | 'combat'
+type GameMode = 'start' | 'design' | 'stage-intro' | 'combat' | 'results'
 
 function main(): void {
   const canvas = document.getElementById('game-canvas') as HTMLCanvasElement
@@ -23,6 +28,9 @@ function main(): void {
   const renderer = new CanvasRenderer(canvas)
   const hud      = new HUD(canvas)
   const start    = new StartScreen(canvas)
+  const design   = new DesignScreen(canvas)
+  const stageIntro = new StageIntroScreen(canvas)
+  const results  = new ResultsScreen(canvas)
   const sound    = new SoundSystem()
   const input    = new InputAdapter(canvas, renderer, {
     onWeaponSelected: (weaponMode) => {
@@ -33,9 +41,10 @@ function main(): void {
       if (mode === 'combat') sound.playSpeedChange(direction)
     },
   })
-  let rng        = createRngStreams(BASE_SEED)
+  let rng = createRngStreams(BASE_SEED)
 
   let selectedShip: PlayerShipType = 'destroyer'
+  let selectedLoadout: WeaponTemplate[] = getDefaultLoadout('destroyer')
   let currentStage = 1
   let normalShip: PlayerShipType = selectedShip
   let normalStage = currentStage
@@ -43,6 +52,7 @@ function main(): void {
   let state: CombatState = debugMode
     ? createDebugState('battleship')
     : createInitialState(selectedShip, currentStage)
+
   if (!debugMode) {
     start.attach()
   } else {
@@ -52,16 +62,36 @@ function main(): void {
     sound.setBgmEnabled(bgmEnabled, isBossStage(state) ? 'boss' : 'normal')
   }
 
-  const beginCombat = (shipType: PlayerShipType, stage = 1): void => {
-    debugMode = false
-    selectedShip = shipType
+  const goToStart = (): void => {
+    mode = 'start'
+    start.attach()
+    sound.setBgmEnabled(false)
+    sound.reset()
+  }
+
+  const goToDesign = (): void => {
+    start.detach()
+    results.detach()
+    mode = 'design'
+    design.attach()
+  }
+
+  const goToStageIntro = (stage: number): void => {
     currentStage = stage
-    state = createInitialState(selectedShip, currentStage)
+    design.detach()
+    results.detach()
+    mode = 'stage-intro'
+    stageIntro.attach()
+  }
+
+  const beginCombat = (): void => {
+    debugMode = false
+    state = createInitialState(selectedShip, currentStage, selectedLoadout)
     rng = createRngStreams(BASE_SEED + currentStage * 1009)
     sound.reset()
     sound.setBgmEnabled(bgmEnabled, isBossStage(state) ? 'boss' : 'normal')
     mode = 'combat'
-    start.detach()
+    stageIntro.detach()
   }
 
   const beginDebugCombat = (): void => {
@@ -71,6 +101,7 @@ function main(): void {
     }
     debugMode = true
     selectedShip = 'battleship'
+    selectedLoadout = getDefaultLoadout('battleship')
     state = createDebugState(selectedShip)
     currentStage = state.stage
     rng = createRngStreams(BASE_SEED + 99099)
@@ -78,21 +109,25 @@ function main(): void {
     sound.setBgmEnabled(bgmEnabled, isBossStage(state) ? 'boss' : 'normal')
     mode = 'combat'
     start.detach()
+    design.detach()
+    stageIntro.detach()
+    results.detach()
   }
 
   const toggleDebugMap = (): void => {
     if (debugMode) {
-      beginCombat(normalShip, normalStage)
+      selectedShip = normalShip
+      currentStage = normalStage
+      goToStart()
     } else {
       beginDebugCombat()
     }
   }
 
-  const returnToStart = (): void => {
-    mode = 'start'
-    start.attach()
-    sound.setBgmEnabled(false)
+  const enterResults = (): void => {
+    mode = 'results'
     sound.reset()
+    results.attach()
   }
 
   window.addEventListener('keydown', (e) => {
@@ -103,22 +138,45 @@ function main(): void {
       return
     }
 
-    if (e.code === 'KeyR' && mode === 'combat') {
-      returnToStart()
-    } else if ((e.code === 'Enter' || e.code === 'Space') && mode === 'combat' && state.missionResult === 'completed') {
-      if (currentStage < state.maxStage) {
-        beginCombat(selectedShip, currentStage + 1)
-      } else {
-        returnToStart()
-      }
+    if (e.code === 'KeyR' && (mode === 'combat' || mode === 'results')) {
+      goToStart()
     }
   })
 
-  // Start screen and HUD click regions (capture phase, before fire-weapon handler)
   canvas.addEventListener('click', (e) => {
     if (mode === 'start') {
-      const shipType = start.checkClick(e)
-      if (shipType) beginCombat(shipType)
+      if (start.checkClick(e)) goToDesign()
+      e.stopImmediatePropagation()
+      return
+    }
+
+    if (mode === 'design') {
+      const result = design.checkClick(e)
+      if (result) {
+        selectedShip = result.shipType
+        selectedLoadout = result.loadout
+        goToStageIntro(1)
+      }
+      e.stopImmediatePropagation()
+      return
+    }
+
+    if (mode === 'stage-intro') {
+      const action = stageIntro.checkClick(e)
+      if (action === 'sortie') beginCombat()
+      e.stopImmediatePropagation()
+      return
+    }
+
+    if (mode === 'results') {
+      const action = results.checkClick(e)
+      if (action === 'next') {
+        goToStageIntro(currentStage + 1)
+      } else if (action === 'retry') {
+        goToStageIntro(currentStage)
+      } else if (action === 'title') {
+        goToStart()
+      }
       e.stopImmediatePropagation()
       return
     }
@@ -153,12 +211,21 @@ function main(): void {
       state = combatStep(state, commands, rng, STATIC_DATA)
     },
     onRender: (_alpha) => {
-      if (mode === 'start') {
-        start.render()
+      if (mode === 'start') { start.render(); return }
+      if (mode === 'design') { design.render(); return }
+      if (mode === 'stage-intro') {
+        const stageDef = STATIC_DATA.stages[currentStage - 1]!
+        stageIntro.render(stageDef, selectedShip)
+        return
+      }
+      if (mode === 'results') { results.render(state); return }
+
+      // combat
+      if (state.missionResult !== 'none') {
+        enterResults()
         return
       }
 
-      // Camera follows player
       const player = state.entities.get('ship.player')
       if (player && player.kind === 'ship' && !player.destroyed) {
         renderer.setCamera((player as ShipEntity).pos.x, (player as ShipEntity).pos.y)

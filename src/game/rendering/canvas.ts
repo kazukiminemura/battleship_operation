@@ -1,4 +1,4 @@
-import type { BuildingEntity, CombatEvent, CombatState, Entity, MapObstacle, ShipEntity, ProjectileEntity, Vec3, WeaponState, WeaponType } from '../simulation/types'
+import type { BuildingEntity, CombatEvent, CombatState, Entity, MapObstacle, ShipEntity, ProjectileEntity, SpeedLevel, Vec3, WeaponState, WeaponType } from '../simulation/types'
 import { isOnLand, WORLD_SIZE } from '../simulation/movement'
 import { getWeaponConfig } from '../simulation/weapon-strategies'
 
@@ -33,6 +33,17 @@ interface IsoParams {
 const HUD_TOP    = 134
 const HUD_BOTTOM = 32
 
+interface ShipWakePoint {
+  x: number
+  y: number
+  angle: number
+  speed: number
+  speedRatio: number
+  speedLevel: SpeedLevel
+  turn: number
+  tick: number
+}
+
 export class CanvasRenderer {
   private ctx: CanvasRenderingContext2D
   private canvas: HTMLCanvasElement
@@ -42,6 +53,10 @@ export class CanvasRenderer {
   // イベントはシミュレーション毎ティック消去されるためレンダラー側で蓄積
   private effectLog: CombatEvent[] = []
   private effectKeys = new Set<string>()
+  private shipWakeHistory = new Map<string, ShipWakePoint[]>()
+  private static readonly WAKE_HISTORY = 55
+  private static readonly WAKE_RECORD_INTERVAL = 2
+  private wakeSprites: WakeSprites | null = null
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas
@@ -129,6 +144,8 @@ export class CanvasRenderer {
       .filter(e => e.kind === 'ship' && !(e as ShipEntity).destroyed) as ShipEntity[])
       .sort((a, b) => a.pos.y - b.pos.y)
 
+    this.updateShipWakes(ships, state.tick)
+
     const projectiles = [...state.entities.values()]
       .filter(e => e.kind === 'projectile' && !(e as ProjectileEntity).destroyed) as ProjectileEntity[]
 
@@ -140,6 +157,7 @@ export class CanvasRenderer {
     for (const b of buildings)   this.renderBuilding(b)
     for (const p of projectiles) this.renderProjectile(p)
     this.renderMuzzleBursts(this.effectLog, state.tick)
+    this.renderShipWakes(ships, state.tick)
     for (const s of ships)       this.renderShip(s, state.tick)
     this.renderLandDust(this.effectLog, state.tick, state.entities, state.mapObstacles)
     this.renderShipExplosions(this.effectLog, state.tick, state.entities)
@@ -897,6 +915,138 @@ export class CanvasRenderer {
     ctx.stroke()
   }
 
+  // ── ship wakes ─────────────────────────────────────────────────────────────
+
+  private updateShipWakes(ships: ShipEntity[], tick: number): void {
+    const alive = new Set<string>()
+    for (const ship of ships) {
+      alive.add(ship.id)
+      if (tick % CanvasRenderer.WAKE_RECORD_INTERVAL !== 0) continue
+      let hist = this.shipWakeHistory.get(ship.id)
+      if (!hist) { hist = []; this.shipWakeHistory.set(ship.id, hist) }
+      const previous = hist[hist.length - 1]
+      const turn = previous ? normalizeAngle(ship.angle - previous.angle) : 0
+      const speedRatio = ship.maxSpeed > 0 ? Math.min(1.35, Math.abs(ship.speed / ship.maxSpeed)) : 0
+      hist.push({
+        x: ship.pos.x,
+        y: ship.pos.y,
+        angle: ship.angle,
+        speed: ship.speed,
+        speedRatio,
+        speedLevel: ship.speedLevel,
+        turn,
+        tick,
+      })
+      if (hist.length > CanvasRenderer.WAKE_HISTORY) hist.shift()
+    }
+    for (const id of this.shipWakeHistory.keys()) {
+      if (!alive.has(id)) this.shipWakeHistory.delete(id)
+    }
+  }
+
+  private renderShipWakes(ships: ShipEntity[], tick: number): void {
+    const { ctx, iso } = this
+    if (!this.wakeSprites) this.wakeSprites = buildWakeSprites()
+    const sp = this.wakeSprites
+
+    for (const ship of ships) {
+      const dim = SHIP_DIMS[ship.templateId] ?? { l: 100, w: 22, h: 12 }
+      const hist = this.shipWakeHistory.get(ship.id)
+      const cosA = Math.cos(ship.angle)
+      const sinA = Math.sin(ship.angle)
+
+      // Screen-space forward direction angle for sprite rotation
+      const svx = (cosA - sinA) * iso.scale
+      const svy = (cosA + sinA) * iso.scale * 0.5
+      const screenAngle = Math.atan2(svy, svx)
+
+      // ── 1. Bow wave sprite ─────────────────────────────────────────────
+      const speedF = Math.min(1, ship.speed / 5)
+      if (speedF > 0.08) {
+        const bowX = ship.pos.x + cosA * dim.l * 0.50
+        const bowY = ship.pos.y + sinA * dim.l * 0.50
+        const [bsx, bsy] = this.w2s(bowX, bowY)
+        const sprW = dim.l * iso.scale * 1.05
+        const sprH = dim.w * iso.scale * 2.30
+
+        ctx.save()
+        ctx.translate(bsx, bsy)
+        ctx.rotate(screenAngle)
+        ctx.globalAlpha = speedF * 0.55
+        // Sprite apex is at right edge; draw so it aligns with bow position
+        ctx.drawImage(sp.bowWave, -sprW, -sprH / 2, sprW, sprH)
+        ctx.globalAlpha = 1
+        ctx.restore()
+      }
+
+      // ── 2. Wake trail foam sprites (from position history) ─────────────
+      if (hist && hist.length >= 2) {
+        const maxAge = CanvasRenderer.WAKE_HISTORY * CanvasRenderer.WAKE_RECORD_INTERVAL
+
+        for (let i = 0; i < hist.length; i++) {
+          const h = hist[i]!
+          const age = tick - h.tick
+          if (age <= 0 || age > maxAge) continue
+
+          const sf = Math.min(1, Math.max(Math.abs(h.speed) / 5, h.speedRatio * 0.85))
+          if (sf < 0.04) continue
+          const speedProfile = wakeSpeedProfile(h.speedLevel, sf)
+          if (speedProfile.alpha <= 0) continue
+
+          const t = age / maxAge
+          const phase = tick * 0.24 + i * 1.73 + ship.id.length
+          const shimmer = 0.72 + Math.sin(phase) * 0.28
+          const turnF = Math.min(1, Math.abs(h.turn) / 0.065)
+          const outsideSign = h.turn === 0 ? 0 : -Math.sign(h.turn)
+          const turnFalloff = Math.max(0, 1 - t * 1.35)
+          const outsideDrift = outsideSign * turnF * dim.w * (0.65 + t * 1.35) * turnFalloff
+          const alpha = (1 - t) * speedProfile.alpha * 0.46 * shimmer * (1 + turnF * 0.18)
+          const spread = dim.w * (0.30 + t * 1.75 + Math.sin(phase * 0.7) * 0.08) * speedProfile.spread * (1 + turnF * 0.22 * turnFalloff)
+          const drift = Math.sin(phase * 1.17) * dim.w * 0.16 * (1 - t)
+          const aftDrift = Math.cos(phase * 0.83) * dim.w * 0.08 * (1 - t)
+
+          const hCosA = Math.cos(h.angle)
+          const hSinA = Math.sin(h.angle)
+          const hSvx = (hCosA - hSinA) * iso.scale
+          const hSvy = (hCosA + hSinA) * iso.scale * 0.5
+          const hScreenAngle = Math.atan2(hSvy, hSvx)
+          const centerDrift = drift + outsideDrift
+          const sternX = h.x - hCosA * (dim.l * 0.48 + aftDrift) + hSinA * centerDrift
+          const sternY = h.y - hSinA * (dim.l * 0.48 + aftDrift) - hCosA * centerDrift
+
+          const [px, py] = this.w2s(sternX + hSinA * spread, sternY - hCosA * spread)
+          const [sx, sy] = this.w2s(sternX - hSinA * spread, sternY + hCosA * spread)
+
+          const foamSpr = t < 0.38 ? sp.foamLg : sp.foamSm
+          const pulse = 0.86 + Math.sin(phase * 1.9) * 0.14
+          const dotSize = Math.max(2, dim.w * iso.scale * (t < 0.38 ? 0.30 : 0.16) * (1 - t * 0.38) * pulse * speedProfile.size)
+          const portAlpha = alpha * (outsideSign > 0 ? 1 + turnF * 0.38 : 1 - turnF * 0.18)
+          const starboardAlpha = alpha * (outsideSign < 0 ? 1 + turnF * 0.38 : 1 - turnF * 0.18)
+
+          ctx.save()
+          ctx.globalAlpha = Math.max(0, portAlpha)
+          ctx.drawImage(foamSpr, px - dotSize / 2, py - dotSize / 2, dotSize, dotSize)
+          ctx.globalAlpha = Math.max(0, starboardAlpha)
+          ctx.drawImage(foamSpr, sx - dotSize / 2, sy - dotSize / 2, dotSize, dotSize)
+
+          // Stern wash sprite for the most recent positions
+          if (t < 0.28) {
+            const [cx2, cy2] = this.w2s(sternX, sternY)
+            const ct = t / 0.28
+            const washSize = Math.max(4, dim.w * iso.scale * (0.58 + Math.sin(phase * 2.1) * 0.08) * (1 - ct) * speedProfile.wash)
+            ctx.globalAlpha = (1 - ct) * speedProfile.alpha * 0.44
+            ctx.translate(cx2, cy2)
+            ctx.rotate(hScreenAngle + Math.sin(phase) * 0.18 + outsideSign * turnF * 0.26)
+            ctx.drawImage(sp.sternWash, -washSize / 2, -washSize / 2, washSize, washSize)
+          }
+
+          ctx.globalAlpha = 1
+          ctx.restore()
+        }
+      }
+    }
+  }
+
   // ── ship ───────────────────────────────────────────────────────────────────
 
   private renderShip(ship: ShipEntity, tick: number): void {
@@ -1154,85 +1304,280 @@ export class CanvasRenderer {
 
   private renderProjectile(proj: ProjectileEntity): void {
     const { ctx, iso } = this
-    const [sx, sy] = this.w2s(proj.pos.x, proj.pos.y)
 
-    // parabolic arc: sin-curve from 0 → peak → 0 over lifetime
     const progress = proj.initialLifetime > 0
       ? (proj.initialLifetime - proj.lifetime) / proj.initialLifetime
       : 0
-    const arcPx = proj.maxHeight * Math.sin(Math.PI * progress) * iso.scale
+    const p = clamp01(progress)
+    const head = this.projectileVisualPoint(proj, p)
+    const sx = head.sx
+    const sy = head.sy
+    const arcPx = head.heightPx
+    const hx = head.hx
+    const hy = head.hy
 
-    if (proj.weaponType === 'torpedo') {
-      // torpedoes stay flat (maxHeight=0), draw wake trail
-      const [tx, ty] = this.w2s(proj.pos.x - proj.vel.x * 6, proj.pos.y - proj.vel.y * 6)
-      ctx.beginPath()
-      ctx.moveTo(sx, sy); ctx.lineTo(tx, ty)
-      ctx.strokeStyle = 'rgba(245,214,75,0.80)'
-      ctx.lineWidth = Math.max(1, 3 * iso.scale)
-      ctx.stroke()
-      ctx.beginPath()
-      ctx.arc(sx, sy, Math.max(1.2, 3 * iso.scale), 0, Math.PI * 2)
-      ctx.fillStyle = '#f5d64b'
-      ctx.fill()
-    } else if (proj.weaponType === 'missile') {
-      const elevated = sy - arcPx
-      // shadow on ocean
-      ctx.beginPath()
-      ctx.arc(sx, sy, 2.5 * iso.scale, 0, Math.PI * 2)
-      ctx.fillStyle = 'rgba(0,0,0,0.25)'
-      ctx.fill()
-      // vertical drop line
-      if (arcPx > 2) {
-        ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx, elevated)
-        ctx.strokeStyle = 'rgba(196,181,253,0.2)'
-        ctx.lineWidth = 0.8
-        ctx.stroke()
+    const tSteps = proj.weaponType === 'torpedo' ? 8 : proj.weaponType === 'missile' ? 7 : 5
+    const [flatTx, flatTy] = this.w2s(
+      proj.pos.x - proj.vel.x * tSteps,
+      proj.pos.y - proj.vel.y * tSteps,
+    )
+    const trailProgress = Math.max(0, p - (proj.weaponType === 'missile' ? 0.045 : 0.10))
+    const trail = this.projectileVisualPoint(proj, trailProgress)
+    const thx = proj.weaponType === 'torpedo' ? flatTx : trail.hx
+    const thy = proj.weaponType === 'torpedo' ? flatTy : trail.hy
+    const angle = Math.atan2(hy - thy, hx - thx)
+
+    switch (proj.weaponType) {
+
+      // ── 機銃 (AA) ─ 小さなトレーサー弾 ──────────────────────────────────────
+      case 'aa': {
+        ctx.beginPath()
+        ctx.moveTo(hx, hy); ctx.lineTo(thx, thy)
+        ctx.strokeStyle = 'rgba(255,255,215,0.60)'
+        ctx.lineWidth = 1.4; ctx.stroke()
+
+        ctx.save()
+        ctx.translate(hx, hy); ctx.rotate(angle)
+        ctx.beginPath()
+        ctx.ellipse(0, 0, 5, 2, 0, 0, Math.PI * 2)
+        ctx.fillStyle = 'rgba(255,250,200,0.30)'
+        ctx.fill()
+        ctx.beginPath()
+        ctx.ellipse(0, 0, 4, 1.4, 0, 0, Math.PI * 2)
+        ctx.fillStyle = '#f0eecc'
+        ctx.fill()
+        ctx.beginPath()
+        ctx.ellipse(0.6, 0, 2.2, 0.7, 0, 0, Math.PI * 2)
+        ctx.fillStyle = '#ffffff'
+        ctx.fill()
+        ctx.restore()
+        break
       }
-      // smoke trail (to previous position)
-      const [tx, ty] = this.w2s(proj.pos.x - proj.vel.x * 5, proj.pos.y - proj.vel.y * 5)
-      const trailProgress = Math.max(0, progress - 0.08)
-      const trailArcPx = proj.maxHeight * Math.sin(Math.PI * trailProgress) * iso.scale
-      ctx.beginPath()
-      ctx.moveTo(sx, elevated); ctx.lineTo(tx, ty - trailArcPx)
-      ctx.strokeStyle = 'rgba(245,214,75,0.62)'
-      ctx.lineWidth = 2.2
-      ctx.stroke()
-      // projectile dot
-      ctx.beginPath()
-      ctx.arc(sx, elevated, Math.max(1.6, 4 * iso.scale), 0, Math.PI * 2)
-      ctx.fillStyle = '#ffe66d'
-      ctx.fill()
-    } else {
-      // gun / secondary / aa: arcing shell
-      const elevated = sy - arcPx
-      const r = (proj.weaponType === 'gun' || proj.weaponType === 'secondary') ? 2.5 : 1.8
-      const [tx, tyBase] = this.w2s(proj.pos.x - proj.vel.x * 4.8, proj.pos.y - proj.vel.y * 4.8)
-      const previousProgress = Math.max(0, progress - 0.12)
-      const previousArcPx = proj.maxHeight * Math.sin(Math.PI * previousProgress) * iso.scale
-      // shadow
-      ctx.beginPath()
-      ctx.arc(sx, sy, r * 0.7 * iso.scale, 0, Math.PI * 2)
-      ctx.fillStyle = 'rgba(0,0,0,0.25)'
-      ctx.fill()
-      // drop line
-      if (arcPx > 2) {
-        ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx, elevated)
-        ctx.strokeStyle = 'rgba(245,214,75,0.14)'
-        ctx.lineWidth = 0.6
-        ctx.stroke()
+
+      // ── 大砲 (gun) ─ 砲弾 ────────────────────────────────────────────────────
+      case 'gun': {
+        if (arcPx > 3) {
+          ctx.beginPath()
+          ctx.ellipse(sx, sy, 5, 2, 0, 0, Math.PI * 2)
+          ctx.fillStyle = 'rgba(0,0,0,0.16)'
+          ctx.fill()
+          ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(hx, hy)
+          ctx.strokeStyle = 'rgba(200,160,60,0.12)'
+          ctx.lineWidth = 0.6; ctx.stroke()
+        }
+        ctx.beginPath()
+        ctx.moveTo(thx, thy); ctx.lineTo(hx, hy)
+        ctx.strokeStyle = 'rgba(170,140,80,0.48)'
+        ctx.lineWidth = 2.2; ctx.stroke()
+
+        ctx.save()
+        ctx.translate(hx, hy); ctx.rotate(angle)
+        ctx.fillStyle = '#a06818'
+        ctx.beginPath()
+        ctx.ellipse(-1, 0, 5.5, 2.4, 0, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.fillStyle = '#c08428'
+        ctx.beginPath()
+        ctx.moveTo(3.5, -2.4); ctx.lineTo(9.5, 0); ctx.lineTo(3.5, 2.4)
+        ctx.closePath(); ctx.fill()
+        ctx.fillStyle = '#5a3008'
+        ctx.fillRect(-6.5, -2.4, 2.5, 4.8)
+        ctx.fillStyle = 'rgba(255,215,110,0.38)'
+        ctx.beginPath()
+        ctx.ellipse(0.5, -0.9, 3.5, 0.9, 0, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.restore()
+        break
       }
-      ctx.beginPath()
-      ctx.moveTo(tx, tyBase - previousArcPx)
-      ctx.lineTo(sx, elevated)
-      const isGunType = proj.weaponType === 'gun' || proj.weaponType === 'secondary'
-      ctx.strokeStyle = isGunType ? 'rgba(255,232,91,0.72)' : 'rgba(235,246,118,0.58)'
-      ctx.lineWidth = isGunType ? 1.4 : 1.0
-      ctx.stroke()
-      ctx.beginPath()
-      ctx.arc(sx, elevated, Math.max(1.2, r * iso.scale), 0, Math.PI * 2)
-      ctx.fillStyle = isGunType ? '#ffe66d' : '#dff76b'
-      ctx.fill()
+
+      // ── ロケット (secondary) ─ ロケット弾 ───────────────────────────────────
+      case 'secondary': {
+        if (arcPx > 3) {
+          ctx.beginPath()
+          ctx.ellipse(sx, sy, 4, 1.5, 0, 0, Math.PI * 2)
+          ctx.fillStyle = 'rgba(0,0,0,0.14)'
+          ctx.fill()
+          ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(hx, hy)
+          ctx.strokeStyle = 'rgba(255,120,40,0.10)'
+          ctx.lineWidth = 0.6; ctx.stroke()
+        }
+        ctx.beginPath()
+        ctx.moveTo(thx, thy); ctx.lineTo(hx, hy)
+        ctx.strokeStyle = 'rgba(255,110,30,0.52)'
+        ctx.lineWidth = 2; ctx.stroke()
+
+        ctx.save()
+        ctx.translate(hx, hy); ctx.rotate(angle)
+        ctx.fillStyle = '#c03018'
+        ctx.beginPath()
+        ctx.ellipse(0, 0, 5, 2.2, 0, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.fillStyle = '#d84028'
+        ctx.beginPath()
+        ctx.moveTo(3.5, -2.2); ctx.lineTo(8.5, 0); ctx.lineTo(3.5, 2.2)
+        ctx.closePath(); ctx.fill()
+        ctx.fillStyle = '#7a1a08'
+        ctx.beginPath()
+        ctx.moveTo(-5, 0); ctx.lineTo(-8, -5); ctx.lineTo(-6, 0)
+        ctx.closePath(); ctx.fill()
+        ctx.beginPath()
+        ctx.moveTo(-5, 0); ctx.lineTo(-8,  5); ctx.lineTo(-6, 0)
+        ctx.closePath(); ctx.fill()
+        ctx.beginPath()
+        ctx.ellipse(-7.5, 0, 3.5, 1.5, 0, 0, Math.PI * 2)
+        ctx.fillStyle = 'rgba(255,190,50,0.78)'
+        ctx.fill()
+        ctx.beginPath()
+        ctx.ellipse(-6, 0, 2, 0.9, 0, 0, Math.PI * 2)
+        ctx.fillStyle = '#fff0a0'
+        ctx.fill()
+        ctx.restore()
+        break
+      }
+
+      // ── ミサイル (missile) ─ 誘導ミサイル ───────────────────────────────────
+      case 'missile': {
+        const launchT = missileLaunchPhase(p)
+        if (arcPx > 3) {
+          ctx.beginPath()
+          ctx.ellipse(sx, sy, 6, 2, 0, 0, Math.PI * 2)
+          ctx.fillStyle = 'rgba(0,0,0,0.14)'
+          ctx.fill()
+          ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(hx, hy)
+          ctx.strokeStyle = `rgba(180,180,255,${0.08 + launchT * 0.16})`
+          ctx.lineWidth = 0.8; ctx.stroke()
+        }
+        ctx.beginPath()
+        ctx.moveTo(thx, thy); ctx.lineTo(hx, hy)
+        ctx.strokeStyle = `rgba(210,210,255,${0.46 + launchT * 0.28})`
+        ctx.lineWidth = 2.1 + launchT * 1.3; ctx.stroke()
+
+        ctx.save()
+        ctx.translate(hx, hy); ctx.rotate(angle)
+        ctx.fillStyle = '#b8bcd4'
+        ctx.beginPath()
+        ctx.ellipse(0, 0, 7, 1.8, 0, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.fillStyle = '#d4d8ec'
+        ctx.beginPath()
+        ctx.moveTo(4.5, -1.8); ctx.lineTo(12, 0); ctx.lineTo(4.5, 1.8)
+        ctx.closePath(); ctx.fill()
+        ctx.fillStyle = '#7880a0'
+        ctx.beginPath()
+        ctx.moveTo(-7, 0); ctx.lineTo(-11, -5.5); ctx.lineTo(-8.5, -1)
+        ctx.closePath(); ctx.fill()
+        ctx.beginPath()
+        ctx.moveTo(-7, 0); ctx.lineTo(-11,  5.5); ctx.lineTo(-8.5,  1)
+        ctx.closePath(); ctx.fill()
+        ctx.beginPath()
+        ctx.ellipse(-10, 0, 4.5, 1.8, 0, 0, Math.PI * 2)
+        ctx.fillStyle = 'rgba(140,200,255,0.72)'
+        ctx.fill()
+        ctx.beginPath()
+        ctx.ellipse(-8, 0, 2.8, 1.1, 0, 0, Math.PI * 2)
+        ctx.fillStyle = '#dff0ff'
+        ctx.fill()
+        ctx.restore()
+
+        if (launchT > 0.02) {
+          const flameLen = 18 * launchT
+          ctx.save()
+          ctx.translate(hx, hy)
+          ctx.rotate(angle + Math.PI)
+          const flame = ctx.createLinearGradient(0, 0, flameLen, 0)
+          flame.addColorStop(0, `rgba(255,245,180,${0.92 * launchT})`)
+          flame.addColorStop(0.45, `rgba(120,200,255,${0.55 * launchT})`)
+          flame.addColorStop(1, 'rgba(120,200,255,0)')
+          ctx.beginPath()
+          ctx.moveTo(0, -2.5)
+          ctx.lineTo(flameLen, 0)
+          ctx.lineTo(0, 2.5)
+          ctx.closePath()
+          ctx.fillStyle = flame
+          ctx.fill()
+          ctx.restore()
+        }
+        break
+      }
+
+      // ── 魚雷 (torpedo) ─ 魚雷 ────────────────────────────────────────────────
+      case 'torpedo': {
+        ctx.beginPath()
+        ctx.moveTo(thx, thy); ctx.lineTo(sx, sy)
+        ctx.strokeStyle = 'rgba(160,215,255,0.50)'
+        ctx.lineWidth = 5; ctx.stroke()
+        ctx.beginPath()
+        ctx.moveTo(thx, thy); ctx.lineTo(sx, sy)
+        ctx.strokeStyle = 'rgba(245,214,75,0.28)'
+        ctx.lineWidth = 2; ctx.stroke()
+
+        ctx.save()
+        ctx.translate(sx, sy); ctx.rotate(angle)
+        ctx.fillStyle = '#485a68'
+        ctx.beginPath()
+        ctx.ellipse(0, 0, 9, 3.8, 0, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.fillStyle = '#607888'
+        ctx.beginPath()
+        ctx.moveTo(6, -3.8); ctx.lineTo(12, 0); ctx.lineTo(6, 3.8)
+        ctx.closePath(); ctx.fill()
+        ctx.fillStyle = '#28383f'
+        ctx.fillRect(-3, -3.8, 3.5, 7.6)
+        ctx.strokeStyle = '#6a8898'
+        ctx.lineWidth = 1.2
+        ctx.beginPath()
+        ctx.moveTo(-9, -4); ctx.lineTo(-12, 0); ctx.lineTo(-9, 4)
+        ctx.stroke()
+        ctx.beginPath()
+        ctx.moveTo(-9, 0); ctx.lineTo(-12, 0)
+        ctx.stroke()
+        ctx.beginPath()
+        ctx.arc(12, 0, 3, 0, Math.PI * 2)
+        ctx.fillStyle = 'rgba(160,220,255,0.60)'
+        ctx.fill()
+        ctx.restore()
+        break
+      }
     }
+  }
+
+  private projectileVisualPoint(proj: ProjectileEntity, progress: number): {
+    sx: number
+    sy: number
+    hx: number
+    hy: number
+    heightPx: number
+  } {
+    if (proj.weaponType === 'torpedo') {
+      const [sx, sy] = this.w2s(proj.pos.x, proj.pos.y)
+      return { sx, sy, hx: sx, hy: sy, heightPx: 0 }
+    }
+
+    const elapsed = proj.initialLifetime - proj.lifetime
+    const launch = proj.launchPos ?? {
+      x: proj.pos.x - proj.vel.x * elapsed,
+      y: proj.pos.y - proj.vel.y * elapsed,
+      z: 0,
+    }
+    const ballisticTarget = {
+      x: launch.x + proj.vel.x * proj.initialLifetime,
+      y: launch.y + proj.vel.y * proj.initialLifetime,
+      z: 0,
+    }
+    const target = proj.weaponType === 'missile'
+      ? (proj.targetPos ?? ballisticTarget)
+      : ballisticTarget
+    const pathT = proj.weaponType === 'missile'
+      ? missilePathProgress(progress)
+      : progress
+    const worldX = launch.x + (target.x - launch.x) * pathT
+    const worldY = launch.y + (target.y - launch.y) * pathT
+    const height = proj.weaponType === 'missile'
+      ? missileArcHeight(proj.maxHeight, progress)
+      : proj.maxHeight * Math.sin(Math.PI * progress)
+    const [sx, sy] = this.w2s(worldX, worldY)
+    const heightPx = height * this.iso.scale
+    return { sx, sy, hx: sx, hy: sy - heightPx, heightPx }
   }
 
   // ── range ellipse (isometric circle = ellipse) ─────────────────────────────
@@ -1414,6 +1759,157 @@ function weaponTypeFromId(weaponId: string | undefined): WeaponType {
   if (weaponId.includes('secondary')) return 'secondary'
   if (weaponId.includes('aa')) return 'aa'
   return 'gun'
+}
+
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value))
+}
+
+function smoothstep(value: number): number {
+  const t = clamp01(value)
+  return t * t * (3 - 2 * t)
+}
+
+function missileLaunchPhase(progress: number): number {
+  return 1 - smoothstep(progress / 0.24)
+}
+
+function missilePathProgress(progress: number): number {
+  return smoothstep((progress - 0.22) / 0.78)
+}
+
+function missileArcHeight(maxHeight: number, progress: number): number {
+  const p = clamp01(progress)
+  if (p < 0.24) {
+    return maxHeight * 0.72 * smoothstep(p / 0.24)
+  }
+  const cruiseT = (p - 0.24) / 0.76
+  const highCruise = maxHeight * (0.72 + 0.28 * Math.sin(Math.PI * clamp01(cruiseT)))
+  const descent = 1 - smoothstep((p - 0.72) / 0.28)
+  return highCruise * Math.max(0, descent)
+}
+
+function normalizeAngle(angle: number): number {
+  let a = angle
+  while (a > Math.PI) a -= Math.PI * 2
+  while (a < -Math.PI) a += Math.PI * 2
+  return a
+}
+
+function wakeSpeedProfile(level: SpeedLevel, speedRatio: number): { alpha: number; size: number; spread: number; wash: number } {
+  const moving = Math.max(0, speedRatio)
+  const levelProfile: Record<SpeedLevel, { alpha: number; size: number; spread: number; wash: number }> = {
+    full:    { alpha: 1.34, size: 1.22, spread: 1.26, wash: 1.32 },
+    cruise:  { alpha: 1.00, size: 1.00, spread: 1.00, wash: 1.00 },
+    slow:    { alpha: 0.58, size: 0.82, spread: 0.72, wash: 0.62 },
+    stop:    { alpha: 0.00, size: 0.00, spread: 0.00, wash: 0.00 },
+    reverse: { alpha: 0.34, size: 0.72, spread: 0.64, wash: 0.48 },
+  }
+  const profile = levelProfile[level]
+  const motion = 0.45 + moving * 0.65
+  return {
+    alpha: profile.alpha * motion,
+    size: profile.size * (0.80 + moving * 0.28),
+    spread: profile.spread * (0.82 + moving * 0.30),
+    wash: profile.wash * (0.78 + moving * 0.36),
+  }
+}
+
+// ── wake sprite generation ────────────────────────────────────────────────────
+
+interface WakeSprites {
+  bowWave: OffscreenCanvas    // 200×80, V-wave apex at right-center; trails to the left
+  foamLg: OffscreenCanvas     // 24×24 soft foam dot (recent trail)
+  foamSm: OffscreenCanvas     // 12×12 soft foam dot (older trail)
+  sternWash: OffscreenCanvas  // 56×56 stern turbulence cloud
+}
+
+function buildWakeSprites(): WakeSprites {
+  // ── bow wave (200×80) ──────────────────────────────────────────────────
+  const BW = 200, BH = 80
+  const bowOC = new OffscreenCanvas(BW, BH)
+  const bowCtx = bowOC.getContext('2d')!
+  const apexX = BW, apexY = BH / 2
+
+  for (const side of [-1, 1]) {
+    const grad = bowCtx.createLinearGradient(apexX, apexY, 0, apexY + side * BH * 0.46)
+    grad.addColorStop(0, 'rgba(255,255,255,0.64)')
+    grad.addColorStop(0.35, 'rgba(230,248,255,0.40)')
+    grad.addColorStop(1, 'rgba(200,240,255,0)')
+    bowCtx.beginPath()
+    for (let i = 0; i <= 22; i++) {
+      const t = i / 22
+      const x = apexX - BW * t
+      const y = apexY + side * BH * 0.34 * Math.pow(t, 1.45)
+      i === 0 ? bowCtx.moveTo(x, y) : bowCtx.lineTo(x, y)
+    }
+    bowCtx.strokeStyle = grad
+    bowCtx.lineWidth = Math.max(1.2, BH * 0.032)
+    bowCtx.lineCap = 'round'
+    bowCtx.stroke()
+
+    for (let i = 3; i <= 20; i += 2) {
+      const t = i / 22
+      const x = apexX - BW * t
+      const y = apexY + side * BH * 0.34 * Math.pow(t, 1.45)
+      const r = Math.max(0.5, BH * 0.018 * (1 - t * 0.5))
+      bowCtx.beginPath()
+      bowCtx.arc(x, y, r, 0, Math.PI * 2)
+      bowCtx.fillStyle = `rgba(255,255,255,${0.36 * (1 - t * 0.6)})`
+      bowCtx.fill()
+    }
+  }
+
+  const apexGrad = bowCtx.createRadialGradient(apexX, apexY, 0, apexX, apexY, BH * 0.32)
+  apexGrad.addColorStop(0, 'rgba(255,255,255,0.42)')
+  apexGrad.addColorStop(0.5, 'rgba(230,248,255,0.18)')
+  apexGrad.addColorStop(1, 'rgba(200,240,255,0)')
+  bowCtx.beginPath()
+  bowCtx.arc(apexX, apexY, BH * 0.32, 0, Math.PI * 2)
+  bowCtx.fillStyle = apexGrad
+  bowCtx.fill()
+
+  // ── large foam dot (24×24) ─────────────────────────────────────────────
+  const foamLgOC = new OffscreenCanvas(24, 24)
+  const flCtx = foamLgOC.getContext('2d')!
+  const flGrad = flCtx.createRadialGradient(12, 12, 0, 12, 12, 12)
+  flGrad.addColorStop(0, 'rgba(255,255,255,0.90)')
+  flGrad.addColorStop(0.45, 'rgba(220,245,255,0.60)')
+  flGrad.addColorStop(1, 'rgba(200,240,255,0)')
+  flCtx.beginPath(); flCtx.arc(12, 12, 12, 0, Math.PI * 2)
+  flCtx.fillStyle = flGrad; flCtx.fill()
+
+  // ── small foam dot (12×12) ─────────────────────────────────────────────
+  const foamSmOC = new OffscreenCanvas(12, 12)
+  const fsCtx = foamSmOC.getContext('2d')!
+  const fsGrad = fsCtx.createRadialGradient(6, 6, 0, 6, 6, 6)
+  fsGrad.addColorStop(0, 'rgba(255,255,255,0.88)')
+  fsGrad.addColorStop(0.5, 'rgba(210,242,255,0.55)')
+  fsGrad.addColorStop(1, 'rgba(200,240,255,0)')
+  fsCtx.beginPath(); fsCtx.arc(6, 6, 6, 0, Math.PI * 2)
+  fsCtx.fillStyle = fsGrad; fsCtx.fill()
+
+  // ── stern wash (56×56) ────────────────────────────────────────────────
+  const sternOC = new OffscreenCanvas(56, 56)
+  const stCtx = sternOC.getContext('2d')!
+  const stGrad = stCtx.createRadialGradient(28, 28, 0, 28, 28, 28)
+  stGrad.addColorStop(0, 'rgba(255,255,255,0.85)')
+  stGrad.addColorStop(0.30, 'rgba(220,248,255,0.60)')
+  stGrad.addColorStop(0.65, 'rgba(190,235,255,0.25)')
+  stGrad.addColorStop(1, 'rgba(180,230,255,0)')
+  stCtx.beginPath(); stCtx.arc(28, 28, 28, 0, Math.PI * 2)
+  stCtx.fillStyle = stGrad; stCtx.fill()
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2
+    stCtx.beginPath()
+    stCtx.moveTo(28, 28)
+    stCtx.lineTo(28 + Math.cos(a) * 22, 28 + Math.sin(a) * 22)
+    stCtx.strokeStyle = `rgba(255,255,255,${0.20 + (i % 3) * 0.06})`
+    stCtx.lineWidth = 1.2
+    stCtx.stroke()
+  }
+
+  return { bowWave: bowOC, foamLg: foamLgOC, foamSm: foamSmOC, sternWash: sternOC }
 }
 
 function combatEventEffectKey(ev: CombatEvent): string {
