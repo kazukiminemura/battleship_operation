@@ -363,6 +363,16 @@ export class HUD {
     ctx.lineTo(rX + rSize, rY + rSize / 2)
     ctx.stroke()
 
+    // detection range ring
+    const detR = (player.detectionRange / RADAR_WORLD_RANGE) * radarR
+    ctx.beginPath()
+    ctx.arc(cX, cY, detR, 0, Math.PI * 2)
+    ctx.strokeStyle = 'rgba(20,200,160,0.45)'
+    ctx.lineWidth = 1
+    ctx.setLineDash([4, 3])
+    ctx.stroke()
+    ctx.setLineDash([])
+
     const liveEnemyIds = new Set<string>()
     for (const entity of state.entities.values()) {
       if (entity.kind !== 'ship') continue

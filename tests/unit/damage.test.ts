@@ -17,6 +17,7 @@ function makeShip(hp: number, maxHp: number): ShipEntity {
     team: 'player',
     destroyed: false,
     templateId: 'hull.destroyer.basic',
+    detectionRange: 2200,
   }
 }
 

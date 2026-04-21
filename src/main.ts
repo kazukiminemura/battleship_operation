@@ -9,14 +9,14 @@ import type { CombatState, ShipEntity, WeaponState } from './game/simulation/typ
 import { WORLD_SIZE } from './game/simulation/movement'
 import { SoundSystem } from './game/audio/sounds'
 import { StartScreen } from './game/ui/startscreen'
-import { DesignScreen } from './game/ui/designscreen'
+import { PrepScreen } from './game/ui/prepscreen'
 import { StageIntroScreen } from './game/ui/stageintroscreen'
 import { ResultsScreen } from './game/ui/resultsscreen'
 import type { WeaponTemplate } from './game/data/masterdata'
 import { getDefaultLoadout } from './game/data/weapon-catalog'
 
 const BASE_SEED = 12345
-type GameMode = 'start' | 'design' | 'stage-intro' | 'combat' | 'results'
+type GameMode = 'start' | 'prep' | 'stage-intro' | 'combat' | 'results'
 
 function main(): void {
   const canvas = document.getElementById('game-canvas') as HTMLCanvasElement
@@ -28,7 +28,7 @@ function main(): void {
   const renderer = new CanvasRenderer(canvas)
   const hud      = new HUD(canvas)
   const start    = new StartScreen(canvas)
-  const design   = new DesignScreen(canvas)
+  const prep     = new PrepScreen(canvas)
   const stageIntro = new StageIntroScreen(canvas)
   const results  = new ResultsScreen(canvas)
   const sound    = new SoundSystem()
@@ -44,6 +44,7 @@ function main(): void {
   let rng = createRngStreams(BASE_SEED)
 
   let selectedShip: PlayerShipType = 'destroyer'
+  let selectedTemplateId: string | undefined = undefined
   let selectedLoadout: WeaponTemplate[] = getDefaultLoadout('destroyer')
   let currentStage = 1
   let normalShip: PlayerShipType = selectedShip
@@ -69,16 +70,17 @@ function main(): void {
     sound.reset()
   }
 
-  const goToDesign = (): void => {
+  const goToPrep = (stage: number): void => {
+    currentStage = stage
     start.detach()
     results.detach()
-    mode = 'design'
-    design.attach()
+    mode = 'prep'
+    prep.attach(stage)
   }
 
   const goToStageIntro = (stage: number): void => {
     currentStage = stage
-    design.detach()
+    prep.detach()
     results.detach()
     mode = 'stage-intro'
     stageIntro.attach()
@@ -86,7 +88,7 @@ function main(): void {
 
   const beginCombat = (): void => {
     debugMode = false
-    state = createInitialState(selectedShip, currentStage, selectedLoadout)
+    state = createInitialState(selectedShip, currentStage, selectedLoadout, selectedTemplateId)
     rng = createRngStreams(BASE_SEED + currentStage * 1009)
     sound.reset()
     sound.setBgmEnabled(bgmEnabled, isBossStage(state) ? 'boss' : 'normal')
@@ -109,7 +111,7 @@ function main(): void {
     sound.setBgmEnabled(bgmEnabled, isBossStage(state) ? 'boss' : 'normal')
     mode = 'combat'
     start.detach()
-    design.detach()
+    prep.detach()
     stageIntro.detach()
     results.detach()
   }
@@ -145,17 +147,18 @@ function main(): void {
 
   canvas.addEventListener('click', (e) => {
     if (mode === 'start') {
-      if (start.checkClick(e)) goToDesign()
+      if (start.checkClick(e)) goToPrep(currentStage)
       e.stopImmediatePropagation()
       return
     }
 
-    if (mode === 'design') {
-      const result = design.checkClick(e)
+    if (mode === 'prep') {
+      const result = prep.checkClick(e)
       if (result) {
         selectedShip = result.shipType
+        selectedTemplateId = result.templateId
         selectedLoadout = result.loadout
-        goToStageIntro(1)
+        goToStageIntro(currentStage)
       }
       e.stopImmediatePropagation()
       return
@@ -171,9 +174,9 @@ function main(): void {
     if (mode === 'results') {
       const action = results.checkClick(e)
       if (action === 'next') {
-        goToStageIntro(currentStage + 1)
+        goToPrep(currentStage + 1)
       } else if (action === 'retry') {
-        goToStageIntro(currentStage)
+        goToPrep(currentStage)
       } else if (action === 'title') {
         goToStart()
       }
@@ -212,7 +215,7 @@ function main(): void {
     },
     onRender: (_alpha) => {
       if (mode === 'start') { start.render(); return }
-      if (mode === 'design') { design.render(); return }
+      if (mode === 'prep') { prep.render(); return }
       if (mode === 'stage-intro') {
         const stageDef = STATIC_DATA.stages[currentStage - 1]!
         stageIntro.render(stageDef, selectedShip)

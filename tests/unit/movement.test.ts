@@ -18,6 +18,7 @@ function makeShip(overrides: Partial<ShipEntity> = {}): ShipEntity {
     weapons: [],
     team: 'player', destroyed: false,
     templateId: 'hull.destroyer.basic',
+    detectionRange: 2200,
     ...overrides,
   }
 }
@@ -39,6 +40,8 @@ function makeState(ships: ShipEntity[]): CombatState {
     eventLog: [],
     missionResult: 'none',
     metrics,
+    detectedByPlayer: new Set<string>(),
+    enemyContacts: new Map(),
   }
 }
 

@@ -7,6 +7,7 @@ import { stepProjectiles } from './projectiles'
 import { getWeaponConfig } from './weapon-strategies'
 import { generateAiCommands } from './ai'
 import { evaluateMission } from './mission'
+import { stepDetection } from './detection'
 
 export function combatStep(
   state: CombatState,
@@ -18,6 +19,9 @@ export function combatStep(
 
   // 1. increment tick
   let s: CombatState = { ...state, tick: state.tick + 1, eventLog: [] }
+
+  // 1.5. update current visibility before command generation
+  s = stepDetection(s)
 
   // 2. apply player commands
   s = applyCommands(s, commands, rng)
@@ -31,6 +35,9 @@ export function combatStep(
 
   // 5. movement step
   s = stepMovement(s)
+
+  // 5.5. detection update (uses current positions after movement)
+  s = stepDetection(s)
 
   // 6. weapon cooldown step
   s = stepWeaponCooldowns(s)
@@ -64,11 +71,13 @@ function generateAutoFireCommands(state: CombatState): Command[] {
   if (!player || player.kind !== 'ship' || player.destroyed) return cmds
 
   const enemies = [...state.entities.values()].filter(
-    e => e.kind === 'ship' && !(e as ShipEntity).destroyed && (e as ShipEntity).team === 'enemy'
+    e => e.kind === 'ship' && !(e as ShipEntity).destroyed && (e as ShipEntity).team === 'enemy' &&
+         state.detectedByPlayer.has(e.id)
   ) as ShipEntity[]
 
   const buildings = [...state.entities.values()].filter(
-    e => e.kind === 'building' && !(e as BuildingEntity).destroyed && (e as BuildingEntity).team === 'enemy'
+    e => e.kind === 'building' && !(e as BuildingEntity).destroyed && (e as BuildingEntity).team === 'enemy' &&
+         state.detectedByPlayer.has(e.id)
   ) as BuildingEntity[]
 
   const targets: { pos: Vec3; kind: 'ship' | 'building' }[] = [

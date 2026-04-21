@@ -39,6 +39,7 @@ export interface ShipEntity {
   speedLevel: SpeedLevel
   maxSpeed: number
   turnRate: number
+  detectionRange: number  // visual detection radius in world units
   weapons: WeaponState[]
   team: 'player' | 'enemy'
   destroyed: boolean
@@ -82,6 +83,11 @@ export interface ObjectiveEntity {
 
 export type Entity = ShipEntity | ProjectileEntity | ObjectiveEntity | BuildingEntity
 
+export interface EnemyContact {
+  pos: Vec3
+  tick: number  // tick when last detected
+}
+
 export interface CombatState {
   tick: number
   stage: number
@@ -92,6 +98,8 @@ export interface CombatState {
   eventLog: CombatEvent[]
   missionResult: 'none' | 'completed' | 'failed'
   metrics: Metrics
+  detectedByPlayer: Set<string>                // entity IDs currently visible to player
+  enemyContacts: Map<string, EnemyContact>     // last known positions of enemy ships
 }
 
 export type CommandType =

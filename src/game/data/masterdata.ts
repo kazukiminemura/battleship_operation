@@ -8,6 +8,7 @@ export interface ShipTemplate {
   hp: number
   maxSpeed: number
   turnRate: number
+  detectionRange: number
   weapons: WeaponTemplate[]
 }
 
@@ -83,10 +84,10 @@ interface ShipSpawn {
   team: ShipEntity['team']
 }
 
-function makePlayerShip(type: PlayerShipType): ShipEntity {
+function makePlayerShip(type: PlayerShipType, customTemplateId?: string): ShipEntity {
   return makeShipFromTemplate({
     id: 'ship.player',
-    templateId: PLAYER_TEMPLATE_BY_TYPE[type],
+    templateId: customTemplateId ?? PLAYER_TEMPLATE_BY_TYPE[type],
     x: 5000,
     y: 9200,
     angle: -Math.PI / 2,
@@ -111,6 +112,7 @@ function makeShipFromTemplate(spawn: ShipSpawn): ShipEntity {
     speedLevel: 'stop',
     maxSpeed: template.maxSpeed,
     turnRate: template.turnRate,
+    detectionRange: template.detectionRange,
     weapons: template.weapons.slice(0, MAX_WEAPON_SLOTS).map(makeWeaponState),
     team: spawn.team,
     destroyed: false,
@@ -148,10 +150,11 @@ export function createInitialState(
   playerType: PlayerShipType = 'destroyer',
   stageNumber = 1,
   customLoadout?: WeaponTemplate[],
+  customTemplateId?: string,
 ): CombatState {
   const stage = getStageDefinition(stageNumber)
   const entities = new Map<string, Entity>()
-  const playerShip = makePlayerShip(playerType)
+  const playerShip = makePlayerShip(playerType, customTemplateId)
   const finalPlayer = customLoadout
     ? { ...playerShip, weapons: customLoadout.slice(0, MAX_WEAPON_SLOTS).map(makeWeaponState) }
     : playerShip
@@ -212,6 +215,8 @@ export function createInitialState(
     eventLog: [],
     missionResult: 'none',
     metrics,
+    detectedByPlayer: new Set<string>(),
+    enemyContacts: new Map(),
   }
 }
 
@@ -265,6 +270,8 @@ export function createDebugState(playerType: PlayerShipType = 'battleship'): Com
     eventLog: [],
     missionResult: 'none',
     metrics,
+    detectedByPlayer: new Set<string>(),
+    enemyContacts: new Map(),
   }
 }
 

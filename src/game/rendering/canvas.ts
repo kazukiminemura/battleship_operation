@@ -108,10 +108,15 @@ export class CanvasRenderer {
       if (player && !player.destroyed) this.renderRangeEllipse(player, selectedWeapon)
     }
 
-    // Depth-sort ships by world Y (higher Y = further south = drawn later / on top)
-    const ships = ([...state.entities.values()]
+    // Depth-sort all non-destroyed ships; then split by visibility
+    const allShips = ([...state.entities.values()]
       .filter(e => e.kind === 'ship' && !(e as ShipEntity).destroyed) as ShipEntity[])
       .sort((a, b) => a.pos.y - b.pos.y)
+
+    // Ships visible this tick (player always visible; enemies only if detected)
+    const ships = allShips.filter(s =>
+      s.team === 'player' || state.detectedByPlayer.has(s.id)
+    )
 
     this.shipWakeRenderer.update(ships, state.tick)
 
@@ -130,6 +135,12 @@ export class CanvasRenderer {
     for (const s of ships)       this.renderShip(s, state.tick)
     this.renderLandDust(this.effectLog, state.tick, state.entities, state.mapObstacles)
     renderShipExplosions(this.ctx, this.iso, this.w2s.bind(this), this.effectLog, state.tick, state.entities)
+
+    // Fog of war + detection boundary
+    this.renderDetectionFog(state)
+
+    // Ghost blips for recently-detected enemies now out of visual range
+    this.renderEnemyGhosts(state)
 
     if (selectedWeapon && aimPoint) {
       const player = state.entities.get('ship.player') as ShipEntity | undefined
@@ -1139,6 +1150,99 @@ export class CanvasRenderer {
     }
 
     ctx.restore()
+  }
+
+  // ── fog of war / detection ─────────────────────────────────────────────────
+
+  private renderDetectionFog(state: CombatState): void {
+    const { ctx, canvas } = this
+    const player = state.entities.get('ship.player') as ShipEntity | undefined
+    if (!player || player.destroyed) return
+
+    const [px, py] = this.w2s(player.pos.x, player.pos.y)
+    const R = player.detectionRange * this.iso.scale  // approx screen radius
+
+    // Draw fog everywhere outside the detection ellipse using composite op
+    ctx.save()
+
+    // Create an off-screen ellipse mask: clip everything OUTSIDE the detection area
+    ctx.beginPath()
+    ctx.rect(0, HUD_TOP, canvas.width, canvas.height - HUD_TOP - HUD_BOTTOM)
+    ctx.save()
+    ctx.translate(px, py)
+    ctx.scale(1.0, 0.5)           // isometric: vertical axis is 0.5x
+    ctx.arc(0, 0, R, 0, Math.PI * 2)
+    ctx.restore()
+    // even-odd fill rule: inside ellipse = hole in the fog rect
+    ctx.fillStyle = 'rgba(4,14,26,0.62)'
+    ctx.fill('evenodd')
+
+    // Soft fade inside the detection boundary
+    ctx.translate(px, py)
+    ctx.scale(1.0, 0.5)
+    const fade = ctx.createRadialGradient(0, 0, R * 0.72, 0, 0, R * 1.05)
+    fade.addColorStop(0, 'rgba(4,14,26,0)')
+    fade.addColorStop(1, 'rgba(4,14,26,0.72)')
+    ctx.beginPath()
+    ctx.arc(0, 0, R * 1.08, 0, Math.PI * 2)
+    ctx.fillStyle = fade
+    ctx.fill()
+
+    ctx.restore()
+
+    // Draw a subtle detection boundary ring
+    ctx.save()
+    ctx.translate(px, py)
+    ctx.scale(1.0, 0.5)
+    ctx.beginPath()
+    ctx.arc(0, 0, R, 0, Math.PI * 2)
+    ctx.strokeStyle = 'rgba(20,200,160,0.20)'
+    ctx.lineWidth = 1.5
+    ctx.setLineDash([6, 5])
+    ctx.stroke()
+    ctx.setLineDash([])
+    ctx.restore()
+  }
+
+  private renderEnemyGhosts(state: CombatState): void {
+    const { ctx } = this
+    const PERSIST = 180  // matches CONTACT_PERSIST_TICKS
+
+    for (const [id, contact] of state.enemyContacts) {
+      if (state.detectedByPlayer.has(id)) continue   // currently visible — no ghost needed
+
+      const age = state.tick - contact.tick
+      if (age < 0 || age >= PERSIST) continue
+
+      const fade = 1 - age / PERSIST   // 1 at fresh detection, 0 at expiry
+      const [sx, sy] = this.w2s(contact.pos.x, contact.pos.y)
+
+      ctx.save()
+      ctx.globalAlpha = fade * 0.75
+
+      // Isometric ellipse blip
+      ctx.translate(sx, sy)
+      ctx.scale(1.55, 0.62)
+      ctx.beginPath()
+      ctx.arc(0, 0, 14, 0, Math.PI * 2)
+      ctx.fillStyle = 'rgba(255,80,80,0.18)'
+      ctx.fill()
+      ctx.strokeStyle = `rgba(255,120,100,${0.7 * fade})`
+      ctx.lineWidth = 1.4
+      ctx.stroke()
+
+      ctx.restore()
+
+      // "?" label
+      ctx.save()
+      ctx.globalAlpha = fade * 0.85
+      ctx.font = 'bold 11px monospace'
+      ctx.fillStyle = `rgba(255,160,140,${fade})`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText('?', sx, sy - 2)
+      ctx.restore()
+    }
   }
 
   private renderTacticalAtmosphere(): void {

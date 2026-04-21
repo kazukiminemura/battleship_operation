@@ -1,6 +1,7 @@
 import type { CombatState, ShipEntity, Command } from './types'
 import type { SeededRandom } from './random'
 import { getWeaponConfig, WEAPON_CONFIGS } from './weapon-strategies'
+import { enemyCanDetectPlayer } from './detection'
 
 // AI keeps this margin inside weapon maxRange before firing
 const RANGE_MARGIN = 0.85
@@ -22,6 +23,13 @@ export function generateAiCommands(state: CombatState, rng: SeededRandom): Comma
     const dx = player.pos.x - enemy.pos.x
     const dy = player.pos.y - enemy.pos.y
     const dist = Math.sqrt(dx * dx + dy * dy)
+
+    // If player is outside this enemy's visual range, just hold position
+    if (!enemyCanDetectPlayer(enemy, player)) {
+      commands.push({ tick: state.tick, actorId: enemy.id, type: 'stop' })
+      continue
+    }
+
     const angleToPlayer = Math.atan2(dy, dx)
     const angleDiff = normalizeAngle(angleToPlayer - enemy.angle)
 
