@@ -2,6 +2,26 @@ import type { WeaponTemplate, PlayerShipType } from '../data/masterdata'
 import { getHullsByClass, type HullCatalogEntry, type HullSlot } from '../data/hull-catalog'
 import { WEAPON_SHOP, TYPE_COLOR, TYPE_JP, type ShopWeapon } from '../data/weapon-shop'
 import type { WeaponType } from '../simulation/types'
+import {
+  GRID_CELL_METERS,
+  buildPlacements,
+  canMoveSlotTo,
+  canMoveTowerTo,
+  cellCenter,
+  cellKey,
+  cellToMount,
+  currentSlotCell,
+  footprintRect,
+  gridSpec,
+  hullDimensions,
+  hullMaxHalfWidth,
+  isInsideHullCell,
+  moveTargetState,
+  occupiedCells,
+  type GridCell,
+  type GridSpec,
+  type Placement,
+} from './prep-layout'
 
 export interface PrepResult {
   templateId: string
@@ -9,43 +29,8 @@ export interface PrepResult {
   loadout: WeaponTemplate[]
 }
 
-// ── Grid constants ────────────────────────────────────────────────────────
-const GRID_COLS = 15   // 0..14, centerline = col 7
-const GRID_ROWS = 28   // 0..27, bow = row 0, stern = row 27
-const MAX_SLOT_MOVE_CELLS = 5
-
-/** Map a hull slot's normalized (x, y) to a grid cell */
-function slotCell(slot: HullSlot): { c: number; r: number } {
-  const c = Math.round(((slot.x + 1) / 2) * (GRID_COLS - 1))
-  const r = Math.round(((slot.y + 1) / 2) * (GRID_ROWS - 1))
-  return {
-    c: Math.max(0, Math.min(GRID_COLS - 1, c)),
-    r: Math.max(0, Math.min(GRID_ROWS - 1, r)),
-  }
-}
-
-function cellToMount(c: number, r: number): { x: number; y: number } {
-  return {
-    x: (c / (GRID_COLS - 1)) * 2 - 1,
-    y: (r / (GRID_ROWS - 1)) * 2 - 1,
-  }
-}
-
 type ScreenTab = 'hull' | 'armament'
 type WeaponFilter = WeaponType | 'all'
-type ComponentKind = 'weapon' | 'tower'
-type Footprint = { w: number; h: number }
-type GridCell = { c: number; r: number }
-type Placement = {
-  id: string
-  kind: ComponentKind
-  label: string
-  cell: GridCell
-  footprint: Footprint
-  color: string
-  slot?: HullSlot
-  weapon?: ShopWeapon
-}
 
 type Region =
   | { tag: 'class-tab';   shipType: PlayerShipType;   x: number; y: number; w: number; h: number }
@@ -182,13 +167,15 @@ export class PrepScreen {
       case 'grid-empty': {
         const hull = this.selectedHull()
         if (!hull) break
+        const spec = gridSpec(hull)
+        const placements = this.currentPlacements(hull, spec)
         if (this.selectedTower) {
-          if (this.canMoveTowerTo(r.c, r.r, hull)) this.towerCell = { c: r.c, r: r.r }
+          if (canMoveTowerTo(r.c, r.r, hull, placements, spec)) this.towerCell = { c: r.c, r: r.r }
           break
         }
         if (!this.selectedSlotId) break
         const slot = hull?.slots.find(s => s.id === this.selectedSlotId)
-        if (!slot || !this.canMoveSlotTo(slot, r.c, r.r, hull)) break
+        if (!slot || !canMoveSlotTo(slot, r.c, r.r, hull, placements, spec)) break
         this.slotCells.set(slot.id, { c: r.c, r: r.r })
         break
       }
@@ -243,11 +230,12 @@ export class PrepScreen {
   private buildResult(): PrepResult | null {
     const hull = this.selectedHull()
     if (!hull) return null
+    const spec = gridSpec(hull)
     const loadout: WeaponTemplate[] = []
     for (const slot of hull.slots) {
       const w = this.slotWeapons.get(slot.id) ?? this.defaultWeapon(slot)
-      const cell = this.currentSlotCell(slot)
-      if (w) loadout.push({ id: w.id, name: w.name, type: w.type, ammo: w.ammo, mount: cellToMount(cell.c, cell.r) })
+      const cell = currentSlotCell(slot, spec, this.slotCells)
+      if (w) loadout.push({ id: w.id, name: w.name, type: w.type, ammo: w.ammo, mount: cellToMount(cell.c, cell.r, spec) })
     }
     if (loadout.length === 0) return null
     return { templateId: hull.templateId, shipType: hull.shipType, loadout }
@@ -265,59 +253,8 @@ export class PrepScreen {
     )
   }
 
-  private defaultTowerCell(hull: HullCatalogEntry): GridCell {
-    const y = hull.shipType === 'destroyer' ? -0.25 : hull.shipType === 'cruiser' ? 0.25 : -0.02
-    return slotCell({ id: 'tower', label: '管制塔', x: 0, y, compatibleTypes: [] })
-  }
-
-  private towerFootprint(hull: HullCatalogEntry): Footprint {
-    return hull.shipType === 'battleship' ? { w: 4, h: 5 }
-      : hull.shipType === 'cruiser' ? { w: 3, h: 4 }
-      : { w: 3, h: 3 }
-  }
-
-  private weaponFootprint(weapon: ShopWeapon | undefined, slot: HullSlot): Footprint {
-    const id = weapon?.id ?? ''
-    const type = weapon?.type ?? slot.compatibleTypes[0]
-    if (type === 'gun') {
-      if (id.includes('460mm')) return { w: 5, h: 4 }
-      if (id.includes('406mm')) return { w: 4, h: 3 }
-      if (id.includes('203mm')) return { w: 3, h: 3 }
-      if (id.includes('152mm')) return { w: 3, h: 2 }
-      return { w: 2, h: 2 }
-    }
-    if (type === 'secondary') return id.includes('152mm') ? { w: 3, h: 2 } : { w: 2, h: 1 }
-    if (type === 'torpedo') return id.includes('610mm') ? { w: 4, h: 1 } : { w: 3, h: 1 }
-    if (type === 'missile') return id.includes('longrange') || id.includes('cruise') ? { w: 3, h: 3 } : { w: 2, h: 2 }
-    if (type === 'aa') return id.includes('ciws') || id.includes('20mm') ? { w: 1, h: 1 } : { w: 2, h: 2 }
-    return { w: 2, h: 2 }
-  }
-
-  private buildPlacements(hull: HullCatalogEntry): Placement[] {
-    const towerCell = this.towerCell ?? this.defaultTowerCell(hull)
-    const placements: Placement[] = [{
-      id: 'tower',
-      kind: 'tower',
-      label: '管制塔',
-      cell: towerCell,
-      footprint: this.towerFootprint(hull),
-      color: '#d6b86a',
-    }]
-
-    for (const slot of hull.slots) {
-      const weapon = this.slotWeapons.get(slot.id)
-      placements.push({
-        id: slot.id,
-        kind: 'weapon',
-        label: weapon ? TYPE_JP[weapon.type] : slot.label,
-        cell: this.currentSlotCell(slot),
-        footprint: this.weaponFootprint(weapon, slot),
-        color: weapon ? (TYPE_COLOR[weapon.type] ?? DIM) : '#3a6a42',
-        slot,
-        weapon,
-      })
-    }
-    return placements
+  private currentPlacements(hull: HullCatalogEntry, spec = gridSpec(hull)): Placement[] {
+    return buildPlacements(hull, spec, this.slotWeapons, this.slotCells, this.towerCell)
   }
 
   // ── Background ────────────────────────────────────────────────────────────
@@ -406,14 +343,17 @@ export class PrepScreen {
     ctx.font = '11px sans-serif'; ctx.fillStyle = locked ? '#1a2a1a' : '#4a7a4a'
     ctx.fillText(hull.className, x + w / 2, y + 60)
 
-    this.drawShipTopDown(ctx, x + w / 2, y + h * 0.42, w * 0.28, h * 0.30, hull, locked)
+    const dims = hullDimensions(hull)
+    const previewHH = h * 0.29
+    const previewHW = Math.min(w * 0.30, previewHH * (dims.beamM / dims.lengthM))
+    this.drawShipTopDown(ctx, x + w / 2, y + h * 0.42, previewHW, previewHH, hull, locked)
 
     const sv = y + h - 104
     this.drawStatBar(x + 14, sv,      w - 28, 'HP',   hull.hp / 2100,      locked ? DIM : '#22c55e', `${hull.hp}`,                   locked)
     this.drawStatBar(x + 14, sv + 30, w - 28, '速力', hull.maxSpeed / 7.2, locked ? DIM : '#38bdf8', `${hull.maxSpeed.toFixed(1)}kt`, locked)
 
     ctx.font = 'bold 10px sans-serif'; ctx.fillStyle = locked ? DIM : '#4a7a4a'; ctx.textAlign = 'left'
-    ctx.fillText(`スロット: ${hull.slots.length}`, x + 14, y + h - 22)
+    ctx.fillText(`スロット: ${hull.slots.length} / ${Math.round(dims.lengthM)}m x ${dims.beamM.toFixed(1)}m`, x + 14, y + h - 22)
     if (selected) {
       ctx.font = 'bold 10px sans-serif'; ctx.fillStyle = '#3a9a4a'; ctx.textAlign = 'right'
       ctx.fillText('✓ 選択中', x + w - 10, y + h - 10)
@@ -447,24 +387,30 @@ export class PrepScreen {
 
   private drawGridArea(px: number, py: number, pw: number, ph: number, hull: HullCatalogEntry): void {
     const ctx = this.ctx
-    const placements = this.buildPlacements(hull)
-    const occupied = this.occupiedCells(placements)
+    const spec = gridSpec(hull)
+    const placements = this.currentPlacements(hull, spec)
+    const occupied = occupiedCells(placements)
+    const sideH = Math.min(64, Math.max(42, ph * 0.13))
+    const gridPy = py + sideH + 8
+    const gridPh = ph - sideH - 10
 
-    // Grid geometry: center the grid in the available area
-    const CW = Math.max(12, Math.floor((pw * 0.58) / GRID_COLS))   // cell width
-    const CH = Math.max(10, Math.floor((ph * 0.86) / GRID_ROWS))   // cell height
-    const gridW = CW * GRID_COLS
-    const gridH = CH * GRID_ROWS
+    // Grid geometry uses a square 2.5m cell so length / beam reads like a real ship.
+    const cellPx = Math.max(3, Math.floor(Math.min((pw * 0.66) / spec.cols, (gridPh * 0.88) / spec.rows)))
+    const CW = cellPx
+    const CH = cellPx
+    const gridW = CW * spec.cols
+    const gridH = CH * spec.rows
     const gx = px + (pw - gridW) / 2  // grid left edge
-    const gy = py + (ph - gridH) / 2  // grid top edge
+    const gy = gridPy + (gridPh - gridH) / 2  // grid top edge
 
-    // Hull half-dimensions in normalized coords → grid coords
-    const hw = (GRID_COLS - 1) / 2     // 3.0
-    const hh = (GRID_ROWS - 1) / 2     // 5.5
+    this.drawSideProfile(px + 18, py + 8, pw - 36, sideH - 6, hull, spec, cellPx)
+
+    const hw = spec.beamCells / 2
+    const hh = spec.lengthCells / 2
 
     // Hull background silhouette (draw first, behind grid)
     ctx.save()
-    ctx.translate(gx + gridW / 2, gy + gridH / 2)
+    ctx.translate(gx + cellCenter(spec.centerC) * CW, gy + (spec.topR + spec.lengthCells / 2) * CH)
     ctx.beginPath()
     this.buildHullPath(ctx, 0, 0, CW * hw * 1.02, CH * hh * 1.02)
     ctx.fillStyle = '#0d1e12'
@@ -472,20 +418,20 @@ export class PrepScreen {
     ctx.strokeStyle = '#2a4a30'; ctx.lineWidth = 2; ctx.stroke()
     ctx.restore()
 
-    this.drawDeckStructure(gx, gy, CW, CH, hull)
+    this.drawDeckStructure(gx, gy, CW, CH, hull, spec)
 
     // Draw all grid cells
-    for (let r = 0; r < GRID_ROWS; r++) {
-      for (let c = 0; c < GRID_COLS; c++) {
+    for (let r = 0; r < spec.rows; r++) {
+      for (let c = 0; c < spec.cols; c++) {
         const cellX = gx + c * CW
         const cellY = gy + r * CH
 
-        if (!this.isInsideHullCell(c, r)) {
+        if (!isInsideHullCell(c, r, spec)) {
           // Outside hull: skip (transparent)
           continue
         }
 
-        const isOccupied = occupied.has(this.cellKey(c, r))
+        const isOccupied = occupied.has(cellKey(c, r))
         if (isOccupied) {
           ctx.strokeStyle = 'rgba(30,60,36,0.30)'
           ctx.lineWidth = 0.5
@@ -493,12 +439,13 @@ export class PrepScreen {
         } else {
           // Interior non-slot cell: faint grid line only
           const moveTarget = this.selectedSlotId || this.selectedTower
-            ? this.moveTargetState(hull, c, r, placements)
+            ? moveTargetState(hull, c, r, placements, spec, { slotId: this.selectedSlotId, tower: this.selectedTower })
             : 'none'
           if (moveTarget === 'valid') {
-            ctx.fillStyle = 'rgba(184,148,32,0.14)'
+            const onCenterline = c === spec.centerC
+            ctx.fillStyle = onCenterline ? 'rgba(234,179,8,0.22)' : 'rgba(184,148,32,0.14)'
             ctx.fillRect(cellX, cellY, CW, CH)
-            ctx.strokeStyle = 'rgba(184,148,32,0.70)'
+            ctx.strokeStyle = onCenterline ? 'rgba(250,204,21,0.88)' : 'rgba(184,148,32,0.70)'
           } else if (moveTarget === 'far') {
             ctx.strokeStyle = 'rgba(80,70,32,0.45)'
           } else {
@@ -520,31 +467,33 @@ export class PrepScreen {
     // Centerline
     ctx.save(); ctx.setLineDash([5, 4])
     ctx.strokeStyle = 'rgba(80,150,90,0.30)'; ctx.lineWidth = 1
-    const clx = gx + (GRID_COLS / 2) * CW
+    const clx = gx + cellCenter(spec.centerC) * CW
     ctx.beginPath(); ctx.moveTo(clx, gy); ctx.lineTo(clx, gy + gridH); ctx.stroke()
     ctx.setLineDash([]); ctx.restore()
 
     // Port / Starboard labels
     ctx.font = '9px sans-serif'; ctx.fillStyle = DIM; ctx.textAlign = 'center'
-    ctx.fillText('▲ 艦首', gx + gridW / 2, py + 14)
-    ctx.fillText('▼ 艦尾', gx + gridW / 2, py + ph - 4)
+    ctx.fillText('▲ 艦首', clx, py + 14)
+    ctx.fillText('▼ 艦尾', clx, py + ph - 4)
     ctx.textAlign = 'right'; ctx.fillText('← 左舷', gx - 4, gy + gridH / 2 + 4)
     ctx.textAlign = 'left';  ctx.fillText('右舷 →', gx + gridW + 4, gy + gridH / 2 + 4)
+    ctx.textAlign = 'center'
+    ctx.fillText(`${Math.round(spec.lengthM)}m x ${spec.beamM.toFixed(1)}m / 1セル ${GRID_CELL_METERS}m`, clx, gy - 14)
 
     // Column & row guides (faint numbers)
     ctx.font = '7px sans-serif'; ctx.fillStyle = 'rgba(50,90,56,0.5)'; ctx.textAlign = 'center'
-    for (let c = 0; c < GRID_COLS; c++) {
-      ctx.fillText(`${c}`, gx + c * CW + CW / 2, gy - 3)
+    for (let c = 0; c < spec.cols; c++) {
+      if (c % 2 === 0) ctx.fillText(`${c}`, gx + c * CW + CW / 2, gy - 3)
     }
     ctx.textAlign = 'right'
-    for (let r = 0; r < GRID_ROWS; r++) {
-      ctx.fillText(`${r}`, gx - 2, gy + r * CH + CH / 2 + 3)
+    for (let r = 0; r < spec.rows; r += 4) {
+      ctx.fillText(`${Math.round((r - spec.topR) * GRID_CELL_METERS)}`, gx - 2, gy + r * CH + CH / 2 + 3)
     }
   }
 
   private drawPlacement(gx: number, gy: number, cw: number, ch: number, placement: Placement): void {
     const ctx = this.ctx
-    const rect = this.footprintRect(placement.cell, placement.footprint)
+    const rect = footprintRect(placement.cell, placement.footprint)
     const x = gx + rect.left * cw
     const y = gy + rect.top * ch
     const w = rect.w * cw
@@ -709,7 +658,7 @@ export class PrepScreen {
       { label: '耐久力', value: `${hull.hp}`,                     barR: hull.hp / 2100,       col: '#22c55e' },
       { label: '速力',   value: `${hull.maxSpeed.toFixed(1)}kt`,  barR: hull.maxSpeed / 7.2,  col: '#38bdf8' },
       { label: '旋回',   value: `${(hull.turnRate * 1000 | 0) / 10}`, barR: hull.turnRate / 0.046, col: '#fb923c' },
-      { label: '索敵',   value: `${hull.hp > 1000 ? 40 : 50}nm`, barR: 0.65,                 col: '#a78bfa' },
+      { label: '尺度',   value: `${Math.round(hullDimensions(hull).lengthM)}m`, barR: hullDimensions(hull).lengthM / 270, col: '#a78bfa' },
     ]
 
     const colW = (cw * 0.74) / stats.length
@@ -786,133 +735,111 @@ export class PrepScreen {
     ctx.moveTo(cx, cy - hh)
     for (let i = 0; i <= steps; i++) {
       const ny = -1 + (2 / steps) * i
-      ctx.lineTo(cx + this.hullMaxHW(ny) * hw, cy + ny * hh)
+      ctx.lineTo(cx + hullMaxHalfWidth(ny) * hw, cy + ny * hh)
     }
     for (let i = steps; i >= 0; i--) {
       const ny = -1 + (2 / steps) * i
-      ctx.lineTo(cx - this.hullMaxHW(ny) * hw, cy + ny * hh)
+      ctx.lineTo(cx - hullMaxHalfWidth(ny) * hw, cy + ny * hh)
     }
     ctx.closePath()
   }
 
-  private hullMaxHW(ny: number): number {
-    if (ny < -0.82) return Math.max(0.02, (ny + 1) / 0.18 * 0.38)
-    if (ny < -0.48) return 0.38 + (ny + 0.82) / 0.34 * 0.62
-    if (ny < 0.50) return 1.0 - Math.abs(ny - 0.02) * 0.07
-    if (ny < 0.86) return 0.94 - (ny - 0.50) / 0.36 * 0.20
-    return 0.74 - (ny - 0.86) / 0.14 * 0.18
-  }
-
-  private currentSlotCell(slot: HullSlot): { c: number; r: number } {
-    return this.slotCells.get(slot.id) ?? slotCell(slot)
-  }
-
-  private moveTargetState(hull: HullCatalogEntry, c: number, r: number, placements: Placement[]): 'none' | 'far' | 'valid' {
-    if (!this.isInsideHullCell(c, r)) return 'none'
-    if (this.selectedTower) return this.canMoveTowerTo(c, r, hull, placements) ? 'valid' : 'far'
-    const slot = hull.slots.find(s => s.id === this.selectedSlotId)
-    if (!slot) return 'none'
-    return this.canMoveSlotTo(slot, c, r, hull, placements) ? 'valid' : 'far'
-  }
-
-  private canMoveSlotTo(slot: HullSlot, c: number, r: number, hull: HullCatalogEntry, placements = this.buildPlacements(hull)): boolean {
-    if (!this.isInsideHullCell(c, r)) return false
-    const home = slotCell(slot)
-    const dc = c - home.c
-    const dr = r - home.r
-    if (Math.sqrt(dc * dc + dr * dr) > MAX_SLOT_MOVE_CELLS) return false
-    const existing = placements.find(p => p.id === slot.id && p.kind === 'weapon')
-    if (!existing) return false
-    return this.canPlaceFootprint({ c, r }, existing.footprint, placements, slot.id)
-  }
-
-  private canMoveTowerTo(c: number, r: number, hull: HullCatalogEntry, placements = this.buildPlacements(hull)): boolean {
-    const home = this.defaultTowerCell(hull)
-    const dc = c - home.c
-    const dr = r - home.r
-    if (Math.sqrt(dc * dc + dr * dr) > MAX_SLOT_MOVE_CELLS) return false
-    return this.canPlaceFootprint({ c, r }, this.towerFootprint(hull), placements, 'tower')
-  }
-
-  private isInsideHullCell(c: number, r: number): boolean {
-    const hw = (GRID_COLS - 1) / 2
-    const hh = (GRID_ROWS - 1) / 2
-    const nx = (c - hw) / hw
-    const ny = (r - hh) / hh
-    return Math.abs(nx) <= this.hullMaxHW(ny) * 0.98
-  }
-
-  private canPlaceFootprint(cell: GridCell, footprint: Footprint, placements: Placement[], ignoreId: string): boolean {
-    const rect = this.footprintRect(cell, footprint)
-    for (let r = rect.top; r < rect.top + rect.h; r++) {
-      for (let c = rect.left; c < rect.left + rect.w; c++) {
-        if (c < 0 || c >= GRID_COLS || r < 0 || r >= GRID_ROWS || !this.isInsideHullCell(c, r)) return false
-      }
-    }
-
-    for (const placement of placements) {
-      if (placement.id === ignoreId) continue
-      if (this.rectsOverlap(rect, this.footprintRect(placement.cell, placement.footprint))) return false
-    }
-    return true
-  }
-
-  private occupiedCells(placements: Placement[]): Set<string> {
-    const cells = new Set<string>()
-    for (const placement of placements) {
-      const rect = this.footprintRect(placement.cell, placement.footprint)
-      for (let r = rect.top; r < rect.top + rect.h; r++) {
-        for (let c = rect.left; c < rect.left + rect.w; c++) cells.add(this.cellKey(c, r))
-      }
-    }
-    return cells
-  }
-
-  private footprintRect(cell: GridCell, footprint: Footprint): { left: number; top: number; w: number; h: number } {
-    return {
-      left: cell.c - Math.floor(footprint.w / 2),
-      top: cell.r - Math.floor(footprint.h / 2),
-      w: footprint.w,
-      h: footprint.h,
-    }
-  }
-
-  private rectsOverlap(a: { left: number; top: number; w: number; h: number }, b: { left: number; top: number; w: number; h: number }): boolean {
-    return a.left < b.left + b.w && a.left + a.w > b.left && a.top < b.top + b.h && a.top + a.h > b.top
-  }
-
-  private cellKey(c: number, r: number): string {
-    return `${c},${r}`
-  }
-
-  private drawDeckStructure(gx: number, gy: number, cw: number, ch: number, hull: HullCatalogEntry): void {
+  private drawDeckStructure(gx: number, gy: number, cw: number, ch: number, hull: HullCatalogEntry, spec: GridSpec): void {
     const ctx = this.ctx
-    const gridW = cw * GRID_COLS
-    const gridH = ch * GRID_ROWS
-    const cx = gx + gridW / 2
+    const gridW = cw * spec.cols
+    const gridH = ch * spec.rows
+    const hullH = ch * spec.lengthCells
+    const cx = gx + cellCenter(spec.centerC) * cw
+    const bowY = gy + spec.topR * ch
     ctx.save()
     ctx.strokeStyle = 'rgba(151,191,151,0.16)'
     ctx.lineWidth = 1
     for (const xMul of [-0.28, 0, 0.28]) {
       ctx.beginPath()
-      ctx.moveTo(cx + xMul * gridW * 0.35, gy + gridH * 0.10)
-      ctx.lineTo(cx + xMul * gridW * 0.25, gy + gridH * 0.90)
+      ctx.moveTo(cx + xMul * spec.beamCells * cw * 0.72, bowY + hullH * 0.10)
+      ctx.lineTo(cx + xMul * spec.beamCells * cw * 0.56, bowY + hullH * 0.90)
       ctx.stroke()
     }
     ctx.strokeStyle = 'rgba(151,191,151,0.11)'
     for (const yMul of [0.18, 0.34, 0.52, 0.70, 0.84]) {
-      const half = this.hullMaxHW(yMul * 2 - 1) * gridW * 0.45
+      const half = hullMaxHalfWidth(yMul * 2 - 1) * spec.beamCells * cw * 0.50
       ctx.beginPath()
-      ctx.moveTo(cx - half, gy + gridH * yMul)
-      ctx.lineTo(cx + half, gy + gridH * yMul)
+      ctx.moveTo(cx - half, bowY + hullH * yMul)
+      ctx.lineTo(cx + half, bowY + hullH * yMul)
       ctx.stroke()
     }
     if (hull.shipType !== 'destroyer') {
       ctx.fillStyle = 'rgba(120,155,130,0.12)'
-      ctx.fillRect(cx - cw * 2.5, gy + gridH * 0.39, cw * 5, ch * 3)
+      ctx.fillRect(cx - cw * Math.min(3.2, spec.beamCells * 0.38), bowY + hullH * 0.39, cw * Math.min(6.4, spec.beamCells * 0.76), ch * 5)
       ctx.strokeStyle = 'rgba(190,220,190,0.18)'
-      ctx.strokeRect(cx - cw * 2.5, gy + gridH * 0.39, cw * 5, ch * 3)
+      ctx.strokeRect(cx - cw * Math.min(3.2, spec.beamCells * 0.38), bowY + hullH * 0.39, cw * Math.min(6.4, spec.beamCells * 0.76), ch * 5)
     }
+    ctx.restore()
+  }
+
+  private drawSideProfile(x: number, y: number, w: number, h: number, hull: HullCatalogEntry, spec: GridSpec, cellPx: number): void {
+    const ctx = this.ctx
+    const lengthPx = Math.min(w, spec.lengthCells * cellPx)
+    const beamRatio = spec.beamM / spec.lengthM
+    const hullH = Math.max(8, Math.min(h * 0.36, lengthPx * beamRatio * 0.72))
+    const sx = x + (w - lengthPx) / 2
+    const waterY = y + h * 0.72
+    const deckY = waterY - hullH
+    const bow = sx
+    const stern = sx + lengthPx
+
+    ctx.save()
+    ctx.strokeStyle = 'rgba(90,130,160,0.28)'
+    ctx.lineWidth = 0.5
+    for (let gx = sx; gx <= stern; gx += cellPx * 4) {
+      ctx.beginPath(); ctx.moveTo(gx, y); ctx.lineTo(gx, y + h); ctx.stroke()
+    }
+    for (let gy = y; gy <= y + h; gy += Math.max(6, cellPx * 2)) {
+      ctx.beginPath(); ctx.moveTo(sx, gy); ctx.lineTo(stern, gy); ctx.stroke()
+    }
+
+    ctx.beginPath()
+    ctx.moveTo(bow, waterY - hullH * 0.15)
+    ctx.lineTo(bow + lengthPx * 0.08, deckY)
+    ctx.lineTo(stern - lengthPx * 0.10, deckY)
+    ctx.lineTo(stern, waterY - hullH * 0.22)
+    ctx.lineTo(stern - lengthPx * 0.03, waterY)
+    ctx.lineTo(bow + lengthPx * 0.08, waterY)
+    ctx.closePath()
+    ctx.fillStyle = 'rgba(20,42,34,0.92)'
+    ctx.fill()
+    ctx.strokeStyle = '#9fb8c6'
+    ctx.lineWidth = 1
+    ctx.stroke()
+
+    const towerX = sx + lengthPx * (hull.shipType === 'destroyer' ? 0.38 : hull.shipType === 'cruiser' ? 0.62 : 0.49)
+    const towerW = Math.max(10, lengthPx * (hull.shipType === 'battleship' ? 0.055 : 0.045))
+    const towerH = Math.max(16, h * (hull.shipType === 'battleship' ? 0.42 : 0.34))
+    ctx.fillStyle = 'rgba(214,184,106,0.18)'
+    ctx.fillRect(towerX - towerW / 2, deckY - towerH, towerW, towerH)
+    ctx.strokeStyle = '#d6b86a'
+    ctx.strokeRect(towerX - towerW / 2, deckY - towerH, towerW, towerH)
+    ctx.beginPath()
+    ctx.moveTo(towerX, deckY - towerH)
+    ctx.lineTo(towerX, deckY - towerH - h * 0.22)
+    ctx.stroke()
+
+    const gunCount = hull.shipType === 'battleship' ? 3 : hull.shipType === 'cruiser' ? 2 : 1
+    ctx.strokeStyle = '#f6d18a'
+    ctx.fillStyle = 'rgba(249,115,22,0.18)'
+    for (let i = 0; i < gunCount; i++) {
+      const t = gunCount === 1 ? 0.28 : 0.18 + i * (0.62 / Math.max(1, gunCount - 1))
+      const gx = sx + lengthPx * t
+      ctx.fillRect(gx - 5, deckY - 6, 10, 6)
+      ctx.beginPath(); ctx.moveTo(gx, deckY - 6); ctx.lineTo(gx + 20, deckY - 11); ctx.stroke()
+    }
+
+    ctx.font = '9px sans-serif'
+    ctx.fillStyle = DIM
+    ctx.textAlign = 'left'
+    ctx.fillText(`側面図 ${Math.round(spec.lengthM)}m`, sx, y + 10)
+    ctx.textAlign = 'right'
+    ctx.fillText(`幅 ${spec.beamM.toFixed(1)}m`, stern, y + 10)
     ctx.restore()
   }
 
