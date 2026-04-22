@@ -9,21 +9,46 @@ export interface PrepResult {
   loadout: WeaponTemplate[]
 }
 
+// ── Grid constants ────────────────────────────────────────────────────────
+const GRID_COLS = 7   // 0..6, centerline = col 3
+const GRID_ROWS = 12  // 0..11, bow = row 0, stern = row 11
+
+/** Map a hull slot's normalized (x, y) to a grid cell */
+function slotCell(slot: HullSlot): { c: number; r: number } {
+  const c = Math.round(((slot.x + 1) / 2) * (GRID_COLS - 1))
+  const r = Math.round(((slot.y + 1) / 2) * (GRID_ROWS - 1))
+  return {
+    c: Math.max(0, Math.min(GRID_COLS - 1, c)),
+    r: Math.max(0, Math.min(GRID_ROWS - 1, r)),
+  }
+}
+
 type ScreenTab = 'hull' | 'armament'
+type WeaponFilter = WeaponType | 'all'
 
 type Region =
-  | { tag: 'class-tab';  shipType: PlayerShipType; x: number; y: number; w: number; h: number }
-  | { tag: 'hull-card';  index: number;             x: number; y: number; w: number; h: number }
-  | { tag: 'main-tab';   tab: ScreenTab;            x: number; y: number; w: number; h: number }
-  | { tag: 'slot-card';  slotId: string;            x: number; y: number; w: number; h: number }
-  | { tag: 'weapon-opt'; slotId: string; weaponId: string; x: number; y: number; w: number; h: number }
-  | { tag: 'deploy';                                 x: number; y: number; w: number; h: number }
-  | { tag: 'back';                                   x: number; y: number; w: number; h: number }
+  | { tag: 'class-tab';   shipType: PlayerShipType;   x: number; y: number; w: number; h: number }
+  | { tag: 'hull-card';   index: number;               x: number; y: number; w: number; h: number }
+  | { tag: 'main-tab';    tab: ScreenTab;              x: number; y: number; w: number; h: number }
+  | { tag: 'type-tab';    filter: WeaponFilter;        x: number; y: number; w: number; h: number }
+  | { tag: 'grid-slot';   slotId: string;              x: number; y: number; w: number; h: number }
+  | { tag: 'weapon-card'; weaponId: string;            x: number; y: number; w: number; h: number }
+  | { tag: 'deploy';                                    x: number; y: number; w: number; h: number }
+  | { tag: 'back';                                      x: number; y: number; w: number; h: number }
 
 const CLASS_TABS: { type: PlayerShipType; label: string }[] = [
   { type: 'destroyer',  label: '駆逐艦' },
   { type: 'cruiser',    label: '巡洋艦' },
   { type: 'battleship', label: '戦艦'   },
+]
+
+const TYPE_TABS: { filter: WeaponFilter; label: string }[] = [
+  { filter: 'all',       label: '全種' },
+  { filter: 'gun',       label: '主砲' },
+  { filter: 'secondary', label: '副砲' },
+  { filter: 'torpedo',   label: '魚雷' },
+  { filter: 'aa',        label: '対空' },
+  { filter: 'missile',   label: 'ミサイル' },
 ]
 
 const BG     = '#0a1410'
@@ -49,7 +74,8 @@ export class PrepScreen {
   private selectedClass: PlayerShipType = 'destroyer'
   private selectedHullIdx = 0
   private selectedSlotId: string | null = null
-  private slotWeapons = new Map<string, ShopWeapon>()
+  private weaponFilter: WeaponFilter = 'all'
+  private slotWeapons = new Map<string, ShopWeapon>()  // slotId → weapon
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas
@@ -63,6 +89,7 @@ export class PrepScreen {
     this.selectedClass = 'destroyer'
     this.selectedHullIdx = 0
     this.selectedSlotId = null
+    this.weaponFilter = 'all'
     this.slotWeapons = new Map()
     this.canvas.addEventListener('mousemove', this.onMoveRef)
   }
@@ -101,13 +128,29 @@ export class PrepScreen {
         break
       }
 
-      case 'slot-card':
+      case 'type-tab':
+        this.weaponFilter = r.filter
+        break
+
+      case 'grid-slot':
+        // Toggle selection; clicking again deselects
         this.selectedSlotId = this.selectedSlotId === r.slotId ? null : r.slotId
         break
 
-      case 'weapon-opt': {
+      case 'weapon-card': {
+        // Assign the weapon to the selected slot (if compatible), or remove it
+        if (!this.selectedSlotId) break
+        const hull = this.selectedHull()
+        const slot = hull?.slots.find(s => s.id === this.selectedSlotId)
+        if (!slot) break
         const w = WEAPON_SHOP.find(x => x.id === r.weaponId)
-        if (w) { this.slotWeapons.set(r.slotId, w); this.selectedSlotId = null }
+        if (!w || !slot.compatibleTypes.includes(w.type)) break
+        if (this.slotWeapons.get(slot.id)?.id === w.id) {
+          this.slotWeapons.delete(slot.id)   // clicking current weapon removes it
+        } else {
+          this.slotWeapons.set(slot.id, w)
+          this.selectedSlotId = null
+        }
         break
       }
 
@@ -135,7 +178,7 @@ export class PrepScreen {
     this.renderButtons(0, ch - BTN_H, cw, BTN_H)
   }
 
-  // ── Private: data helpers ───────────────────────────────────────────────
+  // ── Data helpers ─────────────────────────────────────────────────────────
 
   private selectedHull(): HullCatalogEntry | null {
     return getHullsByClass(this.selectedClass)[this.selectedHullIdx] ?? null
@@ -165,59 +208,57 @@ export class PrepScreen {
     )
   }
 
-  // ── Background ──────────────────────────────────────────────────────────
+  // ── Background ────────────────────────────────────────────────────────────
 
   private drawBackground(cw: number, ch: number): void {
     const ctx = this.ctx
     const g = ctx.createLinearGradient(0, 0, 0, ch)
     g.addColorStop(0, '#0a1510'); g.addColorStop(1, '#060d08')
     ctx.fillStyle = g; ctx.fillRect(0, 0, cw, ch)
-    ctx.strokeStyle = 'rgba(38,74,46,0.15)'; ctx.lineWidth = 1
+    ctx.strokeStyle = 'rgba(38,74,46,0.12)'; ctx.lineWidth = 1
     for (let x = 0; x < cw; x += 50) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, ch); ctx.stroke() }
     for (let y = 0; y < ch; y += 50) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(cw, y); ctx.stroke() }
   }
 
-  // ── Top tabs ────────────────────────────────────────────────────────────
+  // ── Top tabs ──────────────────────────────────────────────────────────────
 
   private drawTopTabs(cw: number, h: number): void {
     const ctx = this.ctx
     ctx.fillStyle = '#080f08'; ctx.fillRect(0, 0, cw, h)
     ctx.strokeStyle = BORDER; ctx.lineWidth = 1
     ctx.beginPath(); ctx.moveTo(0, h); ctx.lineTo(cw, h); ctx.stroke()
-
     ctx.font = '11px sans-serif'; ctx.fillStyle = DIM; ctx.textAlign = 'right'
     ctx.fillText(`Stage ${this.stage}`, cw - 12, h / 2 + 4)
 
-    const tabs: { tab: ScreenTab; label: string }[] = [
+    const defs: { tab: ScreenTab; label: string }[] = [
       { tab: 'hull',     label: '艦体選択' },
-      { tab: 'armament', label: '兵装設定' },
+      { tab: 'armament', label: '兵装配置' },
     ]
-    const tabW = 114, tabH = h - 10, sx = 8
-    for (let i = 0; i < tabs.length; i++) {
-      const t = tabs[i]!; const tx = sx + i * (tabW + 4)
+    const tw = 114, th = h - 10, sx = 8
+    for (let i = 0; i < defs.length; i++) {
+      const t = defs[i]!; const tx = sx + i * (tw + 4)
       const active = this.tab === t.tab
-      ctx.fillStyle = active ? ACCENT : '#0c1610'; ctx.fillRect(tx, 5, tabW, tabH)
-      ctx.strokeStyle = active ? '#3a9a4a' : BORDER; ctx.lineWidth = 1; ctx.strokeRect(tx, 5, tabW, tabH)
+      ctx.fillStyle = active ? ACCENT : '#0c1610'; ctx.fillRect(tx, 5, tw, th)
+      ctx.strokeStyle = active ? '#3a9a4a' : BORDER; ctx.lineWidth = 1; ctx.strokeRect(tx, 5, tw, th)
       ctx.font = 'bold 13px sans-serif'; ctx.fillStyle = active ? '#cce8cc' : DIM; ctx.textAlign = 'center'
-      ctx.fillText(t.label, tx + tabW / 2, 5 + tabH / 2 + 5)
-      this.addRegion({ tag: 'main-tab', tab: t.tab, x: tx, y: 5, w: tabW, h: tabH })
+      ctx.fillText(t.label, tx + tw / 2, 5 + th / 2 + 5)
+      this.addRegion({ tag: 'main-tab', tab: t.tab, x: tx, y: 5, w: tw, h: th })
     }
   }
 
-  // ── Hull tab ────────────────────────────────────────────────────────────
+  // ── Hull tab ──────────────────────────────────────────────────────────────
 
   private renderHullTab(x: number, y: number, cw: number, ch: number): void {
     const ctx = this.ctx
-    const classTabW = 88, classTabH = 42
+    const ctW = 88, ctH = 42
     for (let i = 0; i < CLASS_TABS.length; i++) {
-      const tab = CLASS_TABS[i]!
-      const ty = y + 20 + i * (classTabH + 8)
+      const tab = CLASS_TABS[i]!; const ty = y + 20 + i * (ctH + 8)
       const active = tab.type === this.selectedClass
-      ctx.fillStyle = active ? ACCENT : '#0c1610'; ctx.fillRect(x + 8, ty, classTabW, classTabH)
-      ctx.strokeStyle = active ? '#3a9a4a' : BORDER; ctx.lineWidth = 1; ctx.strokeRect(x + 8, ty, classTabW, classTabH)
+      ctx.fillStyle = active ? ACCENT : '#0c1610'; ctx.fillRect(x + 8, ty, ctW, ctH)
+      ctx.strokeStyle = active ? '#3a9a4a' : BORDER; ctx.lineWidth = 1; ctx.strokeRect(x + 8, ty, ctW, ctH)
       ctx.font = 'bold 13px sans-serif'; ctx.fillStyle = active ? '#cce8cc' : TEXT; ctx.textAlign = 'center'
-      ctx.fillText(tab.label, x + 8 + classTabW / 2, ty + classTabH / 2 + 5)
-      this.addRegion({ tag: 'class-tab', shipType: tab.type, x: x + 8, y: ty, w: classTabW, h: classTabH })
+      ctx.fillText(tab.label, x + 8 + ctW / 2, ty + ctH / 2 + 5)
+      this.addRegion({ tag: 'class-tab', shipType: tab.type, x: x + 8, y: ty, w: ctW, h: ctH })
     }
 
     const hulls = getHullsByClass(this.selectedClass)
@@ -261,7 +302,6 @@ export class PrepScreen {
 
     ctx.font = 'bold 10px sans-serif'; ctx.fillStyle = locked ? DIM : '#4a7a4a'; ctx.textAlign = 'left'
     ctx.fillText(`スロット: ${hull.slots.length}`, x + 14, y + h - 22)
-
     if (selected) {
       ctx.font = 'bold 10px sans-serif'; ctx.fillStyle = '#3a9a4a'; ctx.textAlign = 'right'
       ctx.fillText('✓ 選択中', x + w - 10, y + h - 10)
@@ -272,304 +312,270 @@ export class PrepScreen {
     }
   }
 
-  // ── Armament tab ────────────────────────────────────────────────────────
+  // ── Armament tab ──────────────────────────────────────────────────────────
 
   private renderArmamentTab(x: number, y: number, cw: number, ch: number): void {
     const hull = this.selectedHull()
     if (!hull) return
 
-    const PANEL_W = Math.floor(cw * 0.35)
-    const viewW = cw - PANEL_W
-    const profileH = Math.floor(ch * 0.50)
-    const topDownH = ch - profileH
+    const PALETTE_W = Math.floor(cw * 0.36)
+    const gridAreaW = cw - PALETTE_W
 
-    this.drawSideProfile(x, y, viewW, profileH, hull)
-    this.drawTopDownDiagram(x, y + profileH, viewW, topDownH, hull)
+    this.drawGridArea(x, y, gridAreaW, ch, hull)
 
-    // Right panel background + divider
+    // Right panel
     const ctx = this.ctx
-    ctx.fillStyle = '#090f0a'; ctx.fillRect(x + viewW, y, PANEL_W, ch)
+    ctx.fillStyle = '#080e08'; ctx.fillRect(x + gridAreaW, y, PALETTE_W, ch)
     ctx.strokeStyle = BORDER; ctx.lineWidth = 1
-    ctx.beginPath(); ctx.moveTo(x + viewW, y); ctx.lineTo(x + viewW, y + ch); ctx.stroke()
-
-    this.drawSlotPanel(x + viewW, y, PANEL_W, ch, hull)
+    ctx.beginPath(); ctx.moveTo(x + gridAreaW, y); ctx.lineTo(x + gridAreaW, y + ch); ctx.stroke()
+    this.drawWeaponPalette(x + gridAreaW, y, PALETTE_W, ch, hull)
   }
 
-  // ── Side profile ────────────────────────────────────────────────────────
+  // ── Grid area (left/center) ───────────────────────────────────────────────
 
-  private drawSideProfile(px: number, py: number, pw: number, ph: number, hull: HullCatalogEntry): void {
+  private drawGridArea(px: number, py: number, pw: number, ph: number, hull: HullCatalogEntry): void {
     const ctx = this.ctx
-    const margin = pw * 0.06
-    const shipL = pw - margin * 2
-    const bx = px + margin       // bow (left)
-    const ex = px + pw - margin  // stern (right)
 
-    const wlY   = py + ph * 0.60  // waterline
-    const deckY = py + ph * 0.38  // main deck
-    const keelY = py + ph * 0.78  // keel
-
-    // Sky
-    const skyG = ctx.createLinearGradient(px, py, px, wlY)
-    skyG.addColorStop(0, '#060c08'); skyG.addColorStop(1, '#0a1810')
-    ctx.fillStyle = skyG; ctx.fillRect(px, py, pw, wlY - py)
-
-    // Sea
-    const seaG = ctx.createLinearGradient(px, wlY, px, py + ph)
-    seaG.addColorStop(0, '#06141e'); seaG.addColorStop(1, '#040c16')
-    ctx.fillStyle = seaG; ctx.fillRect(px, wlY, pw, py + ph - wlY)
-
-    // Waterline
-    ctx.strokeStyle = '#1a3a4a'; ctx.lineWidth = 1
-    ctx.beginPath(); ctx.moveTo(px, wlY); ctx.lineTo(px + pw, wlY); ctx.stroke()
-
-    // Underwater hull
-    ctx.beginPath()
-    ctx.moveTo(bx + 18, wlY)
-    ctx.quadraticCurveTo(bx, wlY, bx + 6, keelY)
-    ctx.lineTo(ex - 6, keelY)
-    ctx.quadraticCurveTo(ex + 4, keelY, ex - 14, wlY)
-    ctx.fillStyle = '#0d1e14'; ctx.fill()
-    ctx.strokeStyle = '#1a3020'; ctx.lineWidth = 1; ctx.stroke()
-
-    // Freeboard (hull above waterline)
-    ctx.beginPath()
-    ctx.moveTo(bx, wlY)
-    ctx.bezierCurveTo(bx - 5, deckY + 14, bx + 10, deckY, bx + 24, deckY)
-    ctx.lineTo(ex - 10, deckY)
-    ctx.bezierCurveTo(ex + 2, deckY, ex + 2, wlY + 6, ex - 12, wlY)
-    ctx.closePath()
-    ctx.fillStyle = hull.shipType === 'battleship' ? '#1c2e20' : '#162416'
-    ctx.fill(); ctx.strokeStyle = '#284830'; ctx.lineWidth = 1.5; ctx.stroke()
-
-    // Deck stripe
-    ctx.strokeStyle = '#365840'; ctx.lineWidth = 1
-    ctx.beginPath(); ctx.moveTo(bx + 24, deckY); ctx.lineTo(ex - 10, deckY); ctx.stroke()
-
-    // Superstructure proportions per ship type
-    const superHFrac: Record<PlayerShipType, number> = { destroyer: 0.17, cruiser: 0.22, battleship: 0.30 }
-    const bridgeXFrac: Record<PlayerShipType, number> = { destroyer: 0.30, cruiser: 0.30, battleship: 0.28 }
-    const bridgeWFrac: Record<PlayerShipType, number> = { destroyer: 0.12, cruiser: 0.14, battleship: 0.19 }
-    const superH  = ph * superHFrac[hull.shipType]
-    const superTopY = deckY - superH
-    const bridgeX = bx + shipL * bridgeXFrac[hull.shipType]
-    const bridgeW = shipL * bridgeWFrac[hull.shipType]
-
-    // Bridge main body
-    ctx.fillStyle = '#182e1e'; ctx.fillRect(bridgeX, superTopY, bridgeW, deckY - superTopY)
-    ctx.strokeStyle = '#264a30'; ctx.lineWidth = 1; ctx.strokeRect(bridgeX, superTopY, bridgeW, deckY - superTopY)
-
-    // Bridge windows
-    ctx.fillStyle = '#0a2010'
-    const winH = 3, winW = (bridgeW - 8) / 3 - 1
-    for (let i = 0; i < 3; i++) {
-      ctx.fillRect(bridgeX + 4 + i * (winW + 1), superTopY + 5, winW, winH)
-    }
-
-    // Pagoda levels for battleship
-    if (hull.shipType === 'battleship') {
-      for (let lv = 1; lv <= 3; lv++) {
-        const lw = bridgeW * (1 - lv * 0.20)
-        const lx = bridgeX + (bridgeW - lw) / 2
-        const ly = superTopY - lv * (ph * 0.055)
-        ctx.fillStyle = `rgba(24,46,30,${0.9 - lv * 0.15})`
-        ctx.fillRect(lx, ly, lw, ph * 0.055)
-        ctx.strokeStyle = '#264a30'; ctx.lineWidth = 0.5; ctx.strokeRect(lx, ly, lw, ph * 0.055)
-      }
-    }
-
-    // Funnels
-    type FunnelDef = { xFrac: number; wFrac: number; hFrac: number }
-    const funnels: Record<PlayerShipType, FunnelDef[]> = {
-      destroyer:  [{ xFrac: 0.48, wFrac: 0.040, hFrac: 0.10 }],
-      cruiser:    [{ xFrac: 0.48, wFrac: 0.045, hFrac: 0.12 }, { xFrac: 0.58, wFrac: 0.038, hFrac: 0.10 }],
-      battleship: [{ xFrac: 0.53, wFrac: 0.055, hFrac: 0.13 }, { xFrac: 0.63, wFrac: 0.048, hFrac: 0.11 }],
-    }
-    for (const fc of funnels[hull.shipType]) {
-      const fx = bx + shipL * fc.xFrac - (shipL * fc.wFrac) / 2
-      const fh = ph * fc.hFrac; const fw = shipL * fc.wFrac
-      ctx.fillStyle = '#1e2e22'; ctx.fillRect(fx, deckY - fh, fw, fh)
-      ctx.strokeStyle = '#2a4030'; ctx.lineWidth = 1; ctx.strokeRect(fx, deckY - fh, fw, fh)
-      ctx.fillStyle = '#080e0a'; ctx.fillRect(fx - 1, deckY - fh - 3, fw + 2, 4)
-    }
-
-    // Forward mast
-    const mastX = bx + shipL * 0.15
-    ctx.strokeStyle = '#264830'; ctx.lineWidth = 1
-    ctx.beginPath(); ctx.moveTo(mastX, superTopY - ph * 0.05); ctx.lineTo(mastX, deckY); ctx.stroke()
-    ctx.beginPath(); ctx.moveTo(mastX - 8, superTopY - ph * 0.01); ctx.lineTo(mastX + 8, superTopY - ph * 0.01); ctx.stroke()
-
-    if (hull.shipType !== 'destroyer') {
-      const aftX = bx + shipL * 0.72
-      ctx.beginPath(); ctx.moveTo(aftX, deckY - ph * 0.08); ctx.lineTo(aftX, deckY); ctx.stroke()
-    }
-
-    // Weapon markers
+    // Build slot → cell map
+    const slotByCellKey = new Map<string, HullSlot>()
     for (const slot of hull.slots) {
-      const slotX = bx + ((slot.y + 1) / 2) * shipL
-      const weapon  = this.slotWeapons.get(slot.id)
-      const isSel   = slot.id === this.selectedSlotId
-      const col     = weapon ? (TYPE_COLOR[weapon.type] ?? DIM)
-                    : isSel  ? YELLOW : DIM
-
-      if (slot.compatibleTypes.includes('gun')) {
-        // Turret on deck
-        const tw = 13, th = 7
-        ctx.fillStyle = weapon ? col + '88' : (isSel ? '#3a3a1088' : '#1a2a1888')
-        ctx.fillRect(slotX - tw / 2, deckY - th, tw, th)
-        ctx.strokeStyle = col; ctx.lineWidth = isSel ? 1.5 : 0.8
-        ctx.strokeRect(slotX - tw / 2, deckY - th, tw, th)
-        ctx.beginPath(); ctx.moveTo(slotX - 1, deckY - th); ctx.lineTo(slotX - 9, deckY - th - 4)
-        ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.stroke()
-      } else if (slot.compatibleTypes.includes('torpedo')) {
-        const ty2 = deckY + (wlY - deckY) * 0.45
-        ctx.beginPath(); ctx.arc(slotX, ty2, 4, 0, Math.PI * 2)
-        ctx.fillStyle = weapon ? col + '88' : (isSel ? '#1a3a4488' : '#0a1e2888')
-        ctx.fill(); ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.stroke()
-      } else {
-        // AA / missile: small circle on deck
-        ctx.beginPath(); ctx.arc(slotX, deckY - 4, 3.5, 0, Math.PI * 2)
-        ctx.fillStyle = weapon ? col + '88' : (isSel ? '#2a2a1088' : '#1a2a1888')
-        ctx.fill(); ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.stroke()
-      }
+      const { c, r } = slotCell(slot)
+      slotByCellKey.set(`${c},${r}`, slot)
     }
 
-    // Labels
-    ctx.font = '9px sans-serif'; ctx.fillStyle = DIM
-    ctx.textAlign = 'left';  ctx.fillText('艦首 ▶', bx, py + ph - 5)
-    ctx.textAlign = 'right'; ctx.fillText('◀ 艦尾', ex, py + ph - 5)
-    ctx.textAlign = 'center'; ctx.fillText('─── 側面図 ───', px + pw / 2, py + 12)
-  }
+    // Grid geometry: center the grid in the available area
+    const CW = Math.floor((pw * 0.52) / GRID_COLS)   // cell width
+    const CH = Math.floor((ph * 0.82) / GRID_ROWS)   // cell height
+    const gridW = CW * GRID_COLS
+    const gridH = CH * GRID_ROWS
+    const gx = px + (pw - gridW) / 2  // grid left edge
+    const gy = py + (ph - gridH) / 2  // grid top edge
 
-  // ── Top-down diagram ─────────────────────────────────────────────────────
+    // Hull half-dimensions in normalized coords → grid coords
+    const hw = (GRID_COLS - 1) / 2     // 3.0
+    const hh = (GRID_ROWS - 1) / 2     // 5.5
 
-  private drawTopDownDiagram(px: number, py: number, pw: number, ph: number, hull: HullCatalogEntry): void {
-    const ctx = this.ctx
-    ctx.fillStyle = '#060e08'; ctx.fillRect(px, py, pw, ph)
-    ctx.strokeStyle = BORDER; ctx.lineWidth = 1
-    ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px + pw, py); ctx.stroke()
+    // Hull background silhouette (draw first, behind grid)
+    ctx.save()
+    ctx.translate(gx + gridW / 2, gy + gridH / 2)
+    ctx.beginPath()
+    this.buildHullPath(ctx, 0, 0, CW * hw * 1.02, CH * hh * 1.02)
+    ctx.fillStyle = '#0d1e12'
+    ctx.fill()
+    ctx.strokeStyle = '#2a4a30'; ctx.lineWidth = 2; ctx.stroke()
+    ctx.restore()
 
-    const hw = pw * 0.11
-    const hh = ph * 0.38
-    const cx2 = px + pw / 2
-    const cy2 = py + ph * 0.52
+    // Draw all grid cells
+    for (let r = 0; r < GRID_ROWS; r++) {
+      for (let c = 0; c < GRID_COLS; c++) {
+        // Normalized position of this cell's center
+        const nx = (c - hw) / hw      // -1 to +1
+        const ny = (r - hh) / hh      // -1 to +1
+        const inside = Math.abs(nx) <= this.hullMaxHW(ny) * 0.98
 
-    // Hull shape
-    ctx.beginPath(); this.buildHullPath(ctx, cx2, cy2, hw, hh)
-    ctx.fillStyle = '#0f1e12'; ctx.fill()
-    ctx.strokeStyle = '#284a30'; ctx.lineWidth = 1.5; ctx.stroke()
+        const cellX = gx + c * CW
+        const cellY = gy + r * CH
+        const key = `${c},${r}`
+        const slot = slotByCellKey.get(key)
+
+        if (!inside) {
+          // Outside hull: skip (transparent)
+          continue
+        }
+
+        if (slot) {
+          this.drawSlotCell(cellX, cellY, CW, CH, slot)
+        } else {
+          // Interior non-slot cell: faint grid line only
+          ctx.strokeStyle = 'rgba(30,60,36,0.45)'; ctx.lineWidth = 0.5
+          ctx.strokeRect(cellX + 0.5, cellY + 0.5, CW - 1, CH - 1)
+        }
+      }
+    }
 
     // Centerline
     ctx.save(); ctx.setLineDash([5, 4])
-    ctx.strokeStyle = 'rgba(70,130,80,0.28)'; ctx.lineWidth = 1
-    ctx.beginPath(); ctx.moveTo(cx2, cy2 - hh); ctx.lineTo(cx2, cy2 + hh); ctx.stroke()
+    ctx.strokeStyle = 'rgba(80,150,90,0.30)'; ctx.lineWidth = 1
+    const clx = gx + (GRID_COLS / 2) * CW
+    ctx.beginPath(); ctx.moveTo(clx, gy); ctx.lineTo(clx, gy + gridH); ctx.stroke()
     ctx.setLineDash([]); ctx.restore()
 
-    // Labels
+    // Port / Starboard labels
     ctx.font = '9px sans-serif'; ctx.fillStyle = DIM; ctx.textAlign = 'center'
-    ctx.fillText('▲ 艦首', cx2, py + 12)
-    ctx.fillText('▼ 艦尾', cx2, py + ph - 4)
-    ctx.fillText('─── 俯瞰図 ───', px + pw * 0.75, py + 12)
+    ctx.fillText('▲ 艦首', gx + gridW / 2, py + 14)
+    ctx.fillText('▼ 艦尾', gx + gridW / 2, py + ph - 4)
+    ctx.textAlign = 'right'; ctx.fillText('← 左舷', gx - 4, gy + gridH / 2 + 4)
+    ctx.textAlign = 'left';  ctx.fillText('右舷 →', gx + gridW + 4, gy + gridH / 2 + 4)
 
-    // Slot markers
-    for (const slot of hull.slots) {
-      const sx = cx2 + slot.x * hw
-      const sy = cy2 + slot.y * hh
-      const weapon = this.slotWeapons.get(slot.id)
-      const isSel  = slot.id === this.selectedSlotId
-      const col    = weapon ? (TYPE_COLOR[weapon.type] ?? DIM)
-                   : isSel  ? YELLOW : DIM
-      const r = isSel ? 8 : 6
-
-      ctx.beginPath(); ctx.arc(sx, sy, r, 0, Math.PI * 2)
-      ctx.fillStyle = weapon ? col + '44' : (isSel ? '#3a3a1044' : '#1a2a1844')
-      ctx.fill(); ctx.strokeStyle = col; ctx.lineWidth = isSel ? 2 : 1; ctx.stroke()
-
-      if (weapon) {
-        ctx.font = '7px sans-serif'; ctx.fillStyle = col; ctx.textAlign = 'center'
-        ctx.fillText(TYPE_JP[weapon.type]!, sx, sy + 3)
-      }
+    // Column & row guides (faint numbers)
+    ctx.font = '7px sans-serif'; ctx.fillStyle = 'rgba(50,90,56,0.5)'; ctx.textAlign = 'center'
+    for (let c = 0; c < GRID_COLS; c++) {
+      ctx.fillText(`${c}`, gx + c * CW + CW / 2, gy - 3)
+    }
+    ctx.textAlign = 'right'
+    for (let r = 0; r < GRID_ROWS; r++) {
+      ctx.fillText(`${r}`, gx - 2, gy + r * CH + CH / 2 + 3)
     }
   }
 
-  // ── Slot panel (right) ──────────────────────────────────────────────────
+  private drawSlotCell(cellX: number, cellY: number, cw: number, ch: number, slot: HullSlot): void {
+    const ctx = this.ctx
+    const weapon  = this.slotWeapons.get(slot.id)
+    const isSel   = slot.id === this.selectedSlotId
+    const isHov   = this.hovered?.tag === 'grid-slot' && this.hovered.slotId === slot.id
+    const col     = weapon ? (TYPE_COLOR[weapon.type] ?? DIM)
+                  : isSel  ? YELLOW
+                  : '#3a6a42'
 
-  private drawSlotPanel(px: number, py: number, pw: number, ph: number, hull: HullCatalogEntry): void {
+    // Cell fill
+    if (weapon) {
+      ctx.fillStyle = col + '28'
+    } else if (isSel) {
+      ctx.fillStyle = '#3a3a1030'
+    } else {
+      ctx.fillStyle = isHov ? '#1a3a2030' : '#0a1e1228'
+    }
+    ctx.fillRect(cellX, cellY, cw, ch)
+
+    // Cell border — dashed for empty, solid for occupied
+    ctx.lineWidth = isSel ? 2 : 1
+    ctx.strokeStyle = col
+    if (!weapon) {
+      ctx.save(); ctx.setLineDash([3, 2]); ctx.strokeRect(cellX + 0.5, cellY + 0.5, cw - 1, ch - 1); ctx.setLineDash([]); ctx.restore()
+    } else {
+      ctx.strokeRect(cellX + 0.5, cellY + 0.5, cw - 1, ch - 1)
+    }
+
+    const cx2 = cellX + cw / 2
+    const cy2 = cellY + ch / 2
+
+    if (weapon) {
+      // Weapon type icon (2-char)
+      ctx.font = `bold ${Math.min(cw * 0.4, 9)}px sans-serif`
+      ctx.fillStyle = col; ctx.textAlign = 'center'
+      ctx.fillText(TYPE_JP[weapon.type]!, cx2, cy2 + 3)
+    } else {
+      // Slot label
+      ctx.font = `${Math.min(cw * 0.38, 8)}px sans-serif`
+      ctx.fillStyle = isSel ? YELLOW : DIM; ctx.textAlign = 'center'
+      const lbl = slot.label.length > 4 ? slot.label.slice(0, 3) : slot.label
+      ctx.fillText(lbl, cx2, cy2 + 3)
+    }
+
+    this.addRegion({ tag: 'grid-slot', slotId: slot.id, x: cellX, y: cellY, w: cw, h: ch })
+  }
+
+  // ── Weapon palette (right) ────────────────────────────────────────────────
+
+  private drawWeaponPalette(px: number, py: number, pw: number, ph: number, hull: HullCatalogEntry): void {
     const ctx = this.ctx
 
-    // Header
+    // Hull title
     ctx.font = 'bold 12px sans-serif'; ctx.fillStyle = TEXT; ctx.textAlign = 'left'
     ctx.fillText(hull.name, px + 10, py + 20)
     ctx.font = '10px sans-serif'; ctx.fillStyle = DIM
     ctx.fillText(hull.className, px + 10, py + 34)
-    ctx.strokeStyle = BORDER; ctx.lineWidth = 1
-    ctx.beginPath(); ctx.moveTo(px + 8, py + 40); ctx.lineTo(px + pw - 8, py + 40); ctx.stroke()
 
-    let sy = py + 48
-    const slotW = pw - 16
-
-    for (const slot of hull.slots) {
-      if (sy + 34 > py + ph - 10) break
-      const isSel  = slot.id === this.selectedSlotId
-      const weapon = this.slotWeapons.get(slot.id)
-      const col    = weapon ? (TYPE_COLOR[weapon.type] ?? DIM) : (isSel ? YELLOW : DIM)
-
-      // Slot header card
-      ctx.fillStyle = isSel ? SEL : '#0c1810'; ctx.fillRect(px + 8, sy, slotW, 34)
-      ctx.strokeStyle = isSel ? '#3a9a4a' : BORDER; ctx.lineWidth = 1
-      ctx.strokeRect(px + 8, sy, slotW, 34)
-
-      // Type indicator dot
-      ctx.beginPath(); ctx.arc(px + 18, sy + 17, 5, 0, Math.PI * 2)
-      ctx.fillStyle = col; ctx.fill()
-
-      ctx.font = 'bold 11px sans-serif'; ctx.fillStyle = isSel ? '#90d090' : TEXT; ctx.textAlign = 'left'
-      ctx.fillText(slot.label, px + 28, sy + 14)
-
-      if (weapon) {
-        ctx.font = '9px sans-serif'; ctx.fillStyle = col
-        ctx.fillText(weapon.name, px + 28, sy + 27)
-      } else {
-        ctx.font = '9px sans-serif'; ctx.fillStyle = '#2a4a2a'
-        const compat = slot.compatibleTypes.map(t => TYPE_JP[t] ?? t).join('/')
-        ctx.fillText(`[${compat}]`, px + 28, sy + 27)
-      }
-
-      this.addRegion({ tag: 'slot-card', slotId: slot.id, x: px + 8, y: sy, w: slotW, h: 34 })
-      sy += 36
-
-      // Expanded weapon options
-      if (isSel) {
-        const compatible = this.getCompatible(slot)
-        for (const w of compatible) {
-          if (sy + 26 > py + ph - 14) break
-          const isCur = this.slotWeapons.get(slot.id)?.id === w.id
-          const wCol  = TYPE_COLOR[w.type] ?? DIM
-
-          ctx.fillStyle = isCur ? '#0a2a14' : '#080f0a'
-          ctx.fillRect(px + 20, sy, slotW - 12, 26)
-          ctx.strokeStyle = isCur ? '#3a9a4a' : '#1a3020'; ctx.lineWidth = 1
-          ctx.strokeRect(px + 20, sy, slotW - 12, 26)
-
-          ctx.font = '8px sans-serif'; ctx.fillStyle = wCol; ctx.textAlign = 'left'
-          ctx.fillText(TYPE_JP[w.type]!, px + 26, sy + 11)
-          ctx.font = isCur ? 'bold 10px sans-serif' : '10px sans-serif'
-          ctx.fillStyle = isCur ? '#90d090' : TEXT
-          ctx.fillText(w.name, px + 26, sy + 22)
-
-          if (isCur) {
-            ctx.font = 'bold 11px sans-serif'; ctx.fillStyle = '#3a9a4a'; ctx.textAlign = 'right'
-            ctx.fillText('✓', px + pw - 14, sy + 17); ctx.textAlign = 'left'
-          }
-
-          this.addRegion({ tag: 'weapon-opt', slotId: slot.id, weaponId: w.id, x: px + 20, y: sy, w: slotW - 12, h: 26 })
-          sy += 28
-        }
-        sy += 4
-      }
+    // Selected slot info
+    const selSlot = hull.slots.find(s => s.id === this.selectedSlotId)
+    const infoY = py + 46
+    ctx.fillStyle = selSlot ? SEL : '#080e08'; ctx.fillRect(px + 6, infoY, pw - 12, 22)
+    ctx.strokeStyle = selSlot ? '#3a9a4a' : '#1a3020'; ctx.lineWidth = 1
+    ctx.strokeRect(px + 6, infoY, pw - 12, 22)
+    ctx.font = '10px sans-serif'; ctx.textAlign = 'left'
+    if (selSlot) {
+      ctx.fillStyle = '#90d090'
+      ctx.fillText(`スロット: ${selSlot.label}`, px + 12, infoY + 15)
+      const compat = selSlot.compatibleTypes.map(t => TYPE_JP[t] ?? t).join(' / ')
+      ctx.fillStyle = DIM; ctx.textAlign = 'right'
+      ctx.fillText(compat, px + pw - 12, infoY + 15)
+    } else {
+      ctx.fillStyle = DIM; ctx.fillText('グリッドのスロットを選択', px + 12, infoY + 15)
     }
+
+    // Weapon type tabs
+    const tabY = infoY + 28
+    const tabW = (pw - 12) / TYPE_TABS.length
+    for (let i = 0; i < TYPE_TABS.length; i++) {
+      const t = TYPE_TABS[i]!; const tx = px + 6 + i * tabW
+      const active = this.weaponFilter === t.filter
+      ctx.fillStyle = active ? ACCENT : '#0c1810'; ctx.fillRect(tx, tabY, tabW, 22)
+      ctx.strokeStyle = active ? '#3a9a4a' : '#1a3020'; ctx.lineWidth = 1; ctx.strokeRect(tx, tabY, tabW, 22)
+      ctx.font = `${active ? 'bold ' : ''}9px sans-serif`
+      ctx.fillStyle = active ? '#cce8cc' : DIM; ctx.textAlign = 'center'
+      ctx.fillText(t.label, tx + tabW / 2, tabY + 15)
+      this.addRegion({ tag: 'type-tab', filter: t.filter, x: tx, y: tabY, w: tabW, h: 22 })
+    }
+
+    // Weapon cards
+    const listY = tabY + 28
+    const listH = ph - (listY - py) - 6
+    const cardH = 52, cardW = pw - 12
+    let cy = listY
+
+    // Determine which weapons to show
+    const showAll = !selSlot
+    const weapons = WEAPON_SHOP.filter(w => {
+      if (w.minStage > this.stage) return false
+      if (this.weaponFilter !== 'all' && w.type !== this.weaponFilter) return false
+      if (!showAll && !selSlot!.compatibleTypes.includes(w.type)) return false
+      return true
+    })
+
+    // Clip to list area
+    ctx.save(); ctx.beginPath(); ctx.rect(px, listY, pw, listH); ctx.clip()
+
+    for (const w of weapons) {
+      if (cy + cardH > listY + listH) break
+      const isCur = selSlot ? this.slotWeapons.get(selSlot.id)?.id === w.id : false
+      const isHov = this.hovered?.tag === 'weapon-card' && this.hovered.weaponId === w.id
+      const compatible = !selSlot || selSlot.compatibleTypes.includes(w.type)
+      const wCol = TYPE_COLOR[w.type] ?? DIM
+
+      ctx.fillStyle = isCur ? '#0a2a14' : isHov && compatible ? '#0f1e12' : '#080e08'
+      ctx.fillRect(px + 6, cy, cardW, cardH)
+      ctx.strokeStyle = isCur ? '#3a9a4a' : compatible ? '#1e3824' : '#0f1810'
+      ctx.lineWidth = isCur ? 1.5 : 1
+      ctx.strokeRect(px + 6, cy, cardW, cardH)
+
+      // Type badge
+      ctx.fillStyle = wCol + '30'; ctx.fillRect(px + 8, cy + 4, 30, cardH - 8)
+      ctx.font = 'bold 8px sans-serif'; ctx.fillStyle = wCol; ctx.textAlign = 'center'
+      ctx.fillText(TYPE_JP[w.type]!, px + 23, cy + cardH / 2 + 3)
+
+      // Name and desc
+      ctx.font = `bold 10px sans-serif`
+      ctx.fillStyle = compatible ? TEXT : DIM; ctx.textAlign = 'left'
+      ctx.fillText(w.name, px + 44, cy + 16)
+      ctx.font = '9px sans-serif'; ctx.fillStyle = '#3a5a3a'
+      ctx.fillText(w.desc, px + 44, cy + 28)
+      ctx.fillStyle = DIM; ctx.fillText(`弾数: ${w.ammo}`, px + 44, cy + 41)
+
+      if (isCur) {
+        ctx.font = 'bold 10px sans-serif'; ctx.fillStyle = '#3a9a4a'; ctx.textAlign = 'right'
+        ctx.fillText('✓ 装備中', px + pw - 10, cy + 20)
+      } else if (compatible && selSlot) {
+        const bx = px + pw - 40
+        ctx.fillStyle = isHov ? ACCENT : '#0f2414'; ctx.fillRect(bx, cy + 8, 34, 18)
+        ctx.strokeStyle = '#2a6a30'; ctx.lineWidth = 1; ctx.strokeRect(bx, cy + 8, 34, 18)
+        ctx.font = 'bold 9px sans-serif'; ctx.fillStyle = '#a0d0a0'; ctx.textAlign = 'center'
+        ctx.fillText('装備', bx + 17, cy + 20)
+      }
+
+      if (compatible && selSlot) {
+        this.addRegion({ tag: 'weapon-card', weaponId: w.id, x: px + 6, y: cy, w: cardW, h: cardH })
+      }
+      cy += cardH + 4
+    }
+
+    if (weapons.length === 0) {
+      ctx.font = '11px sans-serif'; ctx.fillStyle = DIM; ctx.textAlign = 'center'
+      ctx.fillText('該当なし', px + pw / 2, listY + 30)
+    }
+    ctx.restore()
   }
 
-  // ── Stats bar ───────────────────────────────────────────────────────────
+  // ── Stats bar ─────────────────────────────────────────────────────────────
 
   private renderStatsBar(x: number, y: number, cw: number, ch: number): void {
     const ctx = this.ctx
@@ -585,34 +591,33 @@ export class PrepScreen {
     }
 
     const stats = [
-      { label: '耐久力', value: `${hull.hp}`,                barR: hull.hp / 2100,      col: '#22c55e' },
-      { label: '速力',   value: `${hull.maxSpeed.toFixed(1)}kt`, barR: hull.maxSpeed / 7.2, col: '#38bdf8' },
-      { label: '旋回',   value: `${Math.round(hull.turnRate * 1000) / 10}`,  barR: hull.turnRate / 0.046, col: '#fb923c' },
-      { label: '索敵',   value: `${hull.hp > 1000 ? 40 : 50}nm`, barR: 0.65,               col: '#a78bfa' },
+      { label: '耐久力', value: `${hull.hp}`,                     barR: hull.hp / 2100,       col: '#22c55e' },
+      { label: '速力',   value: `${hull.maxSpeed.toFixed(1)}kt`,  barR: hull.maxSpeed / 7.2,  col: '#38bdf8' },
+      { label: '旋回',   value: `${(hull.turnRate * 1000 | 0) / 10}`, barR: hull.turnRate / 0.046, col: '#fb923c' },
+      { label: '索敵',   value: `${hull.hp > 1000 ? 40 : 50}nm`, barR: 0.65,                 col: '#a78bfa' },
     ]
 
-    const colW = (cw * 0.72) / stats.length
+    const colW = (cw * 0.74) / stats.length
     for (let i = 0; i < stats.length; i++) {
       const s = stats[i]!; const sx = x + colW * i + 14
       ctx.font = '9px sans-serif'; ctx.fillStyle = DIM; ctx.textAlign = 'left'
       ctx.fillText(s.label, sx, y + 14)
-      const bw = colW - 20
+      const bw = colW - 22
       ctx.fillStyle = '#0a1810'; ctx.fillRect(sx, y + 18, bw, 6)
       ctx.fillStyle = s.col; ctx.fillRect(sx, y + 18, bw * Math.min(1, s.barR), 6)
       ctx.font = 'bold 13px sans-serif'; ctx.fillStyle = '#b0d8b0'
       ctx.fillText(s.value, sx, y + 44)
     }
 
-    // Slot fill summary
     const filled = this.slotWeapons.size
-    const total  = hull.slots.length
-    ctx.font = '10px sans-serif'; ctx.fillStyle = DIM; ctx.textAlign = 'right'
+    ctx.font = '9px sans-serif'; ctx.fillStyle = DIM; ctx.textAlign = 'right'
     ctx.fillText('兵装', cw - 14, y + 14)
-    ctx.font = `bold 15px sans-serif`; ctx.fillStyle = filled === total ? GREEN : YELLOW
-    ctx.fillText(`${filled} / ${total}`, cw - 14, y + 44)
+    ctx.font = `bold 15px sans-serif`
+    ctx.fillStyle = filled === hull.slots.length ? GREEN : YELLOW
+    ctx.fillText(`${filled} / ${hull.slots.length}`, cw - 14, y + 44)
   }
 
-  // ── Button bar ──────────────────────────────────────────────────────────
+  // ── Button bar ────────────────────────────────────────────────────────────
 
   private renderButtons(x: number, y: number, cw: number, ch: number): void {
     const ctx = this.ctx
@@ -625,7 +630,7 @@ export class PrepScreen {
       this.addRegion({ tag: 'back', x: x + 12, y: y + 5, w: 108, h: ch - 10 })
     }
     if (this.tab === 'hull' && this.selectedHull()) {
-      this.drawBtn(x + 12, y + 5, 118, ch - 10, '兵装設定 →', ACCENT, '#cceccc', 12)
+      this.drawBtn(x + 12, y + 5, 118, ch - 10, '兵装配置 →', ACCENT, '#cceccc', 12)
       this.addRegion({ tag: 'main-tab', tab: 'armament', x: x + 12, y: y + 5, w: 118, h: ch - 10 })
     }
 
@@ -635,11 +640,14 @@ export class PrepScreen {
     if (hull) this.addRegion({ tag: 'deploy', x: bx2, y: y + 5, w: bw, h: ch - 10 })
   }
 
-  // ── Drawing utilities ────────────────────────────────────────────────────
+  // ── Drawing utilities ─────────────────────────────────────────────────────
 
   private drawShipTopDown(ctx: CanvasRenderingContext2D, cx: number, cy: number, hw: number, hh: number, hull: HullCatalogEntry, locked: boolean): void {
     ctx.beginPath(); this.buildHullPath(ctx, cx, cy, hw, hh)
-    ctx.fillStyle = locked ? '#090f0a' : hull.shipType === 'destroyer' ? '#0d1e12' : hull.shipType === 'cruiser' ? '#112018' : '#162a1c'
+    ctx.fillStyle = locked ? '#090f0a'
+      : hull.shipType === 'destroyer'  ? '#0d1e12'
+      : hull.shipType === 'cruiser'    ? '#112018'
+      : '#162a1c'
     ctx.fill(); ctx.strokeStyle = locked ? '#1a2a1a' : BORDER; ctx.lineWidth = 1; ctx.stroke()
     for (const slot of hull.slots) {
       ctx.beginPath(); ctx.arc(cx + slot.x * hw * 0.8, cy + slot.y * hh * 0.8, 2.5, 0, Math.PI * 2)
@@ -680,7 +688,8 @@ export class PrepScreen {
   private drawBtn(x: number, y: number, w: number, h: number, label: string, bg: string, fg: string, fs = 13): void {
     const ctx = this.ctx
     ctx.fillStyle = bg; ctx.fillRect(x, y, w, h)
-    ctx.strokeStyle = (fg === '#fff' || fg === '#cceccc') ? '#3a9a4a' : BORDER; ctx.lineWidth = 1; ctx.strokeRect(x, y, w, h)
+    ctx.strokeStyle = (fg === '#fff' || fg === '#cceccc') ? '#3a9a4a' : BORDER
+    ctx.lineWidth = 1; ctx.strokeRect(x, y, w, h)
     ctx.font = `bold ${fs}px sans-serif`; ctx.fillStyle = fg; ctx.textAlign = 'center'
     ctx.fillText(label, x + w / 2, y + h / 2 + fs * 0.37)
   }
