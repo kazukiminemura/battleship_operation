@@ -64,7 +64,7 @@ export function fireWeaponAtSlot(
 
   const weaponType = weapon.type
   const cfg = getWeaponConfig(weapon.id, weaponType)
-  const muzzle = weaponMuzzlePosition(ship, weapon.id, weaponIdx)
+  const muzzle = weaponMuzzlePosition(ship, weapon, weaponIdx)
   const dx = target.x - muzzle.x
   const dy = target.y - muzzle.y
   const dist = Math.sqrt(dx * dx + dy * dy)
@@ -152,15 +152,24 @@ function isWithinFiringArc(ship: ShipEntity, weaponId: string, dx: number, dy: n
   return sideDot <= 0
 }
 
-function weaponMuzzlePosition(ship: ShipEntity, weaponId: string, weaponIdx: number): { x: number; y: number; z: number } {
+function weaponMuzzlePosition(ship: ShipEntity, weapon: ShipEntity['weapons'][number], weaponIdx: number): { x: number; y: number; z: number } {
   const dim = SHIP_MOUNT_DIMS[ship.templateId] ?? { l: 100, w: 22 }
-  const offset = weaponLocalOffset(weaponId, weaponIdx, dim)
+  const offset = weapon.mount
+    ? weaponMountOffset(weapon.mount, dim)
+    : weaponLocalOffset(weapon.id, weaponIdx, dim)
   const cosA = Math.cos(ship.angle)
   const sinA = Math.sin(ship.angle)
   return {
     x: ship.pos.x + cosA * offset.lon + sinA * offset.lat,
     y: ship.pos.y + sinA * offset.lon - cosA * offset.lat,
     z: 0,
+  }
+}
+
+function weaponMountOffset(mount: { x: number; y: number }, dim: { l: number; w: number }): { lon: number; lat: number } {
+  return {
+    lon: -mount.y * dim.l * 0.42,
+    lat: -mount.x * dim.w * 0.46,
   }
 }
 

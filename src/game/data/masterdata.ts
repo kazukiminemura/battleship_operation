@@ -17,6 +17,7 @@ export interface WeaponTemplate {
   name?: string
   type: WeaponType
   ammo: number
+  mount?: { x: number; y: number }
 }
 
 export interface StaticData {
@@ -125,6 +126,7 @@ function makeWeaponState(template: WeaponTemplate): WeaponState {
     id: template.id,
     name: template.name ?? template.id,
     type: template.type,
+    mount: template.mount ? { ...template.mount } : undefined,
     cooldownTick: 0,
     ammo: template.ammo,
     maxAmmo: template.ammo,

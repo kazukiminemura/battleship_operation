@@ -10,8 +10,9 @@ export interface PrepResult {
 }
 
 // ── Grid constants ────────────────────────────────────────────────────────
-const GRID_COLS = 7   // 0..6, centerline = col 3
-const GRID_ROWS = 12  // 0..11, bow = row 0, stern = row 11
+const GRID_COLS = 15   // 0..14, centerline = col 7
+const GRID_ROWS = 28   // 0..27, bow = row 0, stern = row 27
+const MAX_SLOT_MOVE_CELLS = 5
 
 /** Map a hull slot's normalized (x, y) to a grid cell */
 function slotCell(slot: HullSlot): { c: number; r: number } {
@@ -23,8 +24,28 @@ function slotCell(slot: HullSlot): { c: number; r: number } {
   }
 }
 
+function cellToMount(c: number, r: number): { x: number; y: number } {
+  return {
+    x: (c / (GRID_COLS - 1)) * 2 - 1,
+    y: (r / (GRID_ROWS - 1)) * 2 - 1,
+  }
+}
+
 type ScreenTab = 'hull' | 'armament'
 type WeaponFilter = WeaponType | 'all'
+type ComponentKind = 'weapon' | 'tower'
+type Footprint = { w: number; h: number }
+type GridCell = { c: number; r: number }
+type Placement = {
+  id: string
+  kind: ComponentKind
+  label: string
+  cell: GridCell
+  footprint: Footprint
+  color: string
+  slot?: HullSlot
+  weapon?: ShopWeapon
+}
 
 type Region =
   | { tag: 'class-tab';   shipType: PlayerShipType;   x: number; y: number; w: number; h: number }
@@ -32,6 +53,8 @@ type Region =
   | { tag: 'main-tab';    tab: ScreenTab;              x: number; y: number; w: number; h: number }
   | { tag: 'type-tab';    filter: WeaponFilter;        x: number; y: number; w: number; h: number }
   | { tag: 'grid-slot';   slotId: string;              x: number; y: number; w: number; h: number }
+  | { tag: 'grid-tower';                                x: number; y: number; w: number; h: number }
+  | { tag: 'grid-empty';  c: number; r: number;        x: number; y: number; w: number; h: number }
   | { tag: 'weapon-card'; weaponId: string;            x: number; y: number; w: number; h: number }
   | { tag: 'deploy';                                    x: number; y: number; w: number; h: number }
   | { tag: 'back';                                      x: number; y: number; w: number; h: number }
@@ -74,8 +97,11 @@ export class PrepScreen {
   private selectedClass: PlayerShipType = 'destroyer'
   private selectedHullIdx = 0
   private selectedSlotId: string | null = null
+  private selectedTower = false
   private weaponFilter: WeaponFilter = 'all'
   private slotWeapons = new Map<string, ShopWeapon>()  // slotId → weapon
+  private slotCells = new Map<string, { c: number; r: number }>()
+  private towerCell: GridCell | null = null
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas
@@ -89,8 +115,11 @@ export class PrepScreen {
     this.selectedClass = 'destroyer'
     this.selectedHullIdx = 0
     this.selectedSlotId = null
+    this.selectedTower = false
     this.weaponFilter = 'all'
     this.slotWeapons = new Map()
+    this.slotCells = new Map()
+    this.towerCell = null
     this.canvas.addEventListener('mousemove', this.onMoveRef)
   }
 
@@ -108,13 +137,17 @@ export class PrepScreen {
         if (r.tab === 'armament' && !this.selectedHull()) break
         this.tab = r.tab
         this.selectedSlotId = null
+        this.selectedTower = false
         break
 
       case 'class-tab':
         this.selectedClass = r.shipType
         this.selectedHullIdx = 0
         this.slotWeapons = new Map()
+        this.slotCells = new Map()
+        this.towerCell = null
         this.selectedSlotId = null
+        this.selectedTower = false
         break
 
       case 'hull-card': {
@@ -123,7 +156,10 @@ export class PrepScreen {
         if (this.selectedHullIdx !== r.index) {
           this.selectedHullIdx = r.index
           this.slotWeapons = new Map()
+          this.slotCells = new Map()
+          this.towerCell = null
           this.selectedSlotId = null
+          this.selectedTower = false
         }
         break
       }
@@ -135,7 +171,27 @@ export class PrepScreen {
       case 'grid-slot':
         // Toggle selection; clicking again deselects
         this.selectedSlotId = this.selectedSlotId === r.slotId ? null : r.slotId
+        this.selectedTower = false
         break
+
+      case 'grid-tower':
+        this.selectedTower = !this.selectedTower
+        this.selectedSlotId = null
+        break
+
+      case 'grid-empty': {
+        const hull = this.selectedHull()
+        if (!hull) break
+        if (this.selectedTower) {
+          if (this.canMoveTowerTo(r.c, r.r, hull)) this.towerCell = { c: r.c, r: r.r }
+          break
+        }
+        if (!this.selectedSlotId) break
+        const slot = hull?.slots.find(s => s.id === this.selectedSlotId)
+        if (!slot || !this.canMoveSlotTo(slot, r.c, r.r, hull)) break
+        this.slotCells.set(slot.id, { c: r.c, r: r.r })
+        break
+      }
 
       case 'weapon-card': {
         // Assign the weapon to the selected slot (if compatible), or remove it
@@ -190,7 +246,8 @@ export class PrepScreen {
     const loadout: WeaponTemplate[] = []
     for (const slot of hull.slots) {
       const w = this.slotWeapons.get(slot.id) ?? this.defaultWeapon(slot)
-      if (w) loadout.push({ id: w.id, name: w.name, type: w.type, ammo: w.ammo })
+      const cell = this.currentSlotCell(slot)
+      if (w) loadout.push({ id: w.id, name: w.name, type: w.type, ammo: w.ammo, mount: cellToMount(cell.c, cell.r) })
     }
     if (loadout.length === 0) return null
     return { templateId: hull.templateId, shipType: hull.shipType, loadout }
@@ -206,6 +263,61 @@ export class PrepScreen {
     return WEAPON_SHOP.filter(w =>
       slot.compatibleTypes.includes(w.type) && w.minStage <= this.stage
     )
+  }
+
+  private defaultTowerCell(hull: HullCatalogEntry): GridCell {
+    const y = hull.shipType === 'destroyer' ? -0.25 : hull.shipType === 'cruiser' ? 0.25 : -0.02
+    return slotCell({ id: 'tower', label: '管制塔', x: 0, y, compatibleTypes: [] })
+  }
+
+  private towerFootprint(hull: HullCatalogEntry): Footprint {
+    return hull.shipType === 'battleship' ? { w: 4, h: 5 }
+      : hull.shipType === 'cruiser' ? { w: 3, h: 4 }
+      : { w: 3, h: 3 }
+  }
+
+  private weaponFootprint(weapon: ShopWeapon | undefined, slot: HullSlot): Footprint {
+    const id = weapon?.id ?? ''
+    const type = weapon?.type ?? slot.compatibleTypes[0]
+    if (type === 'gun') {
+      if (id.includes('460mm')) return { w: 5, h: 4 }
+      if (id.includes('406mm')) return { w: 4, h: 3 }
+      if (id.includes('203mm')) return { w: 3, h: 3 }
+      if (id.includes('152mm')) return { w: 3, h: 2 }
+      return { w: 2, h: 2 }
+    }
+    if (type === 'secondary') return id.includes('152mm') ? { w: 3, h: 2 } : { w: 2, h: 1 }
+    if (type === 'torpedo') return id.includes('610mm') ? { w: 4, h: 1 } : { w: 3, h: 1 }
+    if (type === 'missile') return id.includes('longrange') || id.includes('cruise') ? { w: 3, h: 3 } : { w: 2, h: 2 }
+    if (type === 'aa') return id.includes('ciws') || id.includes('20mm') ? { w: 1, h: 1 } : { w: 2, h: 2 }
+    return { w: 2, h: 2 }
+  }
+
+  private buildPlacements(hull: HullCatalogEntry): Placement[] {
+    const towerCell = this.towerCell ?? this.defaultTowerCell(hull)
+    const placements: Placement[] = [{
+      id: 'tower',
+      kind: 'tower',
+      label: '管制塔',
+      cell: towerCell,
+      footprint: this.towerFootprint(hull),
+      color: '#d6b86a',
+    }]
+
+    for (const slot of hull.slots) {
+      const weapon = this.slotWeapons.get(slot.id)
+      placements.push({
+        id: slot.id,
+        kind: 'weapon',
+        label: weapon ? TYPE_JP[weapon.type] : slot.label,
+        cell: this.currentSlotCell(slot),
+        footprint: this.weaponFootprint(weapon, slot),
+        color: weapon ? (TYPE_COLOR[weapon.type] ?? DIM) : '#3a6a42',
+        slot,
+        weapon,
+      })
+    }
+    return placements
   }
 
   // ── Background ────────────────────────────────────────────────────────────
@@ -335,17 +447,12 @@ export class PrepScreen {
 
   private drawGridArea(px: number, py: number, pw: number, ph: number, hull: HullCatalogEntry): void {
     const ctx = this.ctx
-
-    // Build slot → cell map
-    const slotByCellKey = new Map<string, HullSlot>()
-    for (const slot of hull.slots) {
-      const { c, r } = slotCell(slot)
-      slotByCellKey.set(`${c},${r}`, slot)
-    }
+    const placements = this.buildPlacements(hull)
+    const occupied = this.occupiedCells(placements)
 
     // Grid geometry: center the grid in the available area
-    const CW = Math.floor((pw * 0.52) / GRID_COLS)   // cell width
-    const CH = Math.floor((ph * 0.82) / GRID_ROWS)   // cell height
+    const CW = Math.max(12, Math.floor((pw * 0.58) / GRID_COLS))   // cell width
+    const CH = Math.max(10, Math.floor((ph * 0.86) / GRID_ROWS))   // cell height
     const gridW = CW * GRID_COLS
     const gridH = CH * GRID_ROWS
     const gx = px + (pw - gridW) / 2  // grid left edge
@@ -365,32 +472,49 @@ export class PrepScreen {
     ctx.strokeStyle = '#2a4a30'; ctx.lineWidth = 2; ctx.stroke()
     ctx.restore()
 
+    this.drawDeckStructure(gx, gy, CW, CH, hull)
+
     // Draw all grid cells
     for (let r = 0; r < GRID_ROWS; r++) {
       for (let c = 0; c < GRID_COLS; c++) {
-        // Normalized position of this cell's center
-        const nx = (c - hw) / hw      // -1 to +1
-        const ny = (r - hh) / hh      // -1 to +1
-        const inside = Math.abs(nx) <= this.hullMaxHW(ny) * 0.98
-
         const cellX = gx + c * CW
         const cellY = gy + r * CH
-        const key = `${c},${r}`
-        const slot = slotByCellKey.get(key)
 
-        if (!inside) {
+        if (!this.isInsideHullCell(c, r)) {
           // Outside hull: skip (transparent)
           continue
         }
 
-        if (slot) {
-          this.drawSlotCell(cellX, cellY, CW, CH, slot)
+        const isOccupied = occupied.has(this.cellKey(c, r))
+        if (isOccupied) {
+          ctx.strokeStyle = 'rgba(30,60,36,0.30)'
+          ctx.lineWidth = 0.5
+          ctx.strokeRect(cellX + 0.5, cellY + 0.5, CW - 1, CH - 1)
         } else {
           // Interior non-slot cell: faint grid line only
-          ctx.strokeStyle = 'rgba(30,60,36,0.45)'; ctx.lineWidth = 0.5
+          const moveTarget = this.selectedSlotId || this.selectedTower
+            ? this.moveTargetState(hull, c, r, placements)
+            : 'none'
+          if (moveTarget === 'valid') {
+            ctx.fillStyle = 'rgba(184,148,32,0.14)'
+            ctx.fillRect(cellX, cellY, CW, CH)
+            ctx.strokeStyle = 'rgba(184,148,32,0.70)'
+          } else if (moveTarget === 'far') {
+            ctx.strokeStyle = 'rgba(80,70,32,0.45)'
+          } else {
+            ctx.strokeStyle = 'rgba(30,60,36,0.45)'
+          }
+          ctx.lineWidth = moveTarget === 'valid' ? 1 : 0.5
           ctx.strokeRect(cellX + 0.5, cellY + 0.5, CW - 1, CH - 1)
+          if (moveTarget === 'valid') {
+            this.addRegion({ tag: 'grid-empty', c, r, x: cellX, y: cellY, w: CW, h: CH })
+          }
         }
       }
+    }
+
+    for (const placement of placements) {
+      this.drawPlacement(gx, gy, CW, CH, placement)
     }
 
     // Centerline
@@ -418,51 +542,42 @@ export class PrepScreen {
     }
   }
 
-  private drawSlotCell(cellX: number, cellY: number, cw: number, ch: number, slot: HullSlot): void {
+  private drawPlacement(gx: number, gy: number, cw: number, ch: number, placement: Placement): void {
     const ctx = this.ctx
-    const weapon  = this.slotWeapons.get(slot.id)
-    const isSel   = slot.id === this.selectedSlotId
-    const isHov   = this.hovered?.tag === 'grid-slot' && this.hovered.slotId === slot.id
-    const col     = weapon ? (TYPE_COLOR[weapon.type] ?? DIM)
-                  : isSel  ? YELLOW
-                  : '#3a6a42'
+    const rect = this.footprintRect(placement.cell, placement.footprint)
+    const x = gx + rect.left * cw
+    const y = gy + rect.top * ch
+    const w = rect.w * cw
+    const h = rect.h * ch
+    const isSel = placement.kind === 'tower' ? this.selectedTower : placement.id === this.selectedSlotId
+    const isHov = placement.kind === 'tower'
+      ? this.hovered?.tag === 'grid-tower'
+      : this.hovered?.tag === 'grid-slot' && this.hovered.slotId === placement.id
+    const col = isSel ? YELLOW : placement.color
 
-    // Cell fill
-    if (weapon) {
-      ctx.fillStyle = col + '28'
-    } else if (isSel) {
-      ctx.fillStyle = '#3a3a1030'
-    } else {
-      ctx.fillStyle = isHov ? '#1a3a2030' : '#0a1e1228'
-    }
-    ctx.fillRect(cellX, cellY, cw, ch)
-
-    // Cell border — dashed for empty, solid for occupied
+    ctx.fillStyle = isHov ? col + '32' : col + '22'
+    ctx.fillRect(x, y, w, h)
     ctx.lineWidth = isSel ? 2 : 1
     ctx.strokeStyle = col
-    if (!weapon) {
-      ctx.save(); ctx.setLineDash([3, 2]); ctx.strokeRect(cellX + 0.5, cellY + 0.5, cw - 1, ch - 1); ctx.setLineDash([]); ctx.restore()
+    if (!placement.weapon && placement.kind === 'weapon') {
+      ctx.save(); ctx.setLineDash([4, 3]); ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1); ctx.restore()
     } else {
-      ctx.strokeRect(cellX + 0.5, cellY + 0.5, cw - 1, ch - 1)
+      ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1)
     }
 
-    const cx2 = cellX + cw / 2
-    const cy2 = cellY + ch / 2
-
-    if (weapon) {
-      // Weapon type icon (2-char)
-      ctx.font = `bold ${Math.min(cw * 0.4, 9)}px sans-serif`
-      ctx.fillStyle = col; ctx.textAlign = 'center'
-      ctx.fillText(TYPE_JP[weapon.type]!, cx2, cy2 + 3)
-    } else {
-      // Slot label
-      ctx.font = `${Math.min(cw * 0.38, 8)}px sans-serif`
-      ctx.fillStyle = isSel ? YELLOW : DIM; ctx.textAlign = 'center'
-      const lbl = slot.label.length > 4 ? slot.label.slice(0, 3) : slot.label
-      ctx.fillText(lbl, cx2, cy2 + 3)
+    if (placement.kind === 'tower') {
+      this.drawTowerShape(x, y, w, h, col)
+      this.addRegion({ tag: 'grid-tower', x, y, w, h })
+      return
     }
 
-    this.addRegion({ tag: 'grid-slot', slotId: slot.id, x: cellX, y: cellY, w: cw, h: ch })
+    this.drawWeaponShape(x, y, w, h, placement.weapon, placement.slot!, col)
+    ctx.font = `bold ${Math.min(11, Math.max(7, cw * 0.55))}px sans-serif`
+    ctx.fillStyle = placement.weapon ? '#e8f2e8' : DIM
+    ctx.textAlign = 'center'
+    const lbl = placement.weapon ? TYPE_JP[placement.weapon.type] : placement.slot!.label.slice(0, 3)
+    ctx.fillText(lbl, x + w / 2, y + h + Math.min(10, ch * 0.72))
+    this.addRegion({ tag: 'grid-slot', slotId: placement.id, x, y, w, h })
   }
 
   // ── Weapon palette (right) ────────────────────────────────────────────────
@@ -649,14 +764,25 @@ export class PrepScreen {
       : hull.shipType === 'cruiser'    ? '#112018'
       : '#162a1c'
     ctx.fill(); ctx.strokeStyle = locked ? '#1a2a1a' : BORDER; ctx.lineWidth = 1; ctx.stroke()
+    ctx.strokeStyle = locked ? '#152015' : 'rgba(170,210,170,0.22)'
+    ctx.beginPath(); ctx.moveTo(cx, cy - hh * 0.82); ctx.lineTo(cx, cy + hh * 0.72); ctx.stroke()
+    ctx.beginPath(); ctx.moveTo(cx - hw * 0.36, cy - hh * 0.20); ctx.lineTo(cx + hw * 0.36, cy - hh * 0.20); ctx.stroke()
+    const towerW = hull.shipType === 'battleship' ? hw * 0.42 : hw * 0.32
+    const towerH = hull.shipType === 'destroyer' ? hh * 0.15 : hh * 0.20
+    ctx.fillStyle = locked ? '#101a10' : '#243827'
+    ctx.fillRect(cx - towerW / 2, cy - towerH * 0.2, towerW, towerH)
+    ctx.strokeStyle = locked ? '#1a2a1a' : '#d6b86a'
+    ctx.strokeRect(cx - towerW / 2, cy - towerH * 0.2, towerW, towerH)
     for (const slot of hull.slots) {
-      ctx.beginPath(); ctx.arc(cx + slot.x * hw * 0.8, cy + slot.y * hh * 0.8, 2.5, 0, Math.PI * 2)
+      const sx = cx + slot.x * hw * 0.82
+      const sy = cy + slot.y * hh * 0.88
+      ctx.beginPath(); ctx.ellipse(sx, sy, 3.2, 2.1, 0, 0, Math.PI * 2)
       ctx.fillStyle = locked ? DIM : (TYPE_COLOR[slot.compatibleTypes[0]!] ?? '#2a6a3a'); ctx.fill()
     }
   }
 
   private buildHullPath(ctx: CanvasRenderingContext2D, cx: number, cy: number, hw: number, hh: number): void {
-    const steps = 40
+    const steps = 56
     ctx.moveTo(cx, cy - hh)
     for (let i = 0; i <= steps; i++) {
       const ny = -1 + (2 / steps) * i
@@ -670,9 +796,232 @@ export class PrepScreen {
   }
 
   private hullMaxHW(ny: number): number {
-    if (ny < -0.55) return Math.max(0, (ny + 1) / 0.45)
-    if (ny > 0.58)  return Math.max(0.4, 1 - (ny - 0.58) / 0.42 * 0.35)
-    return 1.0
+    if (ny < -0.82) return Math.max(0.02, (ny + 1) / 0.18 * 0.38)
+    if (ny < -0.48) return 0.38 + (ny + 0.82) / 0.34 * 0.62
+    if (ny < 0.50) return 1.0 - Math.abs(ny - 0.02) * 0.07
+    if (ny < 0.86) return 0.94 - (ny - 0.50) / 0.36 * 0.20
+    return 0.74 - (ny - 0.86) / 0.14 * 0.18
+  }
+
+  private currentSlotCell(slot: HullSlot): { c: number; r: number } {
+    return this.slotCells.get(slot.id) ?? slotCell(slot)
+  }
+
+  private moveTargetState(hull: HullCatalogEntry, c: number, r: number, placements: Placement[]): 'none' | 'far' | 'valid' {
+    if (!this.isInsideHullCell(c, r)) return 'none'
+    if (this.selectedTower) return this.canMoveTowerTo(c, r, hull, placements) ? 'valid' : 'far'
+    const slot = hull.slots.find(s => s.id === this.selectedSlotId)
+    if (!slot) return 'none'
+    return this.canMoveSlotTo(slot, c, r, hull, placements) ? 'valid' : 'far'
+  }
+
+  private canMoveSlotTo(slot: HullSlot, c: number, r: number, hull: HullCatalogEntry, placements = this.buildPlacements(hull)): boolean {
+    if (!this.isInsideHullCell(c, r)) return false
+    const home = slotCell(slot)
+    const dc = c - home.c
+    const dr = r - home.r
+    if (Math.sqrt(dc * dc + dr * dr) > MAX_SLOT_MOVE_CELLS) return false
+    const existing = placements.find(p => p.id === slot.id && p.kind === 'weapon')
+    if (!existing) return false
+    return this.canPlaceFootprint({ c, r }, existing.footprint, placements, slot.id)
+  }
+
+  private canMoveTowerTo(c: number, r: number, hull: HullCatalogEntry, placements = this.buildPlacements(hull)): boolean {
+    const home = this.defaultTowerCell(hull)
+    const dc = c - home.c
+    const dr = r - home.r
+    if (Math.sqrt(dc * dc + dr * dr) > MAX_SLOT_MOVE_CELLS) return false
+    return this.canPlaceFootprint({ c, r }, this.towerFootprint(hull), placements, 'tower')
+  }
+
+  private isInsideHullCell(c: number, r: number): boolean {
+    const hw = (GRID_COLS - 1) / 2
+    const hh = (GRID_ROWS - 1) / 2
+    const nx = (c - hw) / hw
+    const ny = (r - hh) / hh
+    return Math.abs(nx) <= this.hullMaxHW(ny) * 0.98
+  }
+
+  private canPlaceFootprint(cell: GridCell, footprint: Footprint, placements: Placement[], ignoreId: string): boolean {
+    const rect = this.footprintRect(cell, footprint)
+    for (let r = rect.top; r < rect.top + rect.h; r++) {
+      for (let c = rect.left; c < rect.left + rect.w; c++) {
+        if (c < 0 || c >= GRID_COLS || r < 0 || r >= GRID_ROWS || !this.isInsideHullCell(c, r)) return false
+      }
+    }
+
+    for (const placement of placements) {
+      if (placement.id === ignoreId) continue
+      if (this.rectsOverlap(rect, this.footprintRect(placement.cell, placement.footprint))) return false
+    }
+    return true
+  }
+
+  private occupiedCells(placements: Placement[]): Set<string> {
+    const cells = new Set<string>()
+    for (const placement of placements) {
+      const rect = this.footprintRect(placement.cell, placement.footprint)
+      for (let r = rect.top; r < rect.top + rect.h; r++) {
+        for (let c = rect.left; c < rect.left + rect.w; c++) cells.add(this.cellKey(c, r))
+      }
+    }
+    return cells
+  }
+
+  private footprintRect(cell: GridCell, footprint: Footprint): { left: number; top: number; w: number; h: number } {
+    return {
+      left: cell.c - Math.floor(footprint.w / 2),
+      top: cell.r - Math.floor(footprint.h / 2),
+      w: footprint.w,
+      h: footprint.h,
+    }
+  }
+
+  private rectsOverlap(a: { left: number; top: number; w: number; h: number }, b: { left: number; top: number; w: number; h: number }): boolean {
+    return a.left < b.left + b.w && a.left + a.w > b.left && a.top < b.top + b.h && a.top + a.h > b.top
+  }
+
+  private cellKey(c: number, r: number): string {
+    return `${c},${r}`
+  }
+
+  private drawDeckStructure(gx: number, gy: number, cw: number, ch: number, hull: HullCatalogEntry): void {
+    const ctx = this.ctx
+    const gridW = cw * GRID_COLS
+    const gridH = ch * GRID_ROWS
+    const cx = gx + gridW / 2
+    ctx.save()
+    ctx.strokeStyle = 'rgba(151,191,151,0.16)'
+    ctx.lineWidth = 1
+    for (const xMul of [-0.28, 0, 0.28]) {
+      ctx.beginPath()
+      ctx.moveTo(cx + xMul * gridW * 0.35, gy + gridH * 0.10)
+      ctx.lineTo(cx + xMul * gridW * 0.25, gy + gridH * 0.90)
+      ctx.stroke()
+    }
+    ctx.strokeStyle = 'rgba(151,191,151,0.11)'
+    for (const yMul of [0.18, 0.34, 0.52, 0.70, 0.84]) {
+      const half = this.hullMaxHW(yMul * 2 - 1) * gridW * 0.45
+      ctx.beginPath()
+      ctx.moveTo(cx - half, gy + gridH * yMul)
+      ctx.lineTo(cx + half, gy + gridH * yMul)
+      ctx.stroke()
+    }
+    if (hull.shipType !== 'destroyer') {
+      ctx.fillStyle = 'rgba(120,155,130,0.12)'
+      ctx.fillRect(cx - cw * 2.5, gy + gridH * 0.39, cw * 5, ch * 3)
+      ctx.strokeStyle = 'rgba(190,220,190,0.18)'
+      ctx.strokeRect(cx - cw * 2.5, gy + gridH * 0.39, cw * 5, ch * 3)
+    }
+    ctx.restore()
+  }
+
+  private drawTowerShape(x: number, y: number, w: number, h: number, col: string): void {
+    const ctx = this.ctx
+    const cx = x + w / 2
+    ctx.fillStyle = '#16251c'
+    ctx.fillRect(x + w * 0.22, y + h * 0.20, w * 0.56, h * 0.62)
+    ctx.strokeStyle = col
+    ctx.strokeRect(x + w * 0.22, y + h * 0.20, w * 0.56, h * 0.62)
+
+    ctx.fillStyle = '#243827'
+    ctx.fillRect(x + w * 0.12, y + h * 0.30, w * 0.76, h * 0.20)
+    ctx.fillRect(x + w * 0.30, y + h * 0.05, w * 0.40, h * 0.18)
+    ctx.strokeStyle = 'rgba(240,220,150,0.70)'
+    ctx.beginPath()
+    ctx.moveTo(cx, y + h * 0.05)
+    ctx.lineTo(cx, y - h * 0.14)
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.moveTo(cx - w * 0.28, y + h * 0.18)
+    ctx.lineTo(cx + w * 0.28, y + h * 0.18)
+    ctx.stroke()
+  }
+
+  private drawWeaponShape(x: number, y: number, w: number, h: number, weapon: ShopWeapon | undefined, slot: HullSlot, col: string): void {
+    const type = weapon?.type ?? slot.compatibleTypes[0]
+    if (type === 'gun' || type === 'secondary') {
+      this.drawGunShape(x, y, w, h, weapon, col)
+    } else if (type === 'torpedo') {
+      this.drawTorpedoShape(x, y, w, h, col)
+    } else if (type === 'aa') {
+      this.drawAaShape(x, y, w, h, col)
+    } else if (type === 'missile') {
+      this.drawMissileShape(x, y, w, h, col)
+    }
+  }
+
+  private drawGunShape(x: number, y: number, w: number, h: number, weapon: ShopWeapon | undefined, col: string): void {
+    const ctx = this.ctx
+    const heavy = weapon?.id.includes('406mm') || weapon?.id.includes('460mm')
+    const barrelCount = weapon?.id.includes('single') ? 1 : 2
+    const cx = x + w / 2
+    const cy = y + h / 2
+    const r = Math.min(w, h) * (heavy ? 0.30 : 0.25)
+    ctx.fillStyle = '#172018'
+    ctx.beginPath()
+    ctx.ellipse(cx, cy, r * 1.15, r * 0.82, 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.strokeStyle = col
+    ctx.stroke()
+    ctx.strokeStyle = '#d7d3b8'
+    ctx.lineWidth = Math.max(1, h * 0.08)
+    for (let i = 0; i < barrelCount; i++) {
+      const bx = cx + (i - (barrelCount - 1) / 2) * r * 0.5
+      ctx.beginPath()
+      ctx.moveTo(bx, cy - r * 0.25)
+      ctx.lineTo(bx, y + h * 0.06)
+      ctx.stroke()
+    }
+  }
+
+  private drawTorpedoShape(x: number, y: number, w: number, h: number, col: string): void {
+    const ctx = this.ctx
+    const tubes = w > h * 3 ? 4 : 3
+    ctx.strokeStyle = col
+    ctx.lineWidth = Math.max(1, h * 0.12)
+    for (let i = 0; i < tubes; i++) {
+      const yy = y + h * (0.32 + i * 0.12)
+      ctx.beginPath()
+      ctx.moveTo(x + w * 0.12, yy)
+      ctx.lineTo(x + w * 0.88, yy)
+      ctx.stroke()
+    }
+    ctx.strokeRect(x + w * 0.08, y + h * 0.24, w * 0.84, h * 0.52)
+  }
+
+  private drawAaShape(x: number, y: number, w: number, h: number, col: string): void {
+    const ctx = this.ctx
+    const cx = x + w / 2
+    const cy = y + h / 2
+    ctx.fillStyle = '#13251b'
+    ctx.beginPath()
+    ctx.arc(cx, cy, Math.min(w, h) * 0.26, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.strokeStyle = col
+    ctx.stroke()
+    ctx.strokeStyle = '#d7f5df'
+    ctx.lineWidth = 1
+    for (const a of [-0.5, 0.5]) {
+      ctx.beginPath()
+      ctx.moveTo(cx, cy)
+      ctx.lineTo(cx + Math.sin(a) * w * 0.28, cy - h * 0.34)
+      ctx.stroke()
+    }
+  }
+
+  private drawMissileShape(x: number, y: number, w: number, h: number, col: string): void {
+    const ctx = this.ctx
+    const cols = w > h ? 3 : 2
+    const rows = 2
+    ctx.strokeStyle = col
+    ctx.strokeRect(x + w * 0.14, y + h * 0.16, w * 0.72, h * 0.68)
+    ctx.fillStyle = col + '88'
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        ctx.fillRect(x + w * (0.24 + c * 0.20), y + h * (0.30 + r * 0.24), w * 0.10, h * 0.12)
+      }
+    }
   }
 
   private drawStatBar(x: number, y: number, w: number, label: string, ratio: number, barColor: string, value: string, locked: boolean): void {

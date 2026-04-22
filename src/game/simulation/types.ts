@@ -20,6 +20,7 @@ export interface WeaponState {
   id: string
   name: string
   type: WeaponType
+  mount?: { x: number; y: number }
   cooldownTick: number
   ammo: number
   maxAmmo: number

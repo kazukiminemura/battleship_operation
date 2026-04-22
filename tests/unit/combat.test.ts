@@ -102,6 +102,32 @@ describe('combatStep', () => {
     expect(fired?.targetPosition).toEqual({ x: player.pos.x, y: player.pos.y - 500, z: 0 })
   })
 
+  it('uses custom design mount positions for player weapon fire', () => {
+    const state = createInitialState(
+      'cruiser',
+      1,
+      [{ id: 'weapon.gun.152mm.twin.forward', name: '15.2cm移設砲', type: 'gun', ammo: 20, mount: { x: 0, y: 1 } }],
+      'hull.cruiser.player',
+    )
+    const player = state.entities.get('ship.player') as ShipEntity
+
+    const next = combatStep(
+      state,
+      [{
+        tick: 0,
+        actorId: 'ship.player',
+        type: 'fire.slot',
+        value: 0,
+        target: { x: player.pos.x, y: player.pos.y - 500, z: 0 },
+      }],
+      createRngStreams(12345),
+      STATIC_DATA,
+    )
+
+    const fired = next.eventLog.find(e => e.type === 'weapon.fired' && e.sourceId === 'ship.player')
+    expect(fired?.position?.y).toBeGreaterThan(player.pos.y)
+  })
+
   it('blocks port and starboard secondary guns outside their side arcs', () => {
     const state = createInitialState('battleship')
     const entities = new Map(state.entities)
