@@ -5,6 +5,7 @@ import { inferWeaponSoundClass, inferWeaponType, type WeaponSoundClass } from '.
 
 type ExplosionSample = keyof typeof EXPLOSION_SAMPLE_URLS
 type SpeedDirection = 'up' | 'down'
+type BgmMode = 'title' | 'prep' | 'normal' | 'boss'
 
 const EXPLOSION_SAMPLE_URLS = {
   surface: surfaceExplosionUrl,
@@ -21,7 +22,7 @@ export class SoundSystem {
   private bgmGain: GainNode | null = null
   private bgmTimer: ReturnType<typeof setInterval> | null = null
   private bgmStep = 0
-  private bgmMode: 'normal' | 'boss' = 'normal'
+  private bgmMode: BgmMode = 'normal'
 
   reset(): void {
     this.lastProcessedTick = -1
@@ -31,7 +32,7 @@ export class SoundSystem {
     return this.bgmEnabled
   }
 
-  setBgmEnabled(enabled: boolean, mode: 'normal' | 'boss' = this.bgmMode): void {
+  setBgmEnabled(enabled: boolean, mode: BgmMode = this.bgmMode): void {
     const previousMode = this.bgmMode
     this.bgmMode = mode
     if (enabled === this.bgmEnabled) {
@@ -55,7 +56,7 @@ export class SoundSystem {
     return this.bgmEnabled
   }
 
-  setBgmMode(mode: 'normal' | 'boss'): void {
+  setBgmMode(mode: BgmMode): void {
     if (mode === this.bgmMode) return
     this.bgmMode = mode
     this.bgmStep = 0
@@ -110,6 +111,63 @@ export class SoundSystem {
     pulseTone(ctx, dst, now + 0.190, direction === 'up' ? 410 : 260, 0.026, 0.060, 'triangle')
   }
 
+  playDesignSelect(): void {
+    const ctx = this.getCtx()
+    const dst = this.dest()
+    const now = ctx.currentTime
+    filteredNoise(ctx, dst, now + 0.000, 0.026, 'bandpass', 1300, 1.4, 0.001, 0.035)
+    pulseTone(ctx, dst, now + 0.006, 440, 0.030, 0.055, 'triangle')
+    pulseTone(ctx, dst, now + 0.052, 660, 0.020, 0.060, 'sine')
+  }
+
+  playDesignPlace(): void {
+    const ctx = this.getCtx()
+    const dst = this.dest()
+    const now = ctx.currentTime
+    filteredNoise(ctx, dst, now + 0.000, 0.048, 'bandpass', 360, 1.0, 0.002, 0.070)
+    sineDecay(ctx, dst, now + 0.004, 92, 0.090, 0.004, 0.120)
+    pulseTone(ctx, dst, now + 0.050, 520, 0.026, 0.070, 'triangle')
+  }
+
+  playDesignEquip(): void {
+    const ctx = this.getCtx()
+    const dst = this.dest()
+    const now = ctx.currentTime
+    filteredNoise(ctx, dst, now + 0.000, 0.040, 'highpass', 2200, 0.8, 0.001, 0.030)
+    pulseTone(ctx, dst, now + 0.010, 330, 0.036, 0.070, 'square')
+    pulseTone(ctx, dst, now + 0.075, 495, 0.030, 0.085, 'triangle')
+    pulseTone(ctx, dst, now + 0.140, 660, 0.020, 0.090, 'sine')
+  }
+
+  playDesignBack(): void {
+    const ctx = this.getCtx()
+    const dst = this.dest()
+    const now = ctx.currentTime
+    pulseTone(ctx, dst, now + 0.000, 390, 0.030, 0.070, 'triangle')
+    pulseTone(ctx, dst, now + 0.060, 260, 0.024, 0.090, 'sine')
+    filteredNoise(ctx, dst, now + 0.012, 0.018, 'bandpass', 760, 0.9, 0.002, 0.070)
+  }
+
+  playDesignConfirm(): void {
+    const ctx = this.getCtx()
+    const dst = this.dest()
+    const now = ctx.currentTime
+    filteredNoise(ctx, dst, now + 0.000, 0.052, 'bandpass', 520, 1.2, 0.002, 0.080)
+    pulseTone(ctx, dst, now + 0.000, 330, 0.040, 0.110, 'triangle')
+    pulseTone(ctx, dst, now + 0.080, 495, 0.036, 0.120, 'triangle')
+    pulseTone(ctx, dst, now + 0.165, 660, 0.032, 0.150, 'sine')
+    sweepTone(ctx, dst, now + 0.030, 220, 660, 0.030, 0.260)
+  }
+
+  playDesignDenied(): void {
+    const ctx = this.getCtx()
+    const dst = this.dest()
+    const now = ctx.currentTime
+    filteredNoise(ctx, dst, now + 0.000, 0.026, 'bandpass', 180, 0.8, 0.002, 0.085)
+    pulseTone(ctx, dst, now + 0.000, 180, 0.030, 0.070, 'square')
+    pulseTone(ctx, dst, now + 0.060, 150, 0.022, 0.090, 'square')
+  }
+
   private getCtx(): AudioContext {
     if (!this.actx) {
       this.actx = new AudioContext()
@@ -140,7 +198,10 @@ export class SoundSystem {
     }
     this.bgmGain.gain.cancelScheduledValues(ctx.currentTime)
     this.bgmGain.gain.setValueAtTime(0, ctx.currentTime)
-    this.bgmGain.gain.linearRampToValueAtTime(this.bgmMode === 'boss' ? 0.42 : 0.32, ctx.currentTime + 0.8)
+    this.bgmGain.gain.linearRampToValueAtTime(
+      this.bgmMode === 'boss' ? 0.42 : this.bgmMode === 'normal' ? 0.32 : this.bgmMode === 'prep' ? 0.22 : 0.24,
+      ctx.currentTime + 0.8,
+    )
 
     void ctx.resume().then(() => this.scheduleBgmBar())
     if (!this.bgmTimer) {
@@ -169,34 +230,134 @@ export class SoundSystem {
     if (!this.bgmEnabled || !this.bgmGain) return
     const ctx = this.getCtx()
     const start = ctx.currentTime + 0.05
-    const rootProgression = this.bgmMode === 'boss' ? [41, 46, 49, 39] : [55, 49, 62, 46]
+    if (this.bgmMode === 'title') {
+      this.scheduleTitleBgmBar(ctx, start)
+      return
+    }
+    if (this.bgmMode === 'prep') {
+      this.schedulePrepBgmBar(ctx, start)
+      return
+    }
+    const isBoss = this.bgmMode === 'boss'
+    const rootProgression = isBoss ? [41, 46, 49, 39] : [49, 46, 41, 44]
     const root = rootProgression[this.bgmStep % rootProgression.length]!
+    const phraseStep = this.bgmStep % 2
     this.bgmStep += 1
-    const padVolume = this.bgmMode === 'boss' ? 0.055 : 0.040
 
-    pulseTone(ctx, this.bgmGain, start, root * 2, padVolume, 3.8, 'triangle')
-    pulseTone(ctx, this.bgmGain, start + 0.04, root * 3, padVolume * 0.55, 3.5, 'sine')
-    pulseTone(ctx, this.bgmGain, start + 0.08, root * 4, padVolume * 0.42, 3.2, 'triangle')
+    const chord = isBoss ? [1, 1.189, 1.498, 1.782] : [1, 1.189, 1.498, 2]
+    const padVolume = isBoss ? 0.038 : 0.030
+    for (let i = 0; i < chord.length; i++) {
+      const ratio = chord[i]!
+      pulseTone(ctx, this.bgmGain, start + i * 0.025, root * 2 * ratio, padVolume, 3.8, 'sawtooth')
+      pulseTone(ctx, this.bgmGain, start + 0.06 + i * 0.020, root * 4 * ratio, padVolume * 0.22, 3.3, 'triangle')
+    }
 
-    const beatCount = this.bgmMode === 'boss' ? 16 : 8
-    const beatDur = this.bgmMode === 'boss' ? 0.25 : 0.5
+    pulseTone(ctx, this.bgmGain, start, root * 0.5, isBoss ? 0.080 : 0.058, 3.7, 'sine')
+    sweepTone(ctx, this.bgmGain, start, root * (isBoss ? 3.4 : 2.7), root * 1.1, isBoss ? 0.052 : 0.038, 3.8)
+
+    const beatCount = 16
+    const beatDur = 0.25
+    const bassLine = isBoss ? [0, 0, 7, 0, 10, 0, 7, 0, 0, -2, 3, -2, 7, 0, 10, 7] : [0, 0, 7, 0, 5, 0, 3, 0, 0, 7, 10, 7, 5, 3, 5, 7]
     for (let i = 0; i < beatCount; i++) {
       const t = start + i * beatDur
-      const accent = i % 4 === 0 ? 0.090 : this.bgmMode === 'boss' ? 0.060 : 0.044
-      pulseTone(ctx, this.bgmGain, t, root, accent, 0.42, 'sine')
-      if (i % 2 === 0) pulseTone(ctx, this.bgmGain, t + 0.02, root * 2, this.bgmMode === 'boss' ? 0.046 : 0.032, 0.32, 'triangle')
-      if (this.bgmMode === 'boss' && i % 4 === 2) {
-        filteredNoise(ctx, this.bgmGain, t + 0.01, 0.040, 'bandpass', 900, 1.2, 0.004, 0.090)
+      const downbeat = i % 4 === 0
+      const bassFreq = root * 0.5 * Math.pow(2, bassLine[i]! / 12)
+      pulseTone(ctx, this.bgmGain, t, bassFreq, downbeat ? (isBoss ? 0.120 : 0.090) : isBoss ? 0.074 : 0.052, 0.34, 'square')
+      sineDecay(ctx, this.bgmGain, t + 0.006, root * 0.42, downbeat ? 0.052 : 0.026, 0.006, 0.220)
+      if (i % 2 === 0) filteredNoise(ctx, this.bgmGain, t + 0.010, isBoss ? 0.060 : 0.044, 'lowpass', 125, 0.7, 0.004, 0.180)
+      if (i % 4 === 2) filteredNoise(ctx, this.bgmGain, t + 0.012, isBoss ? 0.040 : 0.030, 'bandpass', 1450, 1.4, 0.002, 0.110)
+      filteredNoise(ctx, this.bgmGain, t + 0.004, isBoss ? 0.018 : 0.014, 'highpass', 4200, 0.6, 0.001, 0.050)
+      if (isBoss && i % 4 === 2) {
+        pulseTone(ctx, this.bgmGain, t + 0.020, root * 2, 0.040, 0.150, 'sawtooth')
       }
+      if (i === beatCount - 1) filteredNoise(ctx, this.bgmGain, t + 0.12, isBoss ? 0.060 : 0.044, 'highpass', 3600, 0.8, 0.010, 0.420)
     }
 
-    const motif = this.bgmMode === 'boss' ? [0, 3, 7, 10, 12, 10, 7, 3, 0, -2, 0, 3, 7, 10, 12, 15] : [0, 7, 10, 12, 10, 7, 5, 3]
+    const arp = isBoss ? [0, 7, 10, 15, 12, 10, 7, 3, 0, 3, 7, 10, 12, 15, 19, 22] : [0, 7, 10, 14, 12, 10, 7, 5, 0, 5, 7, 10, 12, 10, 7, 5]
+    for (let i = 0; i < arp.length; i++) {
+      const freq = root * 4 * Math.pow(2, arp[i]! / 12)
+      pulseTone(ctx, this.bgmGain, start + i * 0.125, freq, isBoss ? 0.020 : 0.016, 0.090, 'square')
+      pulseTone(ctx, this.bgmGain, start + i * 0.125 + 0.055, freq * 2, isBoss ? 0.010 : 0.008, 0.060, 'triangle')
+    }
+
+    const motif = isBoss
+      ? [12, 10, 7, 10, 15, 14, 12, 10, 7, 10, 12, 15, 19, 17, 15, 14]
+      : phraseStep === 0
+        ? [12, 10, 7, 10, 14, 12, 10, 7, 5, 7, 10, 12, 14, 12, 10, 7]
+        : [7, 10, 12, 14, 17, 14, 12, 10, 7, 5, 7, 10, 12, 10, 7, 5]
     for (let i = 0; i < motif.length; i++) {
       const freq = root * 4 * Math.pow(2, motif[i]! / 12)
-      pulseTone(ctx, this.bgmGain, start + i * beatDur + 0.08, freq, this.bgmMode === 'boss' ? 0.038 : 0.026, 0.20, 'triangle')
+      pulseTone(ctx, this.bgmGain, start + i * beatDur + 0.045, freq, isBoss ? 0.044 : 0.034, 0.155, 'square')
+      if (i % 2 === 0) pulseTone(ctx, this.bgmGain, start + i * beatDur + 0.062, freq * 1.5, isBoss ? 0.018 : 0.013, 0.120, 'triangle')
+    }
+  }
+
+  private scheduleTitleBgmBar(ctx: AudioContext, start: number): void {
+    const rootProgression = [37, 44, 41, 49]
+    const root = rootProgression[this.bgmStep % rootProgression.length]!
+    const phraseStep = this.bgmStep % 2
+    this.bgmStep += 1
+
+    const chord = phraseStep === 0 ? [1, 1.259, 1.498, 2] : [1, 1.189, 1.498, 1.782]
+    for (let i = 0; i < chord.length; i++) {
+      const ratio = chord[i]!
+      pulseTone(ctx, this.bgmGain!, start + i * 0.055, root * 2 * ratio, 0.030, 3.8, 'triangle')
+      pulseTone(ctx, this.bgmGain!, start + 0.12 + i * 0.050, root * 4 * ratio, 0.012, 3.3, 'sine')
     }
 
-    sweepTone(ctx, this.bgmGain, start, root * (this.bgmMode === 'boss' ? 2.2 : 1.5), root * 1.05, this.bgmMode === 'boss' ? 0.060 : 0.038, 3.8)
+    pulseTone(ctx, this.bgmGain!, start, root * 0.5, 0.052, 3.7, 'sine')
+    sweepTone(ctx, this.bgmGain!, start, root * 1.2, root * 2.4, 0.018, 3.6)
+
+    for (let i = 0; i < 8; i++) {
+      const t = start + i * 0.5
+      if (i % 4 === 0) {
+        sineDecay(ctx, this.bgmGain!, t + 0.006, root * 0.42, 0.045, 0.006, 0.350)
+        filteredNoise(ctx, this.bgmGain!, t + 0.010, 0.018, 'lowpass', 120, 0.7, 0.004, 0.210)
+      }
+      if (i % 4 === 2) filteredNoise(ctx, this.bgmGain!, t + 0.010, 0.014, 'bandpass', 1100, 1.0, 0.004, 0.130)
+      filteredNoise(ctx, this.bgmGain!, t + 0.006, 0.005, 'highpass', 4200, 0.6, 0.001, 0.050)
+    }
+
+    const motif = phraseStep === 0 ? [0, 7, 12, 10, 7, 5, 7, 10] : [12, 10, 7, 5, 3, 5, 7, 10]
+    for (let i = 0; i < motif.length; i++) {
+      const freq = root * 4 * Math.pow(2, motif[i]! / 12)
+      pulseTone(ctx, this.bgmGain!, start + i * 0.5 + 0.12, freq, 0.020, 0.180, 'triangle')
+      if (i % 2 === 0) pulseTone(ctx, this.bgmGain!, start + i * 0.5 + 0.14, freq * 1.5, 0.008, 0.130, 'sine')
+    }
+  }
+
+  private schedulePrepBgmBar(ctx: AudioContext, start: number): void {
+    const rootProgression = [49, 55, 46, 41]
+    const root = rootProgression[this.bgmStep % rootProgression.length]!
+    const phraseStep = this.bgmStep % 2
+    this.bgmStep += 1
+
+    const chord = [1, 1.189, 1.498, 2]
+    for (let i = 0; i < chord.length; i++) {
+      const ratio = chord[i]!
+      pulseTone(ctx, this.bgmGain!, start + i * 0.035, root * 2 * ratio, 0.026, 3.7, 'triangle')
+      pulseTone(ctx, this.bgmGain!, start + 0.08 + i * 0.025, root * 4 * ratio, 0.008, 3.2, 'sine')
+    }
+
+    pulseTone(ctx, this.bgmGain!, start, root * 0.5, 0.040, 3.6, 'sine')
+    sweepTone(ctx, this.bgmGain!, start, root * 1.8, root * 0.9, 0.020, 3.8)
+
+    const beatDur = 0.5
+    const bassLine = phraseStep === 0 ? [0, 7, 5, 3, 0, 7, 10, 7] : [0, 5, 7, 10, 12, 10, 7, 5]
+    for (let i = 0; i < bassLine.length; i++) {
+      const t = start + i * beatDur
+      const bassFreq = root * 0.5 * Math.pow(2, bassLine[i]! / 12)
+      pulseTone(ctx, this.bgmGain!, t, bassFreq, i % 4 === 0 ? 0.048 : 0.032, 0.34, 'square')
+      if (i % 2 === 0) filteredNoise(ctx, this.bgmGain!, t + 0.012, 0.018, 'lowpass', 130, 0.7, 0.004, 0.150)
+      filteredNoise(ctx, this.bgmGain!, t + 0.006, 0.008, 'highpass', 3800, 0.6, 0.001, 0.040)
+    }
+
+    const motif = phraseStep === 0 ? [0, 7, 10, 12, 10, 7, 5, 7] : [7, 10, 12, 14, 12, 10, 7, 5]
+    for (let i = 0; i < motif.length; i++) {
+      const freq = root * 4 * Math.pow(2, motif[i]! / 12)
+      pulseTone(ctx, this.bgmGain!, start + i * beatDur + 0.08, freq, 0.018, 0.150, 'triangle')
+      if (i % 2 === 0) pulseTone(ctx, this.bgmGain!, start + i * beatDur + 0.10, freq * 1.5, 0.008, 0.120, 'sine')
+    }
   }
 
   private playFired(type: WeaponSoundClass): void {

@@ -9,7 +9,7 @@ import type { CombatState, ShipEntity, WeaponState } from './game/simulation/typ
 import { WORLD_SIZE } from './game/simulation/movement'
 import { SoundSystem } from './game/audio/sounds'
 import { StartScreen } from './game/ui/startscreen'
-import { PrepScreen } from './game/ui/prepscreen'
+import { PrepScreen, type PrepAudioCue } from './game/ui/prepscreen'
 import { StageIntroScreen } from './game/ui/stageintroscreen'
 import { ResultsScreen } from './game/ui/resultsscreen'
 import type { WeaponTemplate } from './game/data/masterdata'
@@ -56,6 +56,7 @@ function main(): void {
 
   if (!debugMode) {
     start.attach()
+    sound.setBgmEnabled(bgmEnabled, 'title')
   } else {
     selectedShip = 'battleship'
     currentStage = state.stage
@@ -66,7 +67,7 @@ function main(): void {
   const goToStart = (): void => {
     mode = 'start'
     start.attach()
-    sound.setBgmEnabled(false)
+    sound.setBgmEnabled(bgmEnabled, 'title')
     sound.reset()
   }
 
@@ -76,6 +77,7 @@ function main(): void {
     results.detach()
     mode = 'prep'
     prep.attach(stage)
+    sound.setBgmEnabled(bgmEnabled, 'prep')
   }
 
   const goToStageIntro = (stage: number): void => {
@@ -84,6 +86,7 @@ function main(): void {
     results.detach()
     mode = 'stage-intro'
     stageIntro.attach()
+    sound.setBgmEnabled(bgmEnabled, 'prep')
   }
 
   const beginCombat = (): void => {
@@ -132,6 +135,15 @@ function main(): void {
     results.attach()
   }
 
+  const playPrepAudioCue = (cue: PrepAudioCue | null): void => {
+    if (cue === 'select') sound.playDesignSelect()
+    else if (cue === 'place') sound.playDesignPlace()
+    else if (cue === 'equip') sound.playDesignEquip()
+    else if (cue === 'back') sound.playDesignBack()
+    else if (cue === 'confirm') sound.playDesignConfirm()
+    else if (cue === 'denied') sound.playDesignDenied()
+  }
+
   window.addEventListener('keydown', (e) => {
     if (e.code === 'KeyD') {
       e.preventDefault()
@@ -154,6 +166,7 @@ function main(): void {
 
     if (mode === 'prep') {
       const result = prep.checkClick(e)
+      playPrepAudioCue(prep.consumeAudioCue())
       if (result) {
         selectedShip = result.shipType
         selectedTemplateId = result.templateId

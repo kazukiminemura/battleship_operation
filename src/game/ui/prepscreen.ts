@@ -31,6 +31,7 @@ export interface PrepResult {
 
 type ScreenTab = 'hull' | 'armament'
 type WeaponFilter = WeaponType | 'all'
+export type PrepAudioCue = 'select' | 'place' | 'equip' | 'back' | 'confirm' | 'denied'
 
 type Region =
   | { tag: 'class-tab';   shipType: PlayerShipType;   x: number; y: number; w: number; h: number }
@@ -87,6 +88,7 @@ export class PrepScreen {
   private slotWeapons = new Map<string, ShopWeapon>()  // slotId → weapon
   private slotCells = new Map<string, { c: number; r: number }>()
   private towerCell: GridCell | null = null
+  private lastAudioCue: PrepAudioCue | null = null
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas
@@ -114,15 +116,20 @@ export class PrepScreen {
   }
 
   checkClick(e: MouseEvent): PrepResult | null {
+    this.lastAudioCue = null
     const r = this.hitRegion(e)
     if (!r) return null
 
     switch (r.tag) {
       case 'main-tab':
-        if (r.tab === 'armament' && !this.selectedHull()) break
+        if (r.tab === 'armament' && !this.selectedHull()) {
+          this.lastAudioCue = 'denied'
+          break
+        }
         this.tab = r.tab
         this.selectedSlotId = null
         this.selectedTower = false
+        this.lastAudioCue = 'select'
         break
 
       case 'class-tab':
@@ -133,11 +140,15 @@ export class PrepScreen {
         this.towerCell = null
         this.selectedSlotId = null
         this.selectedTower = false
+        this.lastAudioCue = 'select'
         break
 
       case 'hull-card': {
         const hull = getHullsByClass(this.selectedClass)[r.index]
-        if (!hull || hull.minStage > this.stage) break
+        if (!hull || hull.minStage > this.stage) {
+          this.lastAudioCue = 'denied'
+          break
+        }
         if (this.selectedHullIdx !== r.index) {
           this.selectedHullIdx = r.index
           this.slotWeapons = new Map()
@@ -146,72 +157,109 @@ export class PrepScreen {
           this.selectedSlotId = null
           this.selectedTower = false
         }
+        this.lastAudioCue = 'select'
         break
       }
 
       case 'type-tab':
         this.weaponFilter = r.filter
+        this.lastAudioCue = 'select'
         break
 
       case 'grid-slot':
         // Toggle selection; clicking again deselects
         this.selectedSlotId = this.selectedSlotId === r.slotId ? null : r.slotId
         this.selectedTower = false
+        this.lastAudioCue = 'select'
         break
 
       case 'grid-tower':
         this.selectedTower = !this.selectedTower
         this.selectedSlotId = null
+        this.lastAudioCue = 'select'
         break
 
       case 'grid-empty': {
         const hull = this.selectedHull()
-        if (!hull) break
+        if (!hull) {
+          this.lastAudioCue = 'denied'
+          break
+        }
         const spec = gridSpec(hull)
         const placements = this.currentPlacements(hull, spec)
         if (this.selectedTower) {
-          if (canMoveTowerTo(r.c, r.r, hull, placements, spec)) this.towerCell = { c: r.c, r: r.r }
+          if (canMoveTowerTo(r.c, r.r, hull, placements, spec)) {
+            this.towerCell = { c: r.c, r: r.r }
+            this.lastAudioCue = 'place'
+          } else {
+            this.lastAudioCue = 'denied'
+          }
           break
         }
-        if (!this.selectedSlotId) break
+        if (!this.selectedSlotId) {
+          this.lastAudioCue = 'denied'
+          break
+        }
         const slot = hull?.slots.find(s => s.id === this.selectedSlotId)
-        if (!slot || !canMoveSlotTo(slot, r.c, r.r, hull, placements, spec)) break
+        if (!slot || !canMoveSlotTo(slot, r.c, r.r, hull, placements, spec)) {
+          this.lastAudioCue = 'denied'
+          break
+        }
         this.slotCells.set(slot.id, { c: r.c, r: r.r })
+        this.lastAudioCue = 'place'
         break
       }
 
       case 'weapon-card': {
         // Assign the weapon to the selected slot (if compatible), or remove it
-        if (!this.selectedSlotId) break
+        if (!this.selectedSlotId) {
+          this.lastAudioCue = 'denied'
+          break
+        }
         const hull = this.selectedHull()
         const slot = hull?.slots.find(s => s.id === this.selectedSlotId)
-        if (!slot) break
+        if (!slot) {
+          this.lastAudioCue = 'denied'
+          break
+        }
         const w = WEAPON_SHOP.find(x => x.id === r.weaponId)
-        if (!w || !slot.compatibleTypes.includes(w.type)) break
+        if (!w || !slot.compatibleTypes.includes(w.type)) {
+          this.lastAudioCue = 'denied'
+          break
+        }
         if (this.slotWeapons.get(slot.id)?.id === w.id) {
           this.slotWeapons.delete(slot.id)   // clicking current weapon removes it
         } else {
           this.slotWeapons.set(slot.id, w)
           this.selectedSlotId = null
         }
+        this.lastAudioCue = 'equip'
         break
       }
 
       case 'deploy':
+        this.lastAudioCue = 'confirm'
         return this.buildResult()
 
       case 'back':
         if (this.tab === 'armament') this.tab = 'hull'
+        this.lastAudioCue = 'back'
         break
     }
     return null
+  }
+
+  consumeAudioCue(): PrepAudioCue | null {
+    const cue = this.lastAudioCue
+    this.lastAudioCue = null
+    return cue
   }
 
   render(): void {
     const { width: cw, height: ch } = this.canvas
     this.regions = []
     this.drawBackground(cw, ch)
-    const TAB_H = 40, STAT_H = 54, BTN_H = 44
+    const TAB_H = 56, STAT_H = 76, BTN_H = 64
     const mainY = TAB_H
     const mainH = ch - TAB_H - STAT_H - BTN_H
     this.drawTopTabs(cw, TAB_H)
@@ -276,21 +324,21 @@ export class PrepScreen {
     ctx.fillStyle = '#080f08'; ctx.fillRect(0, 0, cw, h)
     ctx.strokeStyle = BORDER; ctx.lineWidth = 1
     ctx.beginPath(); ctx.moveTo(0, h); ctx.lineTo(cw, h); ctx.stroke()
-    ctx.font = '11px sans-serif'; ctx.fillStyle = DIM; ctx.textAlign = 'right'
-    ctx.fillText(`Stage ${this.stage}`, cw - 12, h / 2 + 4)
+    ctx.font = '16px sans-serif'; ctx.fillStyle = DIM; ctx.textAlign = 'right'
+    ctx.fillText(`Stage ${this.stage}`, cw - 14, h / 2 + 6)
 
     const defs: { tab: ScreenTab; label: string }[] = [
       { tab: 'hull',     label: '艦体選択' },
       { tab: 'armament', label: '兵装配置' },
     ]
-    const tw = 114, th = h - 10, sx = 8
+    const tw = 150, th = h - 10, sx = 8
     for (let i = 0; i < defs.length; i++) {
       const t = defs[i]!; const tx = sx + i * (tw + 4)
       const active = this.tab === t.tab
       ctx.fillStyle = active ? ACCENT : '#0c1610'; ctx.fillRect(tx, 5, tw, th)
       ctx.strokeStyle = active ? '#3a9a4a' : BORDER; ctx.lineWidth = 1; ctx.strokeRect(tx, 5, tw, th)
-      ctx.font = 'bold 13px sans-serif'; ctx.fillStyle = active ? '#cce8cc' : DIM; ctx.textAlign = 'center'
-      ctx.fillText(t.label, tx + tw / 2, 5 + th / 2 + 5)
+      ctx.font = 'bold 18px sans-serif'; ctx.fillStyle = active ? '#cce8cc' : DIM; ctx.textAlign = 'center'
+      ctx.fillText(t.label, tx + tw / 2, 5 + th / 2 + 7)
       this.addRegion({ tag: 'main-tab', tab: t.tab, x: tx, y: 5, w: tw, h: th })
     }
   }
@@ -299,22 +347,22 @@ export class PrepScreen {
 
   private renderHullTab(x: number, y: number, cw: number, ch: number): void {
     const ctx = this.ctx
-    const ctW = 88, ctH = 42
+    const ctW = 118, ctH = 58
     for (let i = 0; i < CLASS_TABS.length; i++) {
       const tab = CLASS_TABS[i]!; const ty = y + 20 + i * (ctH + 8)
       const active = tab.type === this.selectedClass
       ctx.fillStyle = active ? ACCENT : '#0c1610'; ctx.fillRect(x + 8, ty, ctW, ctH)
       ctx.strokeStyle = active ? '#3a9a4a' : BORDER; ctx.lineWidth = 1; ctx.strokeRect(x + 8, ty, ctW, ctH)
-      ctx.font = 'bold 13px sans-serif'; ctx.fillStyle = active ? '#cce8cc' : TEXT; ctx.textAlign = 'center'
-      ctx.fillText(tab.label, x + 8 + ctW / 2, ty + ctH / 2 + 5)
+      ctx.font = 'bold 18px sans-serif'; ctx.fillStyle = active ? '#cce8cc' : TEXT; ctx.textAlign = 'center'
+      ctx.fillText(tab.label, x + 8 + ctW / 2, ty + ctH / 2 + 7)
       this.addRegion({ tag: 'class-tab', shipType: tab.type, x: x + 8, y: ty, w: ctW, h: ctH })
     }
 
     const hulls = getHullsByClass(this.selectedClass)
-    const cardW = Math.min(250, (cw - 116) / 3 - 14)
+    const cardW = Math.min(286, (cw - 148) / 3 - 14)
     const cardH = Math.min(310, ch - 28)
     const totalW = hulls.length * (cardW + 14) - 14
-    const startX = x + 110 + (cw - 110 - totalW) / 2
+    const startX = x + 142 + (cw - 142 - totalW) / 2
     const cardY = y + (ch - cardH) / 2
 
     for (let i = 0; i < hulls.length; i++) {
@@ -335,13 +383,13 @@ export class PrepScreen {
 
     const bc = locked ? '#1a2a1a' : hull.minStage <= 1 ? '#1a5a1a' : hull.minStage <= 4 ? '#1a3a6f' : '#5a3a0a'
     ctx.fillStyle = bc; ctx.fillRect(x + w - 70, y + 8, 62, 20)
-    ctx.font = '10px sans-serif'; ctx.fillStyle = locked ? DIM : '#c0e0c0'; ctx.textAlign = 'center'
-    ctx.fillText(hull.minStage <= 1 ? '初期解放' : `Stg.${hull.minStage}+`, x + w - 39, y + 22)
+    ctx.font = '13px sans-serif'; ctx.fillStyle = locked ? DIM : '#c0e0c0'; ctx.textAlign = 'center'
+    ctx.fillText(hull.minStage <= 1 ? '初期解放' : `Stg.${hull.minStage}+`, x + w - 39, y + 23)
 
-    ctx.font = 'bold 15px sans-serif'; ctx.fillStyle = locked ? DIM : selected ? '#a0d8a0' : TEXT
-    ctx.fillText(hull.name, x + w / 2, y + 44)
-    ctx.font = '11px sans-serif'; ctx.fillStyle = locked ? '#1a2a1a' : '#4a7a4a'
-    ctx.fillText(hull.className, x + w / 2, y + 60)
+    ctx.font = 'bold 22px sans-serif'; ctx.fillStyle = locked ? DIM : selected ? '#a0d8a0' : TEXT
+    ctx.fillText(hull.name, x + w / 2, y + 52)
+    ctx.font = '16px sans-serif'; ctx.fillStyle = locked ? '#1a2a1a' : '#4a7a4a'
+    ctx.fillText(hull.className, x + w / 2, y + 75)
 
     const dims = hullDimensions(hull)
     const previewHH = h * 0.29
@@ -352,14 +400,14 @@ export class PrepScreen {
     this.drawStatBar(x + 14, sv,      w - 28, 'HP',   hull.hp / 2100,      locked ? DIM : '#22c55e', `${hull.hp}`,                   locked)
     this.drawStatBar(x + 14, sv + 30, w - 28, '速力', hull.maxSpeed / 7.2, locked ? DIM : '#38bdf8', `${hull.maxSpeed.toFixed(1)}kt`, locked)
 
-    ctx.font = 'bold 10px sans-serif'; ctx.fillStyle = locked ? DIM : '#4a7a4a'; ctx.textAlign = 'left'
+    ctx.font = 'bold 14px sans-serif'; ctx.fillStyle = locked ? DIM : '#4a7a4a'; ctx.textAlign = 'left'
     ctx.fillText(`スロット: ${hull.slots.length} / ${Math.round(dims.lengthM)}m x ${dims.beamM.toFixed(1)}m`, x + 14, y + h - 22)
     if (selected) {
-      ctx.font = 'bold 10px sans-serif'; ctx.fillStyle = '#3a9a4a'; ctx.textAlign = 'right'
+      ctx.font = 'bold 14px sans-serif'; ctx.fillStyle = '#3a9a4a'; ctx.textAlign = 'right'
       ctx.fillText('✓ 選択中', x + w - 10, y + h - 10)
     }
     if (locked) {
-      ctx.font = 'bold 13px sans-serif'; ctx.fillStyle = '#2a3a2a'; ctx.textAlign = 'center'
+      ctx.font = 'bold 18px sans-serif'; ctx.fillStyle = '#2a3a2a'; ctx.textAlign = 'center'
       ctx.fillText('🔒 未解放', x + w / 2, y + h / 2 + 4)
     }
   }
@@ -472,16 +520,16 @@ export class PrepScreen {
     ctx.setLineDash([]); ctx.restore()
 
     // Port / Starboard labels
-    ctx.font = '9px sans-serif'; ctx.fillStyle = DIM; ctx.textAlign = 'center'
-    ctx.fillText('▲ 艦首', clx, py + 14)
-    ctx.fillText('▼ 艦尾', clx, py + ph - 4)
-    ctx.textAlign = 'right'; ctx.fillText('← 左舷', gx - 4, gy + gridH / 2 + 4)
-    ctx.textAlign = 'left';  ctx.fillText('右舷 →', gx + gridW + 4, gy + gridH / 2 + 4)
+    ctx.font = '14px sans-serif'; ctx.fillStyle = DIM; ctx.textAlign = 'center'
+    ctx.fillText('▲ 艦首', clx, py + 19)
+    ctx.fillText('▼ 艦尾', clx, py + ph - 6)
+    ctx.textAlign = 'right'; ctx.fillText('← 左舷', gx - 6, gy + gridH / 2 + 5)
+    ctx.textAlign = 'left';  ctx.fillText('右舷 →', gx + gridW + 6, gy + gridH / 2 + 5)
     ctx.textAlign = 'center'
     ctx.fillText(`${Math.round(spec.lengthM)}m x ${spec.beamM.toFixed(1)}m / 1セル ${GRID_CELL_METERS}m`, clx, gy - 14)
 
     // Column & row guides (faint numbers)
-    ctx.font = '7px sans-serif'; ctx.fillStyle = 'rgba(50,90,56,0.5)'; ctx.textAlign = 'center'
+    ctx.font = '9px sans-serif'; ctx.fillStyle = 'rgba(50,90,56,0.5)'; ctx.textAlign = 'center'
     for (let c = 0; c < spec.cols; c++) {
       if (c % 2 === 0) ctx.fillText(`${c}`, gx + c * CW + CW / 2, gy - 3)
     }
@@ -521,7 +569,7 @@ export class PrepScreen {
     }
 
     this.drawWeaponShape(x, y, w, h, placement.weapon, placement.slot!, col)
-    ctx.font = `bold ${Math.min(11, Math.max(7, cw * 0.55))}px sans-serif`
+    ctx.font = `bold ${Math.min(15, Math.max(10, cw * 0.68))}px sans-serif`
     ctx.fillStyle = placement.weapon ? '#e8f2e8' : DIM
     ctx.textAlign = 'center'
     const lbl = placement.weapon ? TYPE_JP[placement.weapon.type] : placement.slot!.label.slice(0, 3)
@@ -535,46 +583,46 @@ export class PrepScreen {
     const ctx = this.ctx
 
     // Hull title
-    ctx.font = 'bold 12px sans-serif'; ctx.fillStyle = TEXT; ctx.textAlign = 'left'
-    ctx.fillText(hull.name, px + 10, py + 20)
-    ctx.font = '10px sans-serif'; ctx.fillStyle = DIM
-    ctx.fillText(hull.className, px + 10, py + 34)
+    ctx.font = 'bold 19px sans-serif'; ctx.fillStyle = TEXT; ctx.textAlign = 'left'
+    ctx.fillText(hull.name, px + 12, py + 28)
+    ctx.font = '15px sans-serif'; ctx.fillStyle = DIM
+    ctx.fillText(hull.className, px + 12, py + 50)
 
     // Selected slot info
     const selSlot = hull.slots.find(s => s.id === this.selectedSlotId)
-    const infoY = py + 46
-    ctx.fillStyle = selSlot ? SEL : '#080e08'; ctx.fillRect(px + 6, infoY, pw - 12, 22)
+    const infoY = py + 64
+    ctx.fillStyle = selSlot ? SEL : '#080e08'; ctx.fillRect(px + 6, infoY, pw - 12, 36)
     ctx.strokeStyle = selSlot ? '#3a9a4a' : '#1a3020'; ctx.lineWidth = 1
-    ctx.strokeRect(px + 6, infoY, pw - 12, 22)
-    ctx.font = '10px sans-serif'; ctx.textAlign = 'left'
+    ctx.strokeRect(px + 6, infoY, pw - 12, 36)
+    ctx.font = '15px sans-serif'; ctx.textAlign = 'left'
     if (selSlot) {
       ctx.fillStyle = '#90d090'
-      ctx.fillText(`スロット: ${selSlot.label}`, px + 12, infoY + 15)
+      ctx.fillText(`スロット: ${selSlot.label}`, px + 12, infoY + 24)
       const compat = selSlot.compatibleTypes.map(t => TYPE_JP[t] ?? t).join(' / ')
       ctx.fillStyle = DIM; ctx.textAlign = 'right'
-      ctx.fillText(compat, px + pw - 12, infoY + 15)
+      ctx.fillText(compat, px + pw - 12, infoY + 24)
     } else {
-      ctx.fillStyle = DIM; ctx.fillText('グリッドのスロットを選択', px + 12, infoY + 15)
+      ctx.fillStyle = DIM; ctx.fillText('グリッドのスロットを選択', px + 12, infoY + 24)
     }
 
     // Weapon type tabs
-    const tabY = infoY + 28
+    const tabY = infoY + 44
     const tabW = (pw - 12) / TYPE_TABS.length
     for (let i = 0; i < TYPE_TABS.length; i++) {
       const t = TYPE_TABS[i]!; const tx = px + 6 + i * tabW
       const active = this.weaponFilter === t.filter
-      ctx.fillStyle = active ? ACCENT : '#0c1810'; ctx.fillRect(tx, tabY, tabW, 22)
-      ctx.strokeStyle = active ? '#3a9a4a' : '#1a3020'; ctx.lineWidth = 1; ctx.strokeRect(tx, tabY, tabW, 22)
-      ctx.font = `${active ? 'bold ' : ''}9px sans-serif`
+      ctx.fillStyle = active ? ACCENT : '#0c1810'; ctx.fillRect(tx, tabY, tabW, 32)
+      ctx.strokeStyle = active ? '#3a9a4a' : '#1a3020'; ctx.lineWidth = 1; ctx.strokeRect(tx, tabY, tabW, 32)
+      ctx.font = `${active ? 'bold ' : ''}12px sans-serif`
       ctx.fillStyle = active ? '#cce8cc' : DIM; ctx.textAlign = 'center'
-      ctx.fillText(t.label, tx + tabW / 2, tabY + 15)
-      this.addRegion({ tag: 'type-tab', filter: t.filter, x: tx, y: tabY, w: tabW, h: 22 })
+      ctx.fillText(t.label, tx + tabW / 2, tabY + 22)
+      this.addRegion({ tag: 'type-tab', filter: t.filter, x: tx, y: tabY, w: tabW, h: 32 })
     }
 
     // Weapon cards
-    const listY = tabY + 28
+    const listY = tabY + 42
     const listH = ph - (listY - py) - 6
-    const cardH = 52, cardW = pw - 12
+    const cardH = 78, cardW = pw - 12
     let cy = listY
 
     // Determine which weapons to show
@@ -603,27 +651,27 @@ export class PrepScreen {
       ctx.strokeRect(px + 6, cy, cardW, cardH)
 
       // Type badge
-      ctx.fillStyle = wCol + '30'; ctx.fillRect(px + 8, cy + 4, 30, cardH - 8)
-      ctx.font = 'bold 8px sans-serif'; ctx.fillStyle = wCol; ctx.textAlign = 'center'
-      ctx.fillText(TYPE_JP[w.type]!, px + 23, cy + cardH / 2 + 3)
+      ctx.fillStyle = wCol + '30'; ctx.fillRect(px + 8, cy + 6, 42, cardH - 12)
+      ctx.font = 'bold 12px sans-serif'; ctx.fillStyle = wCol; ctx.textAlign = 'center'
+      ctx.fillText(TYPE_JP[w.type]!, px + 29, cy + cardH / 2 + 4)
 
       // Name and desc
-      ctx.font = `bold 10px sans-serif`
+      ctx.font = `bold 16px sans-serif`
       ctx.fillStyle = compatible ? TEXT : DIM; ctx.textAlign = 'left'
-      ctx.fillText(w.name, px + 44, cy + 16)
-      ctx.font = '9px sans-serif'; ctx.fillStyle = '#3a5a3a'
-      ctx.fillText(w.desc, px + 44, cy + 28)
-      ctx.fillStyle = DIM; ctx.fillText(`弾数: ${w.ammo}`, px + 44, cy + 41)
+      ctx.fillText(w.name, px + 60, cy + 23)
+      ctx.font = '13px sans-serif'; ctx.fillStyle = '#3a5a3a'
+      ctx.fillText(w.desc, px + 60, cy + 44)
+      ctx.fillStyle = DIM; ctx.fillText(`弾数: ${w.ammo}`, px + 60, cy + 64)
 
       if (isCur) {
-        ctx.font = 'bold 10px sans-serif'; ctx.fillStyle = '#3a9a4a'; ctx.textAlign = 'right'
-        ctx.fillText('✓ 装備中', px + pw - 10, cy + 20)
+        ctx.font = 'bold 14px sans-serif'; ctx.fillStyle = '#3a9a4a'; ctx.textAlign = 'right'
+        ctx.fillText('✓ 装備中', px + pw - 10, cy + 29)
       } else if (compatible && selSlot) {
-        const bx = px + pw - 40
-        ctx.fillStyle = isHov ? ACCENT : '#0f2414'; ctx.fillRect(bx, cy + 8, 34, 18)
-        ctx.strokeStyle = '#2a6a30'; ctx.lineWidth = 1; ctx.strokeRect(bx, cy + 8, 34, 18)
-        ctx.font = 'bold 9px sans-serif'; ctx.fillStyle = '#a0d0a0'; ctx.textAlign = 'center'
-        ctx.fillText('装備', bx + 17, cy + 20)
+        const bx = px + pw - 60
+        ctx.fillStyle = isHov ? ACCENT : '#0f2414'; ctx.fillRect(bx, cy + 12, 54, 30)
+        ctx.strokeStyle = '#2a6a30'; ctx.lineWidth = 1; ctx.strokeRect(bx, cy + 12, 54, 30)
+        ctx.font = 'bold 14px sans-serif'; ctx.fillStyle = '#a0d0a0'; ctx.textAlign = 'center'
+        ctx.fillText('装備', bx + 27, cy + 33)
       }
 
       if (compatible && selSlot) {
@@ -633,8 +681,8 @@ export class PrepScreen {
     }
 
     if (weapons.length === 0) {
-      ctx.font = '11px sans-serif'; ctx.fillStyle = DIM; ctx.textAlign = 'center'
-      ctx.fillText('該当なし', px + pw / 2, listY + 30)
+      ctx.font = '16px sans-serif'; ctx.fillStyle = DIM; ctx.textAlign = 'center'
+      ctx.fillText('該当なし', px + pw / 2, listY + 38)
     }
     ctx.restore()
   }
@@ -649,7 +697,7 @@ export class PrepScreen {
 
     const hull = this.selectedHull()
     if (!hull) {
-      ctx.font = '12px sans-serif'; ctx.fillStyle = DIM; ctx.textAlign = 'center'
+      ctx.font = '18px sans-serif'; ctx.fillStyle = DIM; ctx.textAlign = 'center'
       ctx.fillText('艦体を選択してください', x + cw / 2, y + ch / 2 + 4)
       return
     }
@@ -664,21 +712,21 @@ export class PrepScreen {
     const colW = (cw * 0.74) / stats.length
     for (let i = 0; i < stats.length; i++) {
       const s = stats[i]!; const sx = x + colW * i + 14
-      ctx.font = '9px sans-serif'; ctx.fillStyle = DIM; ctx.textAlign = 'left'
-      ctx.fillText(s.label, sx, y + 14)
+      ctx.font = '14px sans-serif'; ctx.fillStyle = DIM; ctx.textAlign = 'left'
+      ctx.fillText(s.label, sx, y + 21)
       const bw = colW - 22
-      ctx.fillStyle = '#0a1810'; ctx.fillRect(sx, y + 18, bw, 6)
-      ctx.fillStyle = s.col; ctx.fillRect(sx, y + 18, bw * Math.min(1, s.barR), 6)
-      ctx.font = 'bold 13px sans-serif'; ctx.fillStyle = '#b0d8b0'
-      ctx.fillText(s.value, sx, y + 44)
+      ctx.fillStyle = '#0a1810'; ctx.fillRect(sx, y + 29, bw, 9)
+      ctx.fillStyle = s.col; ctx.fillRect(sx, y + 29, bw * Math.min(1, s.barR), 9)
+      ctx.font = 'bold 21px sans-serif'; ctx.fillStyle = '#b0d8b0'
+      ctx.fillText(s.value, sx, y + 66)
     }
 
     const filled = this.slotWeapons.size
-    ctx.font = '9px sans-serif'; ctx.fillStyle = DIM; ctx.textAlign = 'right'
-    ctx.fillText('兵装', cw - 14, y + 14)
-    ctx.font = `bold 15px sans-serif`
+    ctx.font = '14px sans-serif'; ctx.fillStyle = DIM; ctx.textAlign = 'right'
+    ctx.fillText('兵装', cw - 14, y + 21)
+    ctx.font = `bold 23px sans-serif`
     ctx.fillStyle = filled === hull.slots.length ? GREEN : YELLOW
-    ctx.fillText(`${filled} / ${hull.slots.length}`, cw - 14, y + 44)
+    ctx.fillText(`${filled} / ${hull.slots.length}`, cw - 14, y + 66)
   }
 
   // ── Button bar ────────────────────────────────────────────────────────────
@@ -690,18 +738,18 @@ export class PrepScreen {
     ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + cw, y); ctx.stroke()
 
     if (this.tab === 'armament') {
-      this.drawBtn(x + 12, y + 5, 108, ch - 10, '← 艦体選択', PANEL, TEXT, 12)
-      this.addRegion({ tag: 'back', x: x + 12, y: y + 5, w: 108, h: ch - 10 })
+      this.drawBtn(x + 12, y + 8, 154, ch - 16, '← 艦体選択', PANEL, TEXT, 18)
+      this.addRegion({ tag: 'back', x: x + 12, y: y + 8, w: 154, h: ch - 16 })
     }
     if (this.tab === 'hull' && this.selectedHull()) {
-      this.drawBtn(x + 12, y + 5, 118, ch - 10, '兵装配置 →', ACCENT, '#cceccc', 12)
-      this.addRegion({ tag: 'main-tab', tab: 'armament', x: x + 12, y: y + 5, w: 118, h: ch - 10 })
+      this.drawBtn(x + 12, y + 8, 164, ch - 16, '兵装配置 →', ACCENT, '#cceccc', 18)
+      this.addRegion({ tag: 'main-tab', tab: 'armament', x: x + 12, y: y + 8, w: 164, h: ch - 16 })
     }
 
     const hull = this.selectedHull()
-    const bw = 176, bx2 = x + cw - bw - 12
-    this.drawBtn(bx2, y + 5, bw, ch - 10, '出撃準備完了 →', hull ? GREEN : '#0a1810', hull ? '#fff' : DIM, 13)
-    if (hull) this.addRegion({ tag: 'deploy', x: bx2, y: y + 5, w: bw, h: ch - 10 })
+    const bw = 260, bx2 = x + cw - bw - 12
+    this.drawBtn(bx2, y + 8, bw, ch - 16, '出撃準備完了 →', hull ? GREEN : '#0a1810', hull ? '#fff' : DIM, 19)
+    if (hull) this.addRegion({ tag: 'deploy', x: bx2, y: y + 8, w: bw, h: ch - 16 })
   }
 
   // ── Drawing utilities ─────────────────────────────────────────────────────
@@ -953,12 +1001,12 @@ export class PrepScreen {
 
   private drawStatBar(x: number, y: number, w: number, label: string, ratio: number, barColor: string, value: string, locked: boolean): void {
     const ctx = this.ctx
-    ctx.font = '10px sans-serif'; ctx.fillStyle = locked ? DIM : '#4a7a4a'; ctx.textAlign = 'left'
-    ctx.fillText(label, x, y + 10)
-    ctx.fillStyle = '#0a1810'; ctx.fillRect(x + 36, y, w - 82, 10)
-    ctx.fillStyle = locked ? DIM : barColor; ctx.fillRect(x + 36, y, (w - 82) * Math.min(1, ratio), 10)
-    ctx.font = '10px sans-serif'; ctx.fillStyle = locked ? DIM : TEXT; ctx.textAlign = 'right'
-    ctx.fillText(value, x + w, y + 10)
+    ctx.font = '14px sans-serif'; ctx.fillStyle = locked ? DIM : '#4a7a4a'; ctx.textAlign = 'left'
+    ctx.fillText(label, x, y + 14)
+    ctx.fillStyle = '#0a1810'; ctx.fillRect(x + 48, y + 1, w - 112, 13)
+    ctx.fillStyle = locked ? DIM : barColor; ctx.fillRect(x + 48, y + 1, (w - 112) * Math.min(1, ratio), 13)
+    ctx.font = '14px sans-serif'; ctx.fillStyle = locked ? DIM : TEXT; ctx.textAlign = 'right'
+    ctx.fillText(value, x + w, y + 14)
   }
 
   private drawBtn(x: number, y: number, w: number, h: number, label: string, bg: string, fg: string, fs = 13): void {
