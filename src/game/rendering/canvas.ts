@@ -108,6 +108,19 @@ export class CanvasRenderer {
       if (player && !player.destroyed) this.renderRangeEllipse(player, selectedWeapon)
     }
 
+    const player = state.entities.get('ship.player') as ShipEntity | undefined
+    const canSeePosition = (pos: Vec3 | undefined): boolean => (
+      !pos || !player || player.destroyed || distanceSq(pos, player.pos) <= player.detectionRange * player.detectionRange
+    )
+    const canSeeEvent = (ev: CombatEvent): boolean => {
+      if (ev.position) return canSeePosition(ev.position)
+      const source = ev.sourceId ? state.entities.get(ev.sourceId) : undefined
+      const target = ev.targetId ? state.entities.get(ev.targetId) : undefined
+      return canSeeEntity(source, state, canSeePosition) || canSeeEntity(target, state, canSeePosition)
+    }
+
+    const visibleEffects = this.effectLog.filter(canSeeEvent)
+
     // Depth-sort all non-destroyed ships; then split by visibility
     const allShips = ([...state.entities.values()]
       .filter(e => e.kind === 'ship' && !(e as ShipEntity).destroyed) as ShipEntity[])
@@ -121,20 +134,21 @@ export class CanvasRenderer {
     this.shipWakeRenderer.update(ships, state.tick)
 
     const projectiles = [...state.entities.values()]
-      .filter(e => e.kind === 'projectile' && !(e as ProjectileEntity).destroyed) as ProjectileEntity[]
+      .filter(e => e.kind === 'projectile' && !(e as ProjectileEntity).destroyed && canSeePosition((e as ProjectileEntity).pos)) as ProjectileEntity[]
 
     const buildings = ([...state.entities.values()]
-      .filter(e => e.kind === 'building') as BuildingEntity[])
+      .filter(e => e.kind === 'building' && canSeeEntity(e, state, canSeePosition)) as BuildingEntity[])
       .sort((a, b) => a.pos.y - b.pos.y)
 
-    this.renderWaterSplashes(this.effectLog, state.tick, state.mapObstacles)
+    this.renderWaterSplashes(visibleEffects, state.tick, state.mapObstacles)
     for (const b of buildings)   this.renderBuilding(b)
     for (const p of projectiles) this.renderProjectile(p)
-    this.renderMuzzleBursts(this.effectLog, state.tick)
+    this.renderMuzzleBursts(visibleEffects, state.tick)
     this.shipWakeRenderer.render(this.ctx, this.iso, this.w2s.bind(this), ships, state.tick)
     for (const s of ships)       this.renderShip(s, state.tick)
-    this.renderLandDust(this.effectLog, state.tick, state.entities, state.mapObstacles)
-    renderShipExplosions(this.ctx, this.iso, this.w2s.bind(this), this.effectLog, state.tick, state.entities)
+    this.renderLandDust(visibleEffects, state.tick, state.entities, state.mapObstacles)
+    renderShipExplosions(this.ctx, this.iso, this.w2s.bind(this), visibleEffects, state.tick, state.entities)
+    this.renderTacticalAtmosphere()
 
     // Fog of war + detection boundary
     this.renderDetectionFog(state)
@@ -147,7 +161,6 @@ export class CanvasRenderer {
       if (player && !player.destroyed) this.renderAimPointer(player, selectedWeapon, aimPoint, state.mapObstacles)
     }
 
-    this.renderTacticalAtmosphere()
   }
 
   // ── water splashes ─────────────────────────────────────────────────────────
@@ -1173,8 +1186,9 @@ export class CanvasRenderer {
     ctx.scale(1.0, 0.5)           // isometric: vertical axis is 0.5x
     ctx.arc(0, 0, R, 0, Math.PI * 2)
     ctx.restore()
-    // even-odd fill rule: inside ellipse = hole in the fog rect
-    ctx.fillStyle = 'rgba(4,14,26,0.62)'
+    // even-odd fill rule: inside ellipse = hole in the fog rect.
+    // Outside detection should be unknown, not merely dimmed.
+    ctx.fillStyle = 'rgba(2,8,14,0.98)'
     ctx.fill('evenodd')
 
     // Soft fade inside the detection boundary
@@ -1182,7 +1196,7 @@ export class CanvasRenderer {
     ctx.scale(1.0, 0.5)
     const fade = ctx.createRadialGradient(0, 0, R * 0.72, 0, 0, R * 1.05)
     fade.addColorStop(0, 'rgba(4,14,26,0)')
-    fade.addColorStop(1, 'rgba(4,14,26,0.72)')
+    fade.addColorStop(1, 'rgba(4,14,26,0.88)')
     ctx.beginPath()
     ctx.arc(0, 0, R * 1.08, 0, Math.PI * 2)
     ctx.fillStyle = fade
@@ -1296,6 +1310,31 @@ function drawClosedPath(ctx: CanvasRenderingContext2D, points: [number, number][
 function signedNoise(x: number, y: number, salt: number): number {
   const n = Math.sin(x * 12.9898 + y * 78.233 + salt * 37.719) * 43758.5453
   return (n - Math.floor(n)) * 2 - 1
+}
+
+function distanceSq(a: Vec3, b: Vec3): number {
+  const dx = a.x - b.x
+  const dy = a.y - b.y
+  return dx * dx + dy * dy
+}
+
+function canSeeEntity(
+  entity: Entity | undefined,
+  state: CombatState,
+  canSeePosition: (pos: Vec3 | undefined) => boolean,
+): boolean {
+  if (!entity) return false
+  if (entity.kind === 'objective') return true
+  if (entity.kind === 'ship') {
+    const ship = entity as ShipEntity
+    return ship.team === 'player' || state.detectedByPlayer.has(ship.id)
+  }
+  if (entity.kind === 'building') {
+    const building = entity as BuildingEntity
+    return state.detectedByPlayer.has(building.id) || canSeePosition(building.pos)
+  }
+  if (entity.kind === 'projectile') return canSeePosition((entity as ProjectileEntity).pos)
+  return false
 }
 
 function impactWorldRadius(type: WeaponType): number {

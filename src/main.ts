@@ -86,7 +86,7 @@ function main(): void {
     results.detach()
     mode = 'stage-intro'
     stageIntro.attach()
-    sound.setBgmEnabled(bgmEnabled, 'prep')
+    sound.setBgmEnabled(bgmEnabled, 'intro')
   }
 
   const beginCombat = (): void => {
@@ -132,6 +132,7 @@ function main(): void {
   const enterResults = (): void => {
     mode = 'results'
     sound.reset()
+    sound.setBgmEnabled(bgmEnabled, 'results')
     results.attach()
   }
 

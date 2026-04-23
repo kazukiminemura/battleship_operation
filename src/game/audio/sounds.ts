@@ -1,16 +1,35 @@
 import type { CombatEvent, WeaponType } from '../simulation/types'
 import surfaceExplosionUrl from '../../assets/audio/soundeffect-lab/bomb4.mp3?url'
 import heavyExplosionUrl from '../../assets/audio/soundeffect-lab/big-explosion1.mp3?url'
+import titleBgmUrl from '../../../music/maou_bgm_neorock01.mp3?url'
+import prepAltBgmUrl from '../../../music/maou_bgm_neorock05.mp3?url'
+import prepBgmUrl from '../../../music/maou_bgm_neorock25.mp3?url'
+import introBgmUrl from '../../../music/maou_bgm_neorock14.mp3?url'
+import normalAlt3BgmUrl from '../../../music/maou_bgm_neorock29.mp3?url'
+import normalBgmUrl from '../../../music/maou_bgm_neorock35.mp3?url'
+import normalAltBgmUrl from '../../../music/maou_bgm_neorock36.mp3?url'
+import normalAlt2BgmUrl from '../../../music/maou_bgm_neorock37.mp3?url'
+import bossBgmUrl from '../../../music/maou_bgm_neorock42.mp3?url'
+import resultsBgmUrl from '../../../music/maou_bgm_neorock10.mp3?url'
 import { inferWeaponSoundClass, inferWeaponType, type WeaponSoundClass } from './weapon-audio'
 
 type ExplosionSample = keyof typeof EXPLOSION_SAMPLE_URLS
 type SpeedDirection = 'up' | 'down'
-type BgmMode = 'title' | 'prep' | 'normal' | 'boss'
+type BgmMode = 'title' | 'prep' | 'intro' | 'normal' | 'boss' | 'results'
 
 const EXPLOSION_SAMPLE_URLS = {
   surface: surfaceExplosionUrl,
   heavy: heavyExplosionUrl,
 } as const
+
+const BGM_TRACKS: Record<BgmMode, { urls: string[], volume: number }> = {
+  title:   { urls: [titleBgmUrl],                                                volume: 0.42 },
+  prep:    { urls: [prepBgmUrl, prepAltBgmUrl],                                  volume: 0.30 },
+  intro:   { urls: [introBgmUrl],                                                volume: 0.36 },
+  normal:  { urls: [normalBgmUrl, normalAltBgmUrl, normalAlt2BgmUrl, normalAlt3BgmUrl], volume: 0.44 },
+  boss:    { urls: [bossBgmUrl],                                                 volume: 0.52 },
+  results: { urls: [resultsBgmUrl],                                              volume: 0.36 },
+}
 
 export class SoundSystem {
   private actx: AudioContext | null = null
@@ -23,6 +42,16 @@ export class SoundSystem {
   private bgmTimer: ReturnType<typeof setInterval> | null = null
   private bgmStep = 0
   private bgmMode: BgmMode = 'normal'
+  private bgmAudio: HTMLAudioElement | null = null
+  private bgmFadeTimer: ReturnType<typeof setInterval> | null = null
+  private bgmTrackIndex: Record<BgmMode, number> = {
+    title: 0,
+    prep: 0,
+    intro: 0,
+    normal: 0,
+    boss: 0,
+    results: 0,
+  }
 
   reset(): void {
     this.lastProcessedTick = -1
@@ -38,7 +67,7 @@ export class SoundSystem {
     if (enabled === this.bgmEnabled) {
       if (enabled && previousMode !== mode) {
         this.restartBgm()
-      } else if (enabled && !this.bgmTimer) {
+      } else if (enabled && !this.bgmAudio) {
         this.startBgm()
       }
       return
@@ -191,26 +220,41 @@ export class SoundSystem {
   }
 
   private startBgm(): void {
-    const ctx = this.getCtx()
-    if (!this.bgmGain) {
-      this.bgmGain = ctx.createGain()
-      this.bgmGain.connect(this.dest())
-    }
-    this.bgmGain.gain.cancelScheduledValues(ctx.currentTime)
-    this.bgmGain.gain.setValueAtTime(0, ctx.currentTime)
-    this.bgmGain.gain.linearRampToValueAtTime(
-      this.bgmMode === 'boss' ? 0.42 : this.bgmMode === 'normal' ? 0.32 : this.bgmMode === 'prep' ? 0.22 : 0.24,
-      ctx.currentTime + 0.8,
-    )
+    const track = BGM_TRACKS[this.bgmMode]
+    const trackIndex = this.bgmTrackIndex[this.bgmMode] % track.urls.length
+    const trackUrl = track.urls[trackIndex]!
+    this.clearBgmFade()
 
-    void ctx.resume().then(() => this.scheduleBgmBar())
-    if (!this.bgmTimer) {
-      this.bgmTimer = setInterval(() => this.scheduleBgmBar(), 4000)
+    if (!this.bgmAudio || this.bgmAudio.src !== new URL(trackUrl, window.location.href).href) {
+      this.stopBgmAudioNow()
+      this.bgmAudio = new Audio(trackUrl)
+      this.bgmAudio.loop = track.urls.length === 1
+      this.bgmAudio.preload = 'auto'
+      this.bgmAudio.onended = () => this.playNextBgmTrack(this.bgmMode)
     }
+
+    this.bgmAudio.volume = 0
+    void this.bgmAudio.play()
+      .then(() => this.fadeBgmTo(track.volume, 700))
+      .catch(() => {
+        // Browsers may block music before the first user gesture. The next UI sound
+        // unlocks audio, and subsequent mode changes will try playback again.
+      })
+  }
+
+  private playNextBgmTrack(mode: BgmMode): void {
+    if (!this.bgmEnabled || mode !== this.bgmMode) return
+    this.bgmTrackIndex[mode] = (this.bgmTrackIndex[mode] + 1) % BGM_TRACKS[mode].urls.length
+    this.stopBgmAudioNow()
+    this.startBgm()
   }
 
   private restartBgm(): void {
-    this.stopBgm()
+    if (this.bgmTimer) {
+      clearInterval(this.bgmTimer)
+      this.bgmTimer = null
+    }
+    this.stopBgmAudioNow()
     this.startBgm()
   }
 
@@ -219,11 +263,39 @@ export class SoundSystem {
       clearInterval(this.bgmTimer)
       this.bgmTimer = null
     }
-    if (!this.bgmGain || !this.actx) return
-    const now = this.actx.currentTime
-    this.bgmGain.gain.cancelScheduledValues(now)
-    this.bgmGain.gain.setValueAtTime(this.bgmGain.gain.value, now)
-    this.bgmGain.gain.linearRampToValueAtTime(0, now + 0.45)
+    if (!this.bgmAudio) return
+    this.fadeBgmTo(0, 350, () => this.stopBgmAudioNow())
+  }
+
+  private stopBgmAudioNow(): void {
+    this.clearBgmFade()
+    if (!this.bgmAudio) return
+    this.bgmAudio.onended = null
+    this.bgmAudio.pause()
+    this.bgmAudio.currentTime = 0
+    this.bgmAudio = null
+  }
+
+  private fadeBgmTo(target: number, durationMs: number, done?: () => void): void {
+    if (!this.bgmAudio) return
+    this.clearBgmFade()
+    const audio = this.bgmAudio
+    const from = audio.volume
+    const startedAt = performance.now()
+    this.bgmFadeTimer = setInterval(() => {
+      const t = Math.min(1, (performance.now() - startedAt) / durationMs)
+      audio.volume = from + (target - from) * t
+      if (t >= 1) {
+        this.clearBgmFade()
+        done?.()
+      }
+    }, 32)
+  }
+
+  private clearBgmFade(): void {
+    if (!this.bgmFadeTimer) return
+    clearInterval(this.bgmFadeTimer)
+    this.bgmFadeTimer = null
   }
 
   private scheduleBgmBar(): void {

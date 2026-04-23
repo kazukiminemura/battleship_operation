@@ -72,7 +72,7 @@ export class HUD {
     const barH = 130
     const pad = 12
 
-    ctx.fillStyle = 'rgba(0,0,0,0.68)'
+    ctx.fillStyle = '#020812'
     ctx.fillRect(0, 0, canvas.width, barH)
 
     // HP
@@ -121,7 +121,7 @@ export class HUD {
       const wType = weapon?.type
 
       // slot bg
-      ctx.fillStyle = isSelected ? 'rgba(59,130,246,0.30)' : 'rgba(255,255,255,0.04)'
+      ctx.fillStyle = isSelected ? '#0b2a5f' : '#07111f'
       ctx.strokeStyle = isSelected ? '#3b82f6' : '#334155'
       ctx.lineWidth = 1.5
       roundRect(ctx, x, slotY, slotW, barH - 6, 5)
@@ -154,7 +154,7 @@ export class HUD {
       const btnY = slotY + 57
       const btnW = slotW - 12
       const btnH = 16
-      ctx.fillStyle = !weapon ? 'rgba(30,41,59,0.18)' : isAuto ? 'rgba(34,197,94,0.22)' : 'rgba(100,116,139,0.18)'
+      ctx.fillStyle = !weapon ? '#111827' : isAuto ? '#064e2d' : '#172033'
       ctx.strokeStyle = !weapon ? '#334155' : isAuto ? '#22c55e' : '#475569'
       ctx.lineWidth = 1
       roundRect(ctx, btnX, btnY, btnW, btnH, 3)
@@ -175,7 +175,7 @@ export class HUD {
     const allBtnH = 24
     const allAuto = player.weapons.length > 0 && player.weapons.every(w => w.autoFire)
 
-    ctx.fillStyle = allAuto ? 'rgba(34,197,94,0.25)' : 'rgba(239,68,68,0.18)'
+    ctx.fillStyle = allAuto ? '#064e2d' : '#3b1118'
     ctx.strokeStyle = allAuto ? '#22c55e' : '#ef4444'
     ctx.lineWidth = 1.5
     roundRect(ctx, allBtnX, allBtnY, allBtnW, allBtnH, 4)
@@ -190,7 +190,7 @@ export class HUD {
     this.clickRegions.push({ id: 'toggle-all', x: allBtnX, y: allBtnY, w: allBtnW, h: allBtnH })
 
     const bgmBtnY = allBtnY + 32
-    ctx.fillStyle = bgmEnabled ? 'rgba(59,130,246,0.25)' : 'rgba(100,116,139,0.18)'
+    ctx.fillStyle = bgmEnabled ? '#12356b' : '#172033'
     ctx.strokeStyle = bgmEnabled ? '#60a5fa' : '#475569'
     ctx.lineWidth = 1.5
     roundRect(ctx, allBtnX, bgmBtnY, allBtnW, allBtnH, 4)
@@ -285,10 +285,10 @@ export class HUD {
     const { ctx, canvas } = this
     const rSize = RADAR_SIZE
     const rX = canvas.width - rSize - RADAR_PAD
-    const rY = canvas.height - rSize - 30 - RADAR_PAD  // above bottom bar
+    const rY = canvas.height - rSize - 42 - RADAR_PAD  // above bottom bar
 
     // background
-    ctx.fillStyle = 'rgba(0,10,20,0.82)'
+    ctx.fillStyle = '#020812'
     ctx.strokeStyle = '#1e4a6a'
     ctx.lineWidth = 1.5
     roundRect(ctx, rX, rY, rSize, rSize, 6)
@@ -374,12 +374,15 @@ export class HUD {
     ctx.setLineDash([])
 
     const liveEnemyIds = new Set<string>()
+    const knownEnemyIds = new Set<string>(state.enemyContacts.keys())
     for (const entity of state.entities.values()) {
       if (entity.kind !== 'ship') continue
       const ship = entity as ShipEntity
       if (ship.destroyed || ship.team === 'player') continue
 
       liveEnemyIds.add(ship.id)
+      if (!state.detectedByPlayer.has(ship.id)) continue
+      knownEnemyIds.add(ship.id)
       if (!isInRadarRange(ship.pos.x, ship.pos.y)) continue
       const [bx, by] = toRadar(ship.pos.x, ship.pos.y)
       if (sweepStrength(bx, by) > 0.72) {
@@ -393,7 +396,7 @@ export class HUD {
       }
     }
     for (const [id, contact] of this.radarContacts) {
-      if (contact.stage !== state.stage || !liveEnemyIds.has(id) || state.tick - contact.tick > RADAR_CONTACT_TICKS || contact.tick > state.tick) {
+      if (contact.stage !== state.stage || !liveEnemyIds.has(id) || !knownEnemyIds.has(id) || state.tick - contact.tick > RADAR_CONTACT_TICKS || contact.tick > state.tick) {
         this.radarContacts.delete(id)
       }
     }
@@ -465,6 +468,7 @@ export class HUD {
       if (entity.kind !== 'building') continue
       const building = entity as BuildingEntity
       if (building.destroyed) continue
+      if (!state.detectedByPlayer.has(building.id)) continue
       if (!isInRadarRange(building.pos.x, building.pos.y, building.radius)) continue
 
       const [bx, by] = toRadar(building.pos.x, building.pos.y)
@@ -544,9 +548,9 @@ export class HUD {
     const mSize = RADAR_SIZE
     const mGap  = 6
     const mX = canvas.width - RADAR_SIZE - RADAR_PAD - mGap - mSize
-    const mY = canvas.height - mSize - 30 - RADAR_PAD
+    const mY = canvas.height - mSize - 42 - RADAR_PAD
 
-    ctx.fillStyle = 'rgba(0,10,20,0.82)'
+    ctx.fillStyle = '#020812'
     ctx.strokeStyle = '#1e4a6a'
     ctx.lineWidth = 1.5
     roundRect(ctx, mX, mY, mSize, mSize, 6)
@@ -614,19 +618,58 @@ export class HUD {
 
   private renderBottomBar(): void {
     const { ctx, canvas } = this
-    const barH = 28
+    const barH = 40
     const y = canvas.height - barH
 
-    ctx.fillStyle = 'rgba(0,0,0,0.55)'
+    ctx.fillStyle = '#020812'
     ctx.fillRect(0, y, canvas.width, barH)
+    ctx.strokeStyle = '#12395a'
+    ctx.lineWidth = 1.5
+    ctx.beginPath()
+    ctx.moveTo(0, y + 0.5)
+    ctx.lineTo(canvas.width, y + 0.5)
+    ctx.stroke()
 
-    ctx.fillStyle = '#475569'
-    ctx.font = '11px monospace'
-    ctx.fillText(
-      '↑/W: 増速  ↓/S: 減速  ←→/A/E: 旋回  D:デバッグ切替  Click: 射撃  1-8:兵装選択',
-      12,
-      y + 18
-    )
+    const items: Array<[string, string]> = [
+      ['↑ / W', '増速'],
+      ['↓ / S', '減速'],
+      ['← → / A E', '旋回'],
+      ['Click', '射撃'],
+      ['1-8', '兵装選択'],
+      ['D', 'デバッグ'],
+      ['R', 'タイトル'],
+    ]
+
+    let x = 14
+    const cy = y + 24
+    ctx.textBaseline = 'middle'
+    for (const [key, label] of items) {
+      ctx.font = 'bold 13px monospace'
+      const keyW = ctx.measureText(key).width + 14
+      const labelW = ctx.measureText(label).width + 12
+
+      ctx.fillStyle = '#0b2742'
+      roundRect(ctx, x, y + 8, keyW, 24, 4)
+      ctx.fill()
+      ctx.strokeStyle = '#25638c'
+      ctx.lineWidth = 1
+      roundRect(ctx, x, y + 8, keyW, 24, 4)
+      ctx.stroke()
+
+      ctx.fillStyle = '#93c5fd'
+      ctx.textAlign = 'center'
+      ctx.fillText(key, x + keyW / 2, cy)
+
+      ctx.fillStyle = '#cbd5e1'
+      ctx.textAlign = 'left'
+      ctx.font = '13px sans-serif'
+      ctx.fillText(label, x + keyW + 7, cy)
+
+      x += keyW + labelW + 18
+      if (x > canvas.width - 140) break
+    }
+    ctx.textBaseline = 'alphabetic'
+    ctx.textAlign = 'left'
   }
 
 }

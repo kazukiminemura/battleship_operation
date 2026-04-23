@@ -1,16 +1,9 @@
 import type { CombatState, Metrics } from '../simulation/types'
+import { displayWeaponName } from '../data/weapon-names'
 
 export type ResultAction = 'next' | 'retry' | 'title'
 
 interface Region { id: ResultAction; x: number; y: number; w: number; h: number }
-
-const WEAPON_TYPE_LABELS: Record<string, string> = {
-  gun: '主砲',
-  secondary: '副砲',
-  torpedo: '魚雷',
-  aa: '対空',
-  missile: '誘導',
-}
 
 export class ResultsScreen {
   private canvas: HTMLCanvasElement
@@ -229,14 +222,14 @@ export class ResultsScreen {
       const shots  = m.shotCountByWeapon[wid] ?? 0
       const hits   = m.hitCountByWeapon[wid]  ?? 0
       const damage = m.damageByWeapon[wid]     ?? 0
-      const label  = WEAPON_TYPE_LABELS[wid] ?? wid
+      const label  = displayWeaponName(wid)
 
       const ry = y + h * 0.295 + i * rowH
 
       ctx.textAlign = 'left'
       ctx.fillStyle = '#64748b'
       ctx.font = `${Math.round(H * 0.026)}px sans-serif`
-      ctx.fillText(label, x + w * 0.08, ry)
+      ctx.fillText(fitText(ctx, label, w * 0.40), x + w * 0.08, ry)
 
       ctx.textAlign = 'center'
       ctx.fillStyle = '#94a3b8'
@@ -280,6 +273,13 @@ function divider(ctx: CanvasRenderingContext2D, x: number, y: number, w: number)
   ctx.moveTo(x, y)
   ctx.lineTo(x + w, y)
   ctx.stroke()
+}
+
+function fitText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string {
+  if (ctx.measureText(text).width <= maxWidth) return text
+  let t = text
+  while (t.length > 0 && ctx.measureText(`${t}...`).width > maxWidth) t = t.slice(0, -1)
+  return t.length > 0 ? `${t}...` : '...'
 }
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
