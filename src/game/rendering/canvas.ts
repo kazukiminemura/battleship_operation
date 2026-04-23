@@ -5,6 +5,7 @@ import { renderShipExplosions } from './effects-renderer'
 import { renderProjectile as renderProjectileEntity } from './projectile-renderer'
 import { SHIP_DIMS, SHIP_SHAPES, type ShipShapeClass } from './ship-rendering-data'
 import { ShipWakeRenderer } from './wake-renderer'
+import snowmuraSpriteUrl from '../../assets/ships/snowmura-snowman-sprite.png?url'
 
 // Isometric projection parameters
 interface IsoParams {
@@ -26,12 +27,15 @@ export class CanvasRenderer {
   private effectLog: CombatEvent[] = []
   private effectKeys = new Set<string>()
   private shipWakeRenderer = new ShipWakeRenderer()
+  private snowmuraSprite: HTMLImageElement
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas
     const ctx = canvas.getContext('2d')
     if (!ctx) throw new Error('Could not get 2D context')
     this.ctx = ctx
+    this.snowmuraSprite = new Image()
+    this.snowmuraSprite.src = snowmuraSpriteUrl
     this.resize()
     window.addEventListener('resize', () => this.resize())
   }
@@ -1030,6 +1034,26 @@ export class CanvasRenderer {
   ): void {
     const { ctx, iso } = this
     const [cx, cy] = this.w2s(ship.pos.x, ship.pos.y)
+    const sprite = this.snowmuraSprite
+    if (sprite.complete && sprite.naturalWidth > 0) {
+      ctx.save()
+      ctx.translate(cx, cy - hPx * 0.72)
+      ctx.rotate(ship.angle + Math.PI / 2)
+      const spriteW = Math.max(88, dim.l * iso.scale * 0.98)
+      const spriteH = spriteW * (sprite.naturalHeight / sprite.naturalWidth)
+      ctx.drawImage(sprite, -spriteW / 2, -spriteH * 0.72, spriteW, spriteH)
+      ctx.restore()
+
+      const barW = dim.l * iso.scale * 0.65
+      const barY = cy - hPx * 1.95 - 14
+      const hpRatio = ship.hp / ship.maxHp
+      ctx.fillStyle = 'rgba(0,0,0,0.6)'
+      ctx.fillRect(cx - barW / 2 - 1, barY - 1, barW + 2, 6)
+      ctx.fillStyle = hpRatio > 0.5 ? '#22c55e' : hpRatio > 0.25 ? '#eab308' : '#ef4444'
+      ctx.fillRect(cx - barW / 2, barY, barW * hpRatio, 4)
+      return
+    }
+
     const drawSnowPoly = (lon: number, lat: number, rx: number, ry: number, lift: number, facets: number): void => {
       const [wx, wy] = localToWorld(lon, lat)
       const [sx, sy] = this.w2s(wx, wy)
@@ -1619,16 +1643,21 @@ function shipHullPoints(shape: ShipShapeClass, l: number, w: number): [number, n
     ]
   }
   if (shape === 'yukimura') {
+    // 丸みを帯びた雪だるま船体: 船首は小さく尖り、最大幅は中央付近、船尾は広く丸い
     return [
-      [l, 0],
-      [l * 0.86, -w * 0.68],
-      [l * 0.36, -w],
-      [-l * 0.70, -w * 0.95],
-      [-l, -w * 0.55],
-      [-l, w * 0.55],
-      [-l * 0.70, w * 0.95],
-      [l * 0.36, w],
-      [l * 0.86, w * 0.68],
+      [l,         0],
+      [l * 0.88, -w * 0.50],
+      [l * 0.55, -w * 0.90],
+      [l * 0.05, -w * 1.00],
+      [-l * 0.45, -w * 0.92],
+      [-l * 0.82, -w * 0.64],
+      [-l,        -w * 0.28],
+      [-l,         w * 0.28],
+      [-l * 0.82,  w * 0.64],
+      [-l * 0.45,  w * 0.92],
+      [l * 0.05,   w * 1.00],
+      [l * 0.55,   w * 0.90],
+      [l * 0.88,   w * 0.50],
     ]
   }
   const sternWidth = shape === 'boss' ? 0.78 : 0.62

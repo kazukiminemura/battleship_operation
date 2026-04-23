@@ -187,7 +187,7 @@ export const HULL_CATALOG: HullCatalogEntry[] = [
   {
     templateId: 'hull.bb.yukimura',
     shipType: 'battleship',
-    name: '幸村',
+    name: '雪村',
     className: '雪帽特別戦艦',
     minStage: 1,
     hp: 1800, maxSpeed: 4.2, turnRate: 0.024,

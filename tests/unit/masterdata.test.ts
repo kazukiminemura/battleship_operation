@@ -70,15 +70,15 @@ describe('createInitialState', () => {
     }
   })
 
-  it('includes the special battleship Yukimura', () => {
+  it('includes the special battleship Snowmura', () => {
     const template = STATIC_DATA.ships['hull.bb.yukimura']
     const catalog = HULL_CATALOG.find(h => h.templateId === 'hull.bb.yukimura')
 
     expect(template).toBeDefined()
-    if (!template) throw new Error('Yukimura template missing')
+    if (!template) throw new Error('Snowmura template missing')
     expect(template.weapons).toHaveLength(MAX_WEAPON_SLOTS)
     expect(template.hp).toBe(1800)
-    expect(catalog?.name).toBe('幸村')
+    expect(catalog?.name).toBe('雪村')
     expect(catalog?.shipType).toBe('battleship')
     expect(catalog?.minStage).toBe(1)
   })
