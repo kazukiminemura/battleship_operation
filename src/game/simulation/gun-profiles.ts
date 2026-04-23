@@ -25,7 +25,7 @@ export function calcDispersionHalfAngle(
                       : profile.shellType === 'SAP' ? 1.0
                       : 1.25                          // HE
 
-  const baseAngle  = 0.008 * caliberFactor * barrelFactor * shellFactor
+  const baseAngle  = 0.005 * caliberFactor * barrelFactor * shellFactor
   const rangeFactor = 0.4 + 0.6 * (range / maxRange)
 
   return baseAngle * rangeFactor
