@@ -56,7 +56,7 @@ export class HUD {
     return this.clickRegions
   }
 
-  render(state: CombatState, weaponMode: WeaponMode, worldSize: number, bgmEnabled: boolean): void {
+  render(state: CombatState, weaponMode: WeaponMode, worldSize: number, bgmEnabled: boolean, subtitle = ''): void {
     const player = state.entities.get('ship.player') as ShipEntity | undefined
     if (!player) return
 
@@ -65,6 +65,36 @@ export class HUD {
     this.renderRadar(state, player, worldSize)
     this.renderGlobalMap(state, player, worldSize)
     this.renderBottomBar()
+    if (subtitle) this.renderSubtitle(subtitle)
+  }
+
+  private renderSubtitle(text: string): void {
+    const { ctx, canvas } = this
+    const pad = 16
+    const barH = 40
+    ctx.font = 'bold 17px sans-serif'
+    const textW = ctx.measureText(text).width
+    const boxW = textW + pad * 2
+    const boxH = 34
+    const bx = (canvas.width - boxW) / 2
+    const by = canvas.height - barH - boxH - 8
+
+    ctx.globalAlpha = 0.82
+    ctx.fillStyle = '#020c1a'
+    roundRect(ctx, bx, by, boxW, boxH, 6)
+    ctx.fill()
+    ctx.strokeStyle = '#2563a8'
+    ctx.lineWidth = 1.5
+    roundRect(ctx, bx, by, boxW, boxH, 6)
+    ctx.stroke()
+    ctx.globalAlpha = 1.0
+
+    ctx.fillStyle = '#e2f0ff'
+    ctx.textBaseline = 'middle'
+    ctx.textAlign = 'center'
+    ctx.fillText(text, canvas.width / 2, by + boxH / 2)
+    ctx.textBaseline = 'alphabetic'
+    ctx.textAlign = 'left'
   }
 
   private renderTopBar(state: CombatState, player: ShipEntity, weaponMode: WeaponMode, bgmEnabled: boolean): void {

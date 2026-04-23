@@ -8,6 +8,7 @@ import { createDebugState, createInitialState, STATIC_DATA, type PlayerShipType 
 import type { CombatState, ShipEntity, WeaponState } from './game/simulation/types'
 import { WORLD_SIZE } from './game/simulation/movement'
 import { SoundSystem } from './game/audio/sounds'
+import { NavigatorVoice } from './game/audio/navigator-voice'
 import { StartScreen } from './game/ui/startscreen'
 import { PrepScreen, type PrepAudioCue } from './game/ui/prepscreen'
 import { StageIntroScreen } from './game/ui/stageintroscreen'
@@ -32,6 +33,7 @@ function main(): void {
   const stageIntro = new StageIntroScreen(canvas)
   const results  = new ResultsScreen(canvas)
   const sound    = new SoundSystem()
+  const navigator = new NavigatorVoice()
   const input    = new InputAdapter(canvas, renderer, {
     onWeaponSelected: (weaponMode) => {
       const weapon = selectedWeapon(state, weaponMode)
@@ -95,6 +97,8 @@ function main(): void {
     rng = createRngStreams(BASE_SEED + currentStage * 1009)
     sound.reset()
     sound.setBgmEnabled(bgmEnabled, isBossStage(state) ? 'boss' : 'normal')
+    navigator.reset()
+    navigator.announceCombatStart()
     mode = 'combat'
     stageIntro.detach()
   }
@@ -112,6 +116,8 @@ function main(): void {
     rng = createRngStreams(BASE_SEED + 99099)
     sound.reset()
     sound.setBgmEnabled(bgmEnabled, isBossStage(state) ? 'boss' : 'normal')
+    navigator.reset()
+    navigator.announceCombatStart()
     mode = 'combat'
     start.detach()
     prep.detach()
@@ -283,7 +289,8 @@ function main(): void {
       }
 
       renderer.render(state, selectedWeapon(state, input.getWeaponMode()), input.getAimPoint())
-      hud.render(state, input.getWeaponMode(), WORLD_SIZE, bgmEnabled)
+      navigator.update(state)
+      hud.render(state, input.getWeaponMode(), WORLD_SIZE, bgmEnabled, navigator.getSubtitle())
       sound.processEvents(state.eventLog, state.tick)
     },
   })
