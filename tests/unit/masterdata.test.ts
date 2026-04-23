@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createDebugState, createInitialState, STATIC_DATA, type PlayerShipType } from '../../src/game/data/masterdata'
+import { HULL_CATALOG } from '../../src/game/data/hull-catalog'
 import { MAX_WEAPON_SLOTS, type BuildingEntity, type ShipEntity } from '../../src/game/simulation/types'
 import { WORLD_SIZE } from '../../src/game/simulation/movement'
 
@@ -69,6 +70,19 @@ describe('createInitialState', () => {
     }
   })
 
+  it('includes the special battleship Yukimura', () => {
+    const template = STATIC_DATA.ships['hull.bb.yukimura']
+    const catalog = HULL_CATALOG.find(h => h.templateId === 'hull.bb.yukimura')
+
+    expect(template).toBeDefined()
+    if (!template) throw new Error('Yukimura template missing')
+    expect(template.weapons).toHaveLength(MAX_WEAPON_SLOTS)
+    expect(template.hp).toBe(1800)
+    expect(catalog?.name).toBe('幸村')
+    expect(catalog?.shipType).toBe('battleship')
+    expect(catalog?.minStage).toBe(1)
+  })
+
   it('creates ten stages and puts a boss in the final stage', () => {
     expect(STATIC_DATA.stages).toHaveLength(10)
 
@@ -126,5 +140,16 @@ describe('createInitialState', () => {
     expect(debugDestroyer.maxHp).toBe(normalDestroyer.maxHp * 4)
     expect(debugDestroyer.hp).toBe(debugDestroyer.maxHp)
     expect(debugBoss.maxHp).toBe(Math.round(normalBoss.maxHp * 2.5))
+  })
+
+  it('maxes debug player visibility and speed', () => {
+    const debugState = createDebugState()
+    const player = debugState.entities.get('ship.player') as ShipEntity
+
+    expect(player.detectionRange).toBe(WORLD_SIZE * 2)
+    expect(player.maxSpeed).toBe(20)
+    expect(player.speed).toBe(20)
+    expect(player.targetSpeed).toBe(20)
+    expect(player.speedLevel).toBe('full')
   })
 })

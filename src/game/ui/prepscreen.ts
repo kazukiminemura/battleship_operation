@@ -68,6 +68,14 @@ const DIM    = '#3a5840'
 const ACCENT = '#1a6a2a'
 const GREEN  = '#16a34a'
 const YELLOW = '#b89420'
+
+const YUKIMURA_DEFAULT_WEAPONS: Record<string, ShopWeapon> = {
+  s0: { id: 'weapon.gun.yukimura.snowball.forward', name: '雪玉主砲(前)', type: 'gun', ammo: 260, desc: '丸い雪玉を高弾道で撃ち出す', cost: 0, minStage: 1 },
+  s1: { id: 'weapon.gun.yukimura.snowball.center', name: '雪玉主砲(中)', type: 'gun', ammo: 260, desc: '丸い雪玉を高弾道で撃ち出す', cost: 0, minStage: 1 },
+  s2: { id: 'weapon.gun.yukimura.snowball.aft', name: '雪玉主砲(後)', type: 'gun', ammo: 260, desc: '丸い雪玉を高弾道で撃ち出す', cost: 0, minStage: 1 },
+  s3: { id: 'weapon.secondary.yukimura.marshmallow.port', name: '左舷マシュマロ砲', type: 'secondary', ammo: 520, desc: 'ふわっと白いマシュマロ弾を速射する', cost: 0, minStage: 1 },
+  s4: { id: 'weapon.secondary.yukimura.marshmallow.starboard', name: '右舷マシュマロ砲', type: 'secondary', ammo: 520, desc: 'ふわっと白いマシュマロ弾を速射する', cost: 0, minStage: 1 },
+}
 const LOCKED = '#090f0a'
 const SEL    = '#0a3018'
 
@@ -281,7 +289,7 @@ export class PrepScreen {
     const spec = gridSpec(hull)
     const loadout: WeaponTemplate[] = []
     for (const slot of hull.slots) {
-      const w = this.slotWeapons.get(slot.id) ?? this.defaultWeapon(slot)
+      const w = this.slotWeapons.get(slot.id) ?? this.defaultWeapon(hull, slot)
       const cell = currentSlotCell(slot, spec, this.slotCells)
       if (w) loadout.push({ id: w.id, name: w.name, type: w.type, ammo: w.ammo, mount: cellToMount(cell.c, cell.r, spec) })
     }
@@ -289,7 +297,11 @@ export class PrepScreen {
     return { templateId: hull.templateId, shipType: hull.shipType, loadout }
   }
 
-  private defaultWeapon(slot: HullSlot): ShopWeapon | null {
+  private defaultWeapon(hull: HullCatalogEntry, slot: HullSlot): ShopWeapon | null {
+    if (hull.templateId === 'hull.bb.yukimura') {
+      const special = YUKIMURA_DEFAULT_WEAPONS[slot.id]
+      if (special) return special
+    }
     return WEAPON_SHOP.find(w =>
       slot.compatibleTypes.includes(w.type) && w.minStage <= this.stage
     ) ?? null
@@ -755,6 +767,11 @@ export class PrepScreen {
   // ── Drawing utilities ─────────────────────────────────────────────────────
 
   private drawShipTopDown(ctx: CanvasRenderingContext2D, cx: number, cy: number, hw: number, hh: number, hull: HullCatalogEntry, locked: boolean): void {
+    if (hull.templateId === 'hull.bb.yukimura') {
+      this.drawYukimuraTopDown(ctx, cx, cy, hw, hh, locked)
+      return
+    }
+
     ctx.beginPath(); this.buildHullPath(ctx, cx, cy, hw, hh)
     ctx.fillStyle = locked ? '#090f0a'
       : hull.shipType === 'destroyer'  ? '#0d1e12'
@@ -776,6 +793,75 @@ export class PrepScreen {
       ctx.beginPath(); ctx.ellipse(sx, sy, 3.2, 2.1, 0, 0, Math.PI * 2)
       ctx.fillStyle = locked ? DIM : (TYPE_COLOR[slot.compatibleTypes[0]!] ?? '#2a6a3a'); ctx.fill()
     }
+  }
+
+  private drawYukimuraTopDown(ctx: CanvasRenderingContext2D, cx: number, cy: number, hw: number, hh: number, locked: boolean): void {
+    const snow = locked ? '#1d2528' : '#f8fafc'
+    const shade = locked ? '#334155' : '#cbd5e1'
+    const green = locked ? '#1f3a2d' : '#166534'
+    const red = locked ? '#4a1d1d' : '#dc2626'
+
+    ctx.save()
+    ctx.fillStyle = 'rgba(0,0,0,0.22)'
+    polygonPath(ctx, facetedOvalPoints(cx, cy + hh * 0.12, hw * 0.92, hh * 0.62, 16, -Math.PI / 2))
+    ctx.fill()
+
+    for (const [ox, oy, rx, ry] of [
+      [0, 0.24, 0.86, 0.58],
+      [0, -0.12, 0.64, 0.46],
+      [0, -0.45, 0.46, 0.34],
+    ] as const) {
+      polygonPath(ctx, facetedOvalPoints(cx + hw * ox, cy + hh * oy, hw * rx, hh * ry, 14, -Math.PI / 2))
+      ctx.fillStyle = snow
+      ctx.fill()
+      ctx.strokeStyle = shade
+      ctx.lineWidth = 1
+      ctx.stroke()
+    }
+
+    polygonPath(ctx, facetedOvalPoints(cx, cy - hh * 0.70, hw * 0.52, hh * 0.18, 10, Math.PI / 10))
+    ctx.fillStyle = green
+    ctx.fill()
+    ctx.beginPath()
+    ctx.moveTo(cx - hw * 0.30, cy - hh * 0.70)
+    ctx.lineTo(cx - hw * 0.12, cy - hh * 0.92)
+    ctx.lineTo(cx + hw * 0.22, cy - hh * 0.92)
+    ctx.lineTo(cx + hw * 0.34, cy - hh * 0.70)
+    ctx.closePath()
+    ctx.fill()
+
+    ctx.strokeStyle = red
+    ctx.lineWidth = Math.max(2, hw * 0.10)
+    ctx.beginPath()
+    ctx.moveTo(cx - hw * 0.52, cy - hh * 0.16)
+    ctx.lineTo(cx + hw * 0.52, cy - hh * 0.08)
+    ctx.stroke()
+    ctx.strokeStyle = green
+    ctx.beginPath()
+    ctx.moveTo(cx - hw * 0.14, cy - hh * 0.08)
+    ctx.lineTo(cx + hw * 0.24, cy + hh * 0.34)
+    ctx.stroke()
+
+    ctx.fillStyle = locked ? '#92400e' : '#f59e0b'
+    ctx.beginPath()
+    const noseR = Math.max(2, hw * 0.09)
+    ctx.moveTo(cx + noseR * 1.15, cy - hh * 0.46)
+    ctx.lineTo(cx - noseR * 0.45, cy - hh * 0.46 - noseR * 0.68)
+    ctx.lineTo(cx - noseR * 0.45, cy - hh * 0.46 + noseR * 0.68)
+    ctx.closePath()
+    ctx.fill()
+    ctx.fillStyle = locked ? '#111827' : '#020617'
+    for (const ex of [-0.18, 0.18]) {
+      const eyeR = Math.max(1.5, hw * 0.055)
+      polygonPath(ctx, [
+        [cx + hw * ex, cy - hh * 0.52 - eyeR],
+        [cx + hw * ex + eyeR, cy - hh * 0.52],
+        [cx + hw * ex, cy - hh * 0.52 + eyeR],
+        [cx + hw * ex - eyeR, cy - hh * 0.52],
+      ])
+      ctx.fill()
+    }
+    ctx.restore()
   }
 
   private buildHullPath(ctx: CanvasRenderingContext2D, cx: number, cy: number, hw: number, hh: number): void {
@@ -846,6 +932,12 @@ export class PrepScreen {
       ctx.beginPath(); ctx.moveTo(sx, gy); ctx.lineTo(stern, gy); ctx.stroke()
     }
 
+    if (hull.templateId === 'hull.bb.yukimura') {
+      this.drawYukimuraSideProfile(ctx, sx, y, lengthPx, h, waterY, deckY)
+      ctx.restore()
+      return
+    }
+
     ctx.beginPath()
     ctx.moveTo(bow, waterY - hullH * 0.15)
     ctx.lineTo(bow + lengthPx * 0.08, deckY)
@@ -889,6 +981,76 @@ export class PrepScreen {
     ctx.textAlign = 'right'
     ctx.fillText(`幅 ${spec.beamM.toFixed(1)}m`, stern, y + 10)
     ctx.restore()
+  }
+
+  private drawYukimuraSideProfile(ctx: CanvasRenderingContext2D, sx: number, y: number, lengthPx: number, h: number, waterY: number, deckY: number): void {
+    const cx = sx + lengthPx * 0.48
+    const baseR = Math.max(14, h * 0.28)
+    ctx.fillStyle = 'rgba(15,23,42,0.28)'
+    polygonPath(ctx, facetedOvalPoints(cx, waterY, lengthPx * 0.36, h * 0.10, 14))
+    ctx.fill()
+
+    for (const [ox, lift, rx, ry] of [
+      [-0.08, 0.00, 1.18, 0.78],
+      [0.02, 0.34, 0.84, 0.66],
+      [0.10, 0.66, 0.58, 0.48],
+    ] as const) {
+      polygonPath(ctx, facetedOvalPoints(cx + lengthPx * ox, waterY - baseR * lift, baseR * rx, baseR * ry, 14))
+      ctx.fillStyle = '#f8fafc'
+      ctx.fill()
+      ctx.strokeStyle = '#cbd5e1'
+      ctx.stroke()
+    }
+
+    polygonPath(ctx, facetedOvalPoints(cx + lengthPx * 0.10, waterY - baseR * 0.98, baseR * 0.62, baseR * 0.18, 10, Math.PI / 10))
+    ctx.fillStyle = '#166534'
+    ctx.fill()
+    ctx.strokeStyle = '#22c55e'
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.moveTo(cx + lengthPx * 0.10 - baseR * 0.36, waterY - baseR * 0.98)
+    ctx.lineTo(cx + lengthPx * 0.10 - baseR * 0.12, waterY - baseR * 1.34)
+    ctx.lineTo(cx + lengthPx * 0.10 + baseR * 0.26, waterY - baseR * 1.34)
+    ctx.lineTo(cx + lengthPx * 0.10 + baseR * 0.42, waterY - baseR * 0.98)
+    ctx.closePath()
+    ctx.fill()
+
+    ctx.strokeStyle = '#dc2626'
+    ctx.lineWidth = Math.max(3, h * 0.030)
+    ctx.beginPath()
+    ctx.moveTo(cx - baseR * 0.72, waterY - baseR * 0.42)
+    ctx.lineTo(cx + baseR * 0.72, waterY - baseR * 0.38)
+    ctx.stroke()
+    ctx.strokeStyle = '#15803d'
+    ctx.beginPath()
+    ctx.moveTo(cx + baseR * 0.05, waterY - baseR * 0.34)
+    ctx.lineTo(cx + baseR * 0.36, waterY + baseR * 0.20)
+    ctx.stroke()
+
+    ctx.fillStyle = '#f59e0b'
+    ctx.beginPath()
+    const noseR = Math.max(3, baseR * 0.12)
+    ctx.moveTo(cx + lengthPx * 0.20 + noseR * 1.2, waterY - baseR * 0.66)
+    ctx.lineTo(cx + lengthPx * 0.20 - noseR * 0.4, waterY - baseR * 0.66 - noseR * 0.7)
+    ctx.lineTo(cx + lengthPx * 0.20 - noseR * 0.4, waterY - baseR * 0.66 + noseR * 0.7)
+    ctx.closePath()
+    ctx.fill()
+
+    ctx.strokeStyle = '#f8fafc'
+    ctx.fillStyle = 'rgba(248,250,252,0.46)'
+    for (const t of [0.28, 0.46, 0.64]) {
+      const gx = sx + lengthPx * t
+      ctx.fillRect(gx - 5, deckY - 6, 10, 6)
+      ctx.beginPath()
+      ctx.moveTo(gx, deckY - 6)
+      ctx.lineTo(gx + 20, deckY - 12)
+      ctx.stroke()
+    }
+
+    ctx.font = '9px sans-serif'
+    ctx.fillStyle = DIM
+    ctx.textAlign = 'left'
+    ctx.fillText('側面図 雪だるま艦', sx, y + 10)
   }
 
   private drawTowerShape(x: number, y: number, w: number, h: number, col: string): void {
@@ -1031,4 +1193,28 @@ export class PrepScreen {
   }
 
   private onMouseMove(e: MouseEvent): void { this.hovered = this.hitRegion(e) }
+}
+
+function polygonPath(ctx: CanvasRenderingContext2D, points: [number, number][]): void {
+  ctx.beginPath()
+  ctx.moveTo(points[0]![0], points[0]![1])
+  for (const [x, y] of points.slice(1)) ctx.lineTo(x, y)
+  ctx.closePath()
+}
+
+function facetedOvalPoints(
+  cx: number,
+  cy: number,
+  rx: number,
+  ry: number,
+  facets: number,
+  phase = 0,
+): [number, number][] {
+  const pts: [number, number][] = []
+  for (let i = 0; i < facets; i++) {
+    const a = phase + (Math.PI * 2 * i) / facets
+    const wobble = 1 + (i % 3 === 0 ? 0.04 : i % 3 === 1 ? -0.025 : 0.012)
+    pts.push([cx + Math.cos(a) * rx * wobble, cy + Math.sin(a) * ry * wobble])
+  }
+  return pts
 }

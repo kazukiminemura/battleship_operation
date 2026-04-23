@@ -138,6 +138,23 @@
       { "id": "weapon.aa.heavy",                      "name": "重対空砲",       "type": "aa",        "ammo": 1200 }
     ]
   },
+  "hull.bb.yukimura": {
+    "id": "hull.bb.yukimura",
+    "hp": 1800,
+    "maxSpeed": 4.2,
+    "turnRate": 0.024,
+    "detectionRange": 3600,
+    "weapons": [
+      { "id": "weapon.gun.yukimura.snowball.forward",    "name": "雪玉主砲(前)",     "type": "gun",       "ammo": 260 },
+      { "id": "weapon.gun.yukimura.snowball.center",     "name": "雪玉主砲(中)",     "type": "gun",       "ammo": 260 },
+      { "id": "weapon.gun.yukimura.snowball.aft",        "name": "雪玉主砲(後)",     "type": "gun",       "ammo": 260 },
+      { "id": "weapon.secondary.yukimura.marshmallow.port",      "name": "左舷マシュマロ砲", "type": "secondary", "ammo": 520 },
+      { "id": "weapon.secondary.yukimura.marshmallow.starboard", "name": "右舷マシュマロ砲", "type": "secondary", "ammo": 520 },
+      { "id": "weapon.torpedo.610mm.bb",              "name": "赤緑重魚雷",     "type": "torpedo",   "ammo": 40 },
+      { "id": "weapon.aa.ciws.bb",                    "name": "緑帽CIWS",       "type": "aa",        "ammo": 2600 },
+      { "id": "weapon.missile.antiship.bb",           "name": "ホリデーミサイル", "type": "missile",   "ammo": 92 }
+    ]
+  },
   "hull.enemy.destroyer.basic": {
     "id": "hull.enemy.destroyer.basic",
     "hp": 105,

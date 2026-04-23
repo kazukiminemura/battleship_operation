@@ -1,5 +1,6 @@
 import { MAX_WEAPON_SLOTS, type BuildingEntity, type ShipEntity, type CombatState, type Entity, type MapObstacle, type Metrics, type WeaponState, type WeaponType } from '../simulation/types'
 import shipTemplates from './ships.json'
+import { KNOTS_PER_UNIT, WORLD_SIZE } from '../simulation/movement'
 
 export type PlayerShipType = 'destroyer' | 'cruiser' | 'battleship'
 
@@ -56,6 +57,9 @@ export interface StageDefinition {
 const DEBUG_STAGE_NUMBER = 99
 const DEBUG_ENEMY_HP_MULTIPLIER = 4
 const DEBUG_BOSS_HP_MULTIPLIER = 2.5
+const DEBUG_PLAYER_SPEED_KNOTS = 200
+const DEBUG_PLAYER_SPEED = DEBUG_PLAYER_SPEED_KNOTS / KNOTS_PER_UNIT
+const DEBUG_PLAYER_DETECTION_RANGE = WORLD_SIZE * 2
 const DEBUG_MAP_OBSTACLES: MapObstacle[] = [
   { id: 'debug.island.north-wall-a', x: 3300, y: 3600, rx: 900, ry: 470 },
   { id: 'debug.island.north-wall-b', x: 5650, y: 3150, rx: 1120, ry: 380 },
@@ -231,6 +235,11 @@ export function createDebugState(playerType: PlayerShipType = 'battleship'): Com
     ...player,
     pos: { x: 8000, y: 15000, z: 0 },
     angle: -Math.PI / 2,
+    speed: DEBUG_PLAYER_SPEED,
+    targetSpeed: DEBUG_PLAYER_SPEED,
+    speedLevel: 'full',
+    maxSpeed: DEBUG_PLAYER_SPEED,
+    detectionRange: DEBUG_PLAYER_DETECTION_RANGE,
   })
 
   for (const [index, x, y, angle, templateId] of makeDebugEnemySpawns()) {

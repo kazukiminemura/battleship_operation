@@ -808,6 +808,11 @@ export class CanvasRenderer {
       ship.pos.y + sinA * lon - cosA * lat,
     ]
 
+    if (ship.templateId === 'hull.bb.yukimura') {
+      this.renderYukimuraShip(ship, dim, hPx, localToWorld)
+      return
+    }
+
     const hullLocal = shipHullPoints(shape, L, W)
     const wc = hullLocal.map(([lon, lat]) => localToWorld(lon, lat))
     const sc = wc.map(([x, y]) => this.w2s(x, y)) as [number, number][]
@@ -935,7 +940,7 @@ export class CanvasRenderer {
       ctx.fillStyle = lerpHex(topColor, '#ffffff', 0.35)
       ctx.fill()
 
-      if (shape === 'battleship' || shape === 'boss') {
+      if (shape === 'battleship' || shape === 'yukimura' || shape === 'boss') {
         const mastBase = localToWorld(superSpec.offset, 0)
         const [mx, my] = this.w2s(mastBase[0], mastBase[1])
         ctx.strokeStyle = lerpHex(rimColor, '#ffffff', 0.35)
@@ -945,6 +950,10 @@ export class CanvasRenderer {
         ctx.lineTo(mx, my - hPx - sHpx - dim.h * iso.scale * 0.75)
         ctx.stroke()
       }
+    }
+
+    if (shape === 'yukimura') {
+      this.renderYukimuraDetails(dim, hPx, localToWorld)
     }
 
     // 6. Compact HP bar
@@ -969,7 +978,7 @@ export class CanvasRenderer {
   ): void {
     const { ctx, iso } = this
     const lineCount = shape === 'destroyer' ? 1 : shape === 'cruiser' ? 2 : 3
-    ctx.strokeStyle = 'rgba(226,232,240,0.20)'
+    ctx.strokeStyle = shape === 'yukimura' ? 'rgba(22,163,74,0.45)' : 'rgba(226,232,240,0.20)'
     ctx.lineWidth = Math.max(0.7, 1.5 * iso.scale)
     for (let i = 0; i < lineCount; i++) {
       const lat = (i - (lineCount - 1) / 2) * dim.w * 0.18
@@ -1011,6 +1020,209 @@ export class CanvasRenderer {
       ctx.lineWidth = Math.max(0.8, turret.barrels * 0.55)
       ctx.stroke()
     }
+  }
+
+  private renderYukimuraShip(
+    ship: ShipEntity,
+    dim: { l: number; w: number; h: number },
+    hPx: number,
+    localToWorld: (lon: number, lat: number) => [number, number],
+  ): void {
+    const { ctx, iso } = this
+    const [cx, cy] = this.w2s(ship.pos.x, ship.pos.y)
+    const drawSnowPoly = (lon: number, lat: number, rx: number, ry: number, lift: number, facets: number): void => {
+      const [wx, wy] = localToWorld(lon, lat)
+      const [sx, sy] = this.w2s(wx, wy)
+      const grad = ctx.createRadialGradient(
+        sx - rx * 0.22,
+        sy - lift - ry * 0.38,
+        Math.max(1, rx * 0.08),
+        sx,
+        sy - lift,
+        Math.max(rx, ry),
+      )
+      grad.addColorStop(0, '#ffffff')
+      grad.addColorStop(0.58, '#f8fafc')
+      grad.addColorStop(1, '#cbd5e1')
+      const pts = facetedOvalPoints(sx, sy - lift, rx, ry * 0.72, facets, -Math.PI / 2)
+      drawClosedPath(ctx, pts)
+      ctx.fillStyle = grad
+      ctx.fill()
+      ctx.strokeStyle = '#e2e8f0'
+      ctx.lineWidth = 1
+      ctx.stroke()
+    }
+
+    ctx.save()
+    ctx.translate(cx, cy)
+    ctx.scale(1.75, 0.70)
+    const shadow = ctx.createRadialGradient(0, 0, 0, 0, 0, dim.l * iso.scale * 0.30)
+    shadow.addColorStop(0, 'rgba(15,23,42,0.34)')
+    shadow.addColorStop(1, 'rgba(15,23,42,0)')
+    ctx.beginPath()
+    ctx.arc(0, 0, dim.l * iso.scale * 0.30, 0, Math.PI * 2)
+    ctx.fillStyle = shadow
+    ctx.fill()
+    ctx.restore()
+
+    const baseRx = Math.max(24, dim.w * iso.scale * 1.05)
+    const baseRy = Math.max(16, dim.w * iso.scale * 0.56)
+    drawSnowPoly(-dim.l * 0.08, 0, baseRx, baseRy, hPx * 0.05, 16)
+    drawSnowPoly(dim.l * 0.02, 0, baseRx * 0.74, baseRy * 0.82, hPx * 0.84, 14)
+    drawSnowPoly(dim.l * 0.12, 0, baseRx * 0.56, baseRy * 0.64, hPx * 1.48, 12)
+
+    const [hx, hy] = this.w2s(...localToWorld(dim.l * 0.12, 0))
+    ctx.save()
+    ctx.translate(hx, hy - hPx * 1.48 - baseRy * 0.74)
+    drawClosedPath(ctx, facetedOvalPoints(0, 0, baseRx * 0.60, baseRy * 0.22, 10, Math.PI / 10))
+    ctx.fillStyle = '#166534'
+    ctx.fill()
+    ctx.strokeStyle = '#22c55e'
+    ctx.lineWidth = 1.5
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.moveTo(-baseRx * 0.35, 0)
+    ctx.lineTo(-baseRx * 0.16, -baseRy * 0.54)
+    ctx.lineTo(baseRx * 0.22, -baseRy * 0.58)
+    ctx.lineTo(baseRx * 0.40, 0)
+    ctx.closePath()
+    ctx.fillStyle = '#15803d'
+    ctx.fill()
+    ctx.strokeStyle = '#22c55e'
+    ctx.stroke()
+    ctx.restore()
+
+    const scarfY = hy - hPx * 1.18
+    ctx.lineWidth = Math.max(3, dim.w * iso.scale * 0.08)
+    for (let i = 0; i < 5; i++) {
+      ctx.strokeStyle = i % 2 === 0 ? '#dc2626' : '#15803d'
+      ctx.beginPath()
+      ctx.moveTo(hx - baseRx * 0.55 + i * baseRx * 0.22, scarfY)
+      ctx.lineTo(hx - baseRx * 0.41 + i * baseRx * 0.22, scarfY + baseRy * 0.10)
+      ctx.stroke()
+    }
+
+    ctx.fillStyle = '#0f172a'
+    for (const lat of [-dim.w * 0.12, dim.w * 0.12]) {
+      const [ex, ey] = this.w2s(...localToWorld(dim.l * 0.24, lat))
+      const eyeR = Math.max(2.3, dim.w * iso.scale * 0.045)
+      drawClosedPath(ctx, [
+        [ex, ey - hPx * 1.48 - baseRy * 0.14 - eyeR],
+        [ex + eyeR * 0.85, ey - hPx * 1.48 - baseRy * 0.14],
+        [ex, ey - hPx * 1.48 - baseRy * 0.14 + eyeR],
+        [ex - eyeR * 0.85, ey - hPx * 1.48 - baseRy * 0.14],
+      ])
+      ctx.fill()
+    }
+
+    const [nx, ny] = this.w2s(...localToWorld(dim.l * 0.31, 0))
+    ctx.save()
+    ctx.translate(nx, ny - hPx * 1.48 - baseRy * 0.06)
+    ctx.beginPath()
+    const noseR = Math.max(4, dim.w * iso.scale * 0.08)
+    ctx.moveTo(noseR * 1.35, 0)
+    ctx.lineTo(-noseR * 0.42, -noseR * 0.72)
+    ctx.lineTo(-noseR * 0.42, noseR * 0.72)
+    ctx.closePath()
+    ctx.fillStyle = '#f59e0b'
+    ctx.fill()
+    ctx.restore()
+
+    ctx.strokeStyle = '#111827'
+    ctx.lineWidth = 1.2
+    ctx.beginPath()
+    ctx.moveTo(hx - baseRx * 0.21, hy - hPx * 1.42 + baseRy * 0.07)
+    ctx.lineTo(hx - baseRx * 0.08, hy - hPx * 1.42 + baseRy * 0.15)
+    ctx.lineTo(hx + baseRx * 0.07, hy - hPx * 1.42 + baseRy * 0.18)
+    ctx.lineTo(hx + baseRx * 0.22, hy - hPx * 1.42 + baseRy * 0.10)
+    ctx.stroke()
+
+    for (const lat of [-dim.w * 0.44, dim.w * 0.44]) {
+      const [ax, ay] = this.w2s(...localToWorld(-dim.l * 0.03, lat))
+      ctx.strokeStyle = '#7f1d1d'
+      ctx.lineWidth = Math.max(2, dim.w * iso.scale * 0.055)
+      ctx.beginPath()
+      ctx.moveTo(ax, ay - hPx * 0.72)
+      ctx.lineTo(ax - Math.sign(lat) * 18, ay - hPx * 0.96)
+      ctx.stroke()
+    }
+
+    const turrets = turretLayout('yukimura', dim)
+    for (const turret of turrets) {
+      const [tx, ty] = localToWorld(turret.lon, turret.lat)
+      const [sx, sy] = this.w2s(tx, ty)
+      const r = Math.max(2.6, turret.radius * iso.scale)
+      ctx.save()
+      ctx.translate(sx, sy - hPx * 0.58)
+      ctx.scale(1.2, 0.62)
+      ctx.beginPath()
+      ctx.arc(0, 0, r, 0, Math.PI * 2)
+      ctx.fillStyle = '#f8fafc'
+      ctx.fill()
+      ctx.strokeStyle = '#16a34a'
+      ctx.lineWidth = 0.8
+      ctx.stroke()
+      ctx.restore()
+    }
+
+    const barW = dim.l * iso.scale * 0.65
+    const barY = cy - hPx * 1.95 - 14
+    const hpRatio = ship.hp / ship.maxHp
+    ctx.fillStyle = 'rgba(0,0,0,0.6)'
+    ctx.fillRect(cx - barW / 2 - 1, barY - 1, barW + 2, 6)
+    ctx.fillStyle = hpRatio > 0.5 ? '#22c55e' : hpRatio > 0.25 ? '#eab308' : '#ef4444'
+    ctx.fillRect(cx - barW / 2, barY, barW * hpRatio, 4)
+  }
+
+  private renderYukimuraDetails(
+    dim: { l: number; w: number; h: number },
+    hPx: number,
+    localToWorld: (lon: number, lat: number) => [number, number],
+  ): void {
+    const { ctx } = this
+
+    const drawDeckBand = (lon: number, lat0: number, lat1: number, color: string): void => {
+      const halfL = dim.l * 0.018
+      const pts = [
+        localToWorld(lon + halfL, lat0),
+        localToWorld(lon + halfL, lat1),
+        localToWorld(lon - halfL, lat1),
+        localToWorld(lon - halfL, lat0),
+      ].map(([x, y]) => this.w2s(x, y)) as [number, number][]
+      drawClosedPath(ctx, pts.map(([x, y]) => [x, y - hPx - 1] as [number, number]))
+      ctx.fillStyle = color
+      ctx.fill()
+    }
+
+    for (let i = 0; i < 5; i++) {
+      const lon = -dim.l * 0.23 + i * dim.l * 0.052
+      drawDeckBand(lon, -dim.w * 0.40, dim.w * 0.40, i % 2 === 0 ? '#dc2626' : '#15803d')
+    }
+
+    const hatCenter = localToWorld(dim.l * 0.02, 0)
+    const [hx, hy] = this.w2s(hatCenter[0], hatCenter[1])
+    ctx.save()
+    ctx.translate(hx, hy - hPx - dim.h * 0.22)
+    ctx.scale(1.55, 0.68)
+    ctx.beginPath()
+    ctx.arc(0, 0, Math.max(5, dim.w * 0.16), 0, Math.PI * 2)
+    ctx.fillStyle = '#166534'
+    ctx.fill()
+    ctx.strokeStyle = '#22c55e'
+    ctx.lineWidth = 1.2
+    ctx.stroke()
+    ctx.restore()
+
+    const nose = localToWorld(dim.l * 0.30, 0)
+    const [nx, ny] = this.w2s(nose[0], nose[1])
+    ctx.save()
+    ctx.translate(nx, ny - hPx - 1)
+    ctx.scale(1.25, 0.65)
+    ctx.beginPath()
+    ctx.arc(0, 0, Math.max(2.5, dim.w * 0.055), 0, Math.PI * 2)
+    ctx.fillStyle = '#f59e0b'
+    ctx.fill()
+    ctx.restore()
   }
 
   private turretAimDirection(ship: ShipEntity, mount: Vec3, tick: number, maxMountDistance: number): { x: number; y: number } {
@@ -1307,6 +1519,23 @@ function drawClosedPath(ctx: CanvasRenderingContext2D, points: [number, number][
   ctx.closePath()
 }
 
+function facetedOvalPoints(
+  cx: number,
+  cy: number,
+  rx: number,
+  ry: number,
+  facets: number,
+  phase = 0,
+): [number, number][] {
+  const pts: [number, number][] = []
+  for (let i = 0; i < facets; i++) {
+    const a = phase + (Math.PI * 2 * i) / facets
+    const wobble = 1 + (i % 3 === 0 ? 0.045 : i % 3 === 1 ? -0.025 : 0.015)
+    pts.push([cx + Math.cos(a) * rx * wobble, cy + Math.sin(a) * ry * wobble])
+  }
+  return pts
+}
+
 function signedNoise(x: number, y: number, salt: number): number {
   const n = Math.sin(x * 12.9898 + y * 78.233 + salt * 37.719) * 43758.5453
   return (n - Math.floor(n)) * 2 - 1
@@ -1389,6 +1618,19 @@ function shipHullPoints(shape: ShipShapeClass, l: number, w: number): [number, n
       [l * 0.78, w * 0.85],
     ]
   }
+  if (shape === 'yukimura') {
+    return [
+      [l, 0],
+      [l * 0.86, -w * 0.68],
+      [l * 0.36, -w],
+      [-l * 0.70, -w * 0.95],
+      [-l, -w * 0.55],
+      [-l, w * 0.55],
+      [-l * 0.70, w * 0.95],
+      [l * 0.36, w],
+      [l * 0.86, w * 0.68],
+    ]
+  }
   const sternWidth = shape === 'boss' ? 0.78 : 0.62
   return [
     [l, 0],
@@ -1406,6 +1648,7 @@ function shipHullPoints(shape: ShipShapeClass, l: number, w: number): [number, n
 function superstructureSpec(shape: ShipShapeClass, dim: { l: number; w: number; h: number }): { offset: number; l: number; w: number; h: number } {
   if (shape === 'destroyer') return { offset: -dim.l * 0.03, l: dim.l * 0.22, w: dim.w * 0.46, h: 0.42 }
   if (shape === 'cruiser') return { offset: -dim.l * 0.02, l: dim.l * 0.25, w: dim.w * 0.54, h: 0.58 }
+  if (shape === 'yukimura') return { offset: -dim.l * 0.02, l: dim.l * 0.28, w: dim.w * 0.60, h: 0.72 }
   if (shape === 'boss') return { offset: -dim.l * 0.04, l: dim.l * 0.34, w: dim.w * 0.62, h: 0.82 }
   return { offset: -dim.l * 0.03, l: dim.l * 0.30, w: dim.w * 0.58, h: 0.70 }
 }
@@ -1429,6 +1672,15 @@ function turretLayout(shape: ShipShapeClass, dim: { l: number; w: number }): Arr
       { lon: -dim.l * 0.34, lat: 0, radius: dim.w * 0.19, barrels: 3 },
       { lon: -dim.l * 0.08, lat: -dim.w * 0.28, radius: dim.w * 0.12, barrels: 2 },
       { lon: -dim.l * 0.08, lat: dim.w * 0.28, radius: dim.w * 0.12, barrels: 2 },
+    ]
+  }
+  if (shape === 'yukimura') {
+    return [
+      { lon: dim.l * 0.34, lat: 0, radius: dim.w * 0.17, barrels: 2 },
+      { lon: dim.l * 0.08, lat: 0, radius: dim.w * 0.16, barrels: 2 },
+      { lon: -dim.l * 0.32, lat: 0, radius: dim.w * 0.17, barrels: 2 },
+      { lon: -dim.l * 0.08, lat: dim.w * 0.30, radius: dim.w * 0.11, barrels: 2 },
+      { lon: -dim.l * 0.08, lat: -dim.w * 0.30, radius: dim.w * 0.11, barrels: 2 },
     ]
   }
   return [

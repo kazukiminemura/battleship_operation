@@ -184,6 +184,24 @@ export const HULL_CATALOG: HullCatalogEntry[] = [
       { id: 's7', label: '対空',     x:  0.00, y:  0.72, compatibleTypes: AA },
     ],
   },
+  {
+    templateId: 'hull.bb.yukimura',
+    shipType: 'battleship',
+    name: '幸村',
+    className: '雪帽特別戦艦',
+    minStage: 1,
+    hp: 1800, maxSpeed: 4.2, turnRate: 0.024,
+    slots: [
+      { id: 's0', label: '雪玉主砲(前)', x:  0.00, y: -0.76, compatibleTypes: GUN_ONLY },
+      { id: 's1', label: '雪玉主砲(中)', x:  0.00, y: -0.34, compatibleTypes: GUN_ONLY },
+      { id: 's2', label: '雪玉主砲(後)', x:  0.00, y:  0.08, compatibleTypes: GUN_ONLY },
+      { id: 's3', label: '左舷副砲',     x: -0.62, y: -0.06, compatibleTypes: SEC },
+      { id: 's4', label: '右舷副砲',     x:  0.62, y: -0.06, compatibleTypes: SEC },
+      { id: 's5', label: '赤緑魚雷',     x:  0.00, y:  0.48, compatibleTypes: TRP },
+      { id: 's6', label: '緑帽対空',     x: -0.52, y:  0.72, compatibleTypes: AA },
+      { id: 's7', label: '祝祭誘導弾',   x:  0.52, y:  0.72, compatibleTypes: MSL },
+    ],
+  },
 ]
 
 export function getHullsByClass(shipType: PlayerShipType): HullCatalogEntry[] {

@@ -12,6 +12,7 @@ const SHIP_MOUNT_DIMS: Record<string, { l: number; w: number }> = {
   'hull.cruiser.basic': { l: 165, w: 36 },
   'hull.cruiser.player': { l: 205, w: 48 },
   'hull.battleship.basic': { l: 285, w: 68 },
+  'hull.bb.yukimura': { l: 278, w: 74 },
   'hull.enemy.boss.dreadnought': { l: 340, w: 82 },
 }
 

@@ -59,6 +59,15 @@ export function renderProjectile(
   const thy = proj.weaponType === 'torpedo' ? flatTy : trail.hy
   const angle = Math.atan2(hy - thy, hx - thx)
 
+  if (proj.weaponId?.includes('yukimura.snowball')) {
+    renderSnowball(ctx, sx, sy, hx, hy, thx, thy, angle, arcPx)
+    return
+  }
+  if (proj.weaponId?.includes('yukimura.marshmallow')) {
+    renderMarshmallow(ctx, sx, sy, hx, hy, thx, thy, angle, arcPx)
+    return
+  }
+
   PROJECTILE_RENDERERS[proj.weaponType](ctx, { sx, sy, hx, hy, thx, thy, angle, arcPx, progress: p })
 }
 
@@ -166,6 +175,93 @@ function renderSecondary(
   ctx.beginPath()
   ctx.ellipse(-6, 0, 2, 0.9, 0, 0, Math.PI * 2)
   ctx.fillStyle = '#fff0a0'
+  ctx.fill()
+  ctx.restore()
+}
+
+function renderSnowball(
+  ctx: CanvasRenderingContext2D,
+  sx: number,
+  sy: number,
+  hx: number,
+  hy: number,
+  thx: number,
+  thy: number,
+  angle: number,
+  arcPx: number,
+): void {
+  if (arcPx > 3) {
+    ctx.beginPath()
+    ctx.ellipse(sx, sy, 5.5, 2, 0, 0, Math.PI * 2)
+    ctx.fillStyle = 'rgba(0,0,0,0.12)'
+    ctx.fill()
+  }
+
+  ctx.beginPath()
+  ctx.moveTo(thx, thy)
+  ctx.lineTo(hx, hy)
+  ctx.strokeStyle = 'rgba(226,242,255,0.34)'
+  ctx.lineWidth = 2
+  ctx.stroke()
+
+  ctx.save()
+  ctx.translate(hx, hy); ctx.rotate(angle)
+  const grad = ctx.createRadialGradient(-2, -2, 1, 0, 0, 7)
+  grad.addColorStop(0, '#ffffff')
+  grad.addColorStop(0.62, '#f8fafc')
+  grad.addColorStop(1, '#cbd5e1')
+  ctx.beginPath()
+  ctx.arc(0, 0, 6.2, 0, Math.PI * 2)
+  ctx.fillStyle = grad
+  ctx.fill()
+  ctx.strokeStyle = '#e2e8f0'
+  ctx.lineWidth = 1
+  ctx.stroke()
+  for (const [dx, dy, r] of [[-2.6, 1.3, 1.1], [1.8, -1.6, 0.9], [2.7, 1.7, 0.7]] as const) {
+    ctx.beginPath()
+    ctx.arc(dx, dy, r, 0, Math.PI * 2)
+    ctx.fillStyle = 'rgba(148,163,184,0.28)'
+    ctx.fill()
+  }
+  ctx.restore()
+}
+
+function renderMarshmallow(
+  ctx: CanvasRenderingContext2D,
+  sx: number,
+  sy: number,
+  hx: number,
+  hy: number,
+  thx: number,
+  thy: number,
+  angle: number,
+  arcPx: number,
+): void {
+  if (arcPx > 3) {
+    ctx.beginPath()
+    ctx.ellipse(sx, sy, 4.5, 1.6, 0, 0, Math.PI * 2)
+    ctx.fillStyle = 'rgba(0,0,0,0.12)'
+    ctx.fill()
+  }
+
+  ctx.beginPath()
+  ctx.moveTo(thx, thy)
+  ctx.lineTo(hx, hy)
+  ctx.strokeStyle = 'rgba(255,255,255,0.36)'
+  ctx.lineWidth = 1.5
+  ctx.stroke()
+
+  ctx.save()
+  ctx.translate(hx, hy); ctx.rotate(angle)
+  ctx.fillStyle = '#fff7ed'
+  roundRectPath(ctx, -6.5, -3.6, 13, 7.2, 3.4)
+  ctx.fill()
+  ctx.strokeStyle = '#fed7aa'
+  ctx.lineWidth = 1
+  ctx.stroke()
+  ctx.beginPath()
+  ctx.ellipse(-2.2, -1.1, 2.4, 0.8, 0, 0, Math.PI * 2)
+  ctx.fillStyle = 'rgba(255,255,255,0.72)'
   ctx.fill()
   ctx.restore()
 }
@@ -279,6 +375,20 @@ function renderTorpedo(
   ctx.fillStyle = 'rgba(160,220,255,0.60)'
   ctx.fill()
   ctx.restore()
+}
+
+function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
+  ctx.beginPath()
+  ctx.moveTo(x + r, y)
+  ctx.lineTo(x + w - r, y)
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r)
+  ctx.lineTo(x + w, y + h - r)
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h)
+  ctx.lineTo(x + r, y + h)
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r)
+  ctx.lineTo(x, y + r)
+  ctx.quadraticCurveTo(x, y, x + r, y)
+  ctx.closePath()
 }
 
 function projectileVisualPoint(

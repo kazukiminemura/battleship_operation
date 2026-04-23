@@ -57,6 +57,7 @@ export function hullDimensions(hull: HullCatalogEntry): { lengthM: number; beamM
     case 'hull.ca.elite': return { lengthM: 214, beamM: 21.8 }
     case 'hull.bb.fast': return { lengthM: 247, beamM: 33.0 }
     case 'hull.bb.super': return { lengthM: 263, beamM: 38.9 }
+    case 'hull.bb.yukimura': return { lengthM: 238, beamM: 34.5 }
     case 'hull.battleship.basic':
     default:
       return hull.shipType === 'battleship' ? { lengthM: 242, beamM: 32.0 }
