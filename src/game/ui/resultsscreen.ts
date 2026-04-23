@@ -10,6 +10,7 @@ export class ResultsScreen {
   private ctx: CanvasRenderingContext2D
   private regions: Region[] = []
   private hovered: ResultAction | null = null
+  private selected: ResultAction | null = null
   private onMoveRef: (e: MouseEvent) => void
 
   constructor(canvas: HTMLCanvasElement) {
@@ -25,6 +26,7 @@ export class ResultsScreen {
   detach(): void {
     this.canvas.removeEventListener('mousemove', this.onMoveRef)
     this.hovered = null
+    this.selected = null
   }
 
   checkClick(e: MouseEvent): ResultAction | null {
@@ -34,6 +36,34 @@ export class ResultsScreen {
     for (const r of this.regions) {
       if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) return r.id
     }
+    return null
+  }
+
+  checkKeyDown(e: KeyboardEvent, state: CombatState): ResultAction | null {
+    const actions = this.availableActions(state)
+    if (actions.length === 0) return null
+    this.ensureSelected(actions)
+
+    if (e.code === 'KeyN' && actions.includes('next')) {
+      this.selected = 'next'
+      return 'next'
+    }
+    if (e.code === 'KeyT' && actions.includes('title')) {
+      this.selected = 'title'
+      return 'title'
+    }
+    if (e.code === 'ArrowLeft' || (e.code === 'Tab' && e.shiftKey)) {
+      this.moveSelection(actions, -1)
+      return null
+    }
+    if (e.code === 'ArrowRight' || e.code === 'Tab') {
+      this.moveSelection(actions, 1)
+      return null
+    }
+    if (e.code === 'Enter' || e.code === 'Space') {
+      return this.selected
+    }
+
     return null
   }
 
@@ -58,6 +88,8 @@ export class ResultsScreen {
     const m = state.metrics
     const completed = result === 'completed'
     const allClear = completed && state.stage >= state.maxStage
+    const actions = this.availableActions(state)
+    this.ensureSelected(actions)
 
     // Background
     const bg = ctx.createLinearGradient(0, 0, 0, H)
@@ -250,19 +282,41 @@ export class ResultsScreen {
     label: string,
     accentColor: string,
   ): void {
-    const hov = this.hovered === id
-    ctx.fillStyle = hov ? `${accentColor}30` : 'rgba(10,24,46,0.88)'
+    const active = this.hovered === id || this.selected === id
+    ctx.fillStyle = active ? `${accentColor}30` : 'rgba(10,24,46,0.88)'
     roundRect(ctx, x, y, w, h, 10)
     ctx.fill()
-    ctx.strokeStyle = hov ? accentColor : '#1e3a5f'
-    ctx.lineWidth = hov ? 2 : 1
+    ctx.strokeStyle = active ? accentColor : '#1e3a5f'
+    ctx.lineWidth = active ? 2 : 1
     roundRect(ctx, x, y, w, h, 10)
     ctx.stroke()
-    ctx.fillStyle = hov ? '#ffffff' : accentColor
+    ctx.fillStyle = active ? '#ffffff' : accentColor
     ctx.textAlign = 'center'
     ctx.font = `bold ${Math.round(H * 0.030)}px sans-serif`
     ctx.fillText(label, x + w / 2, y + h * 0.66)
     this.regions.push({ id, x, y, w, h })
+  }
+
+  private availableActions(state: CombatState): ResultAction[] {
+    if (state.missionResult === 'completed') {
+      return state.stage >= state.maxStage ? ['title'] : ['next', 'title']
+    }
+    return ['retry', 'title']
+  }
+
+  private ensureSelected(actions: ResultAction[]): void {
+    if (actions.length === 0) {
+      this.selected = null
+    } else if (!this.selected || !actions.includes(this.selected)) {
+      this.selected = actions[0]!
+    }
+  }
+
+  private moveSelection(actions: ResultAction[], direction: -1 | 1): void {
+    this.ensureSelected(actions)
+    const current = Math.max(0, actions.indexOf(this.selected!))
+    const next = (current + direction + actions.length) % actions.length
+    this.selected = actions[next]!
   }
 }
 

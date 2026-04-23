@@ -70,10 +70,11 @@ export class HUD {
   private renderTopBar(state: CombatState, player: ShipEntity, weaponMode: WeaponMode, bgmEnabled: boolean): void {
     const { ctx, canvas } = this
     const barH = 130
+    const coverH = barH + 8
     const pad = 12
 
     ctx.fillStyle = '#020812'
-    ctx.fillRect(0, 0, canvas.width, barH)
+    ctx.fillRect(0, 0, canvas.width, coverH)
 
     // HP
     ctx.font = 'bold 12px monospace'
@@ -203,6 +204,15 @@ export class HUD {
     ctx.textAlign = 'left'
 
     this.clickRegions.push({ id: 'toggle-bgm', x: allBtnX, y: bgmBtnY, w: allBtnW, h: allBtnH })
+
+    ctx.fillStyle = '#020812'
+    ctx.fillRect(0, barH, canvas.width, coverH - barH)
+    ctx.strokeStyle = '#0f3d64'
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.moveTo(0, barH + 0.5)
+    ctx.lineTo(canvas.width, barH + 0.5)
+    ctx.stroke()
   }
 
   private renderHullSectionStatus(player: ShipEntity, x: number, y: number): void {

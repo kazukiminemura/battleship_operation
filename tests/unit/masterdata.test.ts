@@ -104,10 +104,27 @@ describe('createInitialState', () => {
 
     expect(state.stageName).toBe('Debug Maze Fleet')
     expect(state.mapObstacles.length).toBeGreaterThanOrEqual(10)
-    expect(enemies.length).toBeGreaterThanOrEqual(45)
+    expect(enemies.length).toBeGreaterThanOrEqual(100)
     expect(enemies.some(e => e.templateId === 'hull.enemy.boss.dreadnought')).toBe(true)
     expect(Math.max(...enemies.map(e => e.pos.x))).toBeGreaterThan(12000)
     expect(WORLD_SIZE).toBeGreaterThan(10000)
     expect(buildings.length).toBeGreaterThanOrEqual(5)
+  })
+
+  it('hardens debug enemies for fleet battles', () => {
+    const debugState = createDebugState()
+    const normalState = createInitialState('battleship', 10)
+    const debugDestroyer = [...debugState.entities.values()].find(
+      e => e.kind === 'ship' && (e as ShipEntity).templateId === 'hull.enemy.destroyer.basic',
+    ) as ShipEntity
+    const normalDestroyer = [...normalState.entities.values()].find(
+      e => e.kind === 'ship' && (e as ShipEntity).templateId === 'hull.enemy.destroyer.basic',
+    ) as ShipEntity
+    const debugBoss = debugState.entities.get('ship.debug.enemy.boss.dreadnought') as ShipEntity
+    const normalBoss = normalState.entities.get('ship.enemy.boss.dreadnought') as ShipEntity
+
+    expect(debugDestroyer.maxHp).toBe(normalDestroyer.maxHp * 4)
+    expect(debugDestroyer.hp).toBe(debugDestroyer.maxHp)
+    expect(debugBoss.maxHp).toBe(Math.round(normalBoss.maxHp * 2.5))
   })
 })

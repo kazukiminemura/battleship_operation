@@ -30,7 +30,7 @@ Battleship Operation は、艦船設計・艦隊戦・リアルタイム海戦�
 ### Play Screen
 ゲームのプレイ画面では、海域がCanvasで描かれ、プレイヤー艦（青い船）が中央に表示され、周囲に敵艦（赤い船）がAIで動きます。HUDにはHP、兵装、弾薬の情報が表示され、戦闘状況をリアルタイムで確認できます。
 
-（スクリーンショット画像をここに追加予定）
+![デバッグ艦隊戦のプレイ画面](docs/screenshots/debug-fleet-combat.png)
 
 
 

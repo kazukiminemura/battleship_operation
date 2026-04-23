@@ -140,7 +140,7 @@
   },
   "hull.enemy.destroyer.basic": {
     "id": "hull.enemy.destroyer.basic",
-    "hp": 80,
+    "hp": 105,
     "maxSpeed": 3.75,
     "turnRate": 0.05,
     "detectionRange": 1600,
@@ -150,7 +150,7 @@
   },
   "hull.cruiser.basic": {
     "id": "hull.cruiser.basic",
-    "hp": 150,
+    "hp": 200,
     "maxSpeed": 3.15,
     "turnRate": 0.03,
     "detectionRange": 2000,
@@ -161,7 +161,7 @@
   },
   "hull.enemy.boss.dreadnought": {
     "id": "hull.enemy.boss.dreadnought",
-    "hp": 3200,
+    "hp": 3800,
     "maxSpeed": 2.1,
     "turnRate": 0.014,
     "detectionRange": 2600,

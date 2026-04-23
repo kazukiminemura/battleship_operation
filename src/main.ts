@@ -136,6 +136,16 @@ function main(): void {
     results.attach()
   }
 
+  const applyResultAction = (action: 'next' | 'retry' | 'title' | null): void => {
+    if (action === 'next') {
+      goToPrep(currentStage + 1)
+    } else if (action === 'retry') {
+      goToPrep(currentStage)
+    } else if (action === 'title') {
+      goToStart()
+    }
+  }
+
   const playPrepAudioCue = (cue: PrepAudioCue | null): void => {
     if (cue === 'select') sound.playDesignSelect()
     else if (cue === 'place') sound.playDesignPlace()
@@ -151,6 +161,36 @@ function main(): void {
       input.releaseKey('KeyD')
       if (!e.repeat) toggleDebugMap()
       return
+    }
+
+    if (mode === 'start' && start.checkKeyDown(e)) {
+      e.preventDefault()
+      if (!e.repeat) goToPrep(currentStage)
+      return
+    }
+
+    if (mode === 'stage-intro' && (e.code === 'Enter' || e.code === 'Space')) {
+      e.preventDefault()
+      if (!e.repeat) beginCombat()
+      return
+    }
+
+    if (mode === 'results') {
+      const action = results.checkKeyDown(e, state)
+      if (
+        action ||
+        e.code === 'ArrowLeft' ||
+        e.code === 'ArrowRight' ||
+        e.code === 'Tab' ||
+        e.code === 'Enter' ||
+        e.code === 'Space' ||
+        e.code === 'KeyN' ||
+        e.code === 'KeyT'
+      ) {
+        e.preventDefault()
+        if (!e.repeat) applyResultAction(action)
+        return
+      }
     }
 
     if (e.code === 'KeyR' && (mode === 'combat' || mode === 'results')) {
@@ -187,13 +227,7 @@ function main(): void {
 
     if (mode === 'results') {
       const action = results.checkClick(e)
-      if (action === 'next') {
-        goToPrep(currentStage + 1)
-      } else if (action === 'retry') {
-        goToPrep(currentStage)
-      } else if (action === 'title') {
-        goToStart()
-      }
+      applyResultAction(action)
       e.stopImmediatePropagation()
       return
     }

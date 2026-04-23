@@ -5,6 +5,7 @@ export class StartScreen {
   private ctx: CanvasRenderingContext2D
   private btnRegion: Region | null = null
   private hovered = false
+  private keyboardFocused = false
   private onMoveRef: (e: MouseEvent) => void
 
   constructor(canvas: HTMLCanvasElement) {
@@ -15,11 +16,19 @@ export class StartScreen {
 
   attach(): void {
     this.canvas.addEventListener('mousemove', this.onMoveRef)
+    this.keyboardFocused = true
   }
 
   detach(): void {
     this.canvas.removeEventListener('mousemove', this.onMoveRef)
     this.hovered = false
+    this.keyboardFocused = false
+  }
+
+  checkKeyDown(e: KeyboardEvent): boolean {
+    if (e.code !== 'Enter' && e.code !== 'Space') return false
+    this.keyboardFocused = true
+    return true
   }
 
   checkClick(e: MouseEvent): boolean {
@@ -82,14 +91,15 @@ export class StartScreen {
     const btnY = H * 0.64
     this.btnRegion = { x: btnX, y: btnY, w: btnW, h: btnH }
 
-    ctx.fillStyle = this.hovered ? '#0284c7' : '#0f2944'
+    const active = this.hovered || this.keyboardFocused
+    ctx.fillStyle = active ? '#0284c7' : '#0f2944'
     roundRect(ctx, btnX, btnY, btnW, btnH, 10)
     ctx.fill()
-    ctx.strokeStyle = this.hovered ? '#38bdf8' : '#1e3a5f'
+    ctx.strokeStyle = active ? '#38bdf8' : '#1e3a5f'
     ctx.lineWidth = 2
     roundRect(ctx, btnX, btnY, btnW, btnH, 10)
     ctx.stroke()
-    ctx.fillStyle = this.hovered ? '#ffffff' : '#7dd3fc'
+    ctx.fillStyle = active ? '#ffffff' : '#7dd3fc'
     ctx.font = `bold ${Math.round(btnH * 0.50)}px sans-serif`
     ctx.fillText('BATTLE START', cx, btnY + btnH * 0.67)
 

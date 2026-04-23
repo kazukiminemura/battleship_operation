@@ -54,6 +54,8 @@ export interface StageDefinition {
 }
 
 const DEBUG_STAGE_NUMBER = 99
+const DEBUG_ENEMY_HP_MULTIPLIER = 4
+const DEBUG_BOSS_HP_MULTIPLIER = 2.5
 const DEBUG_MAP_OBSTACLES: MapObstacle[] = [
   { id: 'debug.island.north-wall-a', x: 3300, y: 3600, rx: 900, ry: 470 },
   { id: 'debug.island.north-wall-b', x: 5650, y: 3150, rx: 1120, ry: 380 },
@@ -234,24 +236,24 @@ export function createDebugState(playerType: PlayerShipType = 'battleship'): Com
   for (const [index, x, y, angle, templateId] of makeDebugEnemySpawns()) {
     const className = templateId.includes('cruiser') ? 'cruiser' : 'destroyer'
     const id = `ship.debug.enemy.${className}.${String(index + 1).padStart(2, '0')}`
-    entities.set(id, makeShipFromTemplate({
+    entities.set(id, hardenDebugEnemy(makeShipFromTemplate({
       id,
       templateId,
       x,
       y,
       angle,
       team: 'enemy',
-    }))
+    })))
   }
 
-  entities.set('ship.debug.enemy.boss.dreadnought', makeShipFromTemplate({
+  entities.set('ship.debug.enemy.boss.dreadnought', hardenDebugEnemy(makeShipFromTemplate({
     id: 'ship.debug.enemy.boss.dreadnought',
     templateId: 'hull.enemy.boss.dreadnought',
     x: 8000,
     y: 1450,
     angle: Math.PI / 2,
     team: 'enemy',
-  }))
+  })))
 
   for (const [id, x, y, hp, radius, templateId] of makeDebugBuildings()) {
     entities.set(id, makeBuilding(id, x, y, hp, radius, templateId))
@@ -275,6 +277,14 @@ export function createDebugState(playerType: PlayerShipType = 'battleship'): Com
     detectedByPlayer: new Set<string>(),
     enemyContacts: new Map(),
   }
+}
+
+function hardenDebugEnemy(ship: ShipEntity): ShipEntity {
+  const multiplier = ship.templateId === 'hull.enemy.boss.dreadnought'
+    ? DEBUG_BOSS_HP_MULTIPLIER
+    : DEBUG_ENEMY_HP_MULTIPLIER
+  const maxHp = Math.round(ship.maxHp * multiplier)
+  return { ...ship, hp: maxHp, maxHp }
 }
 
 function makeStageBuildings(stage: StageDefinition): [string, number, number, number, number, string][] {
@@ -337,12 +347,14 @@ function makeEnemyFormation(count: number, minY: number, maxY: number): [number,
 function makeDebugEnemySpawns(): [number, number, number, number, string][] {
   const spawns: [number, number, number, number, string][] = []
   const lanes = [
-    { x: 1250, y0: 2400, y1: 13700, count: 11 },
-    { x: 2600, y0: 2050, y1: 14100, count: 10 },
-    { x: 5550, y0: 4300, y1: 14300, count: 9 },
-    { x: 10350, y0: 4300, y1: 14300, count: 9 },
-    { x: 13400, y0: 2050, y1: 14100, count: 10 },
-    { x: 14750, y0: 2400, y1: 13700, count: 11 },
+    { x: 1250, y0: 2200, y1: 14050, count: 14 },
+    { x: 2350, y0: 2050, y1: 14350, count: 14 },
+    { x: 4300, y0: 3600, y1: 14500, count: 12 },
+    { x: 6100, y0: 4100, y1: 14600, count: 13 },
+    { x: 9900, y0: 4100, y1: 14600, count: 13 },
+    { x: 11700, y0: 3600, y1: 14500, count: 12 },
+    { x: 13650, y0: 2050, y1: 14350, count: 14 },
+    { x: 14750, y0: 2200, y1: 14050, count: 14 },
   ]
 
   for (const lane of lanes) {
@@ -361,14 +373,27 @@ function makeDebugEnemySpawns(): [number, number, number, number, string][] {
   }
 
   const ambushes: [number, number, string][] = [
+    [3200, 7850, 'hull.enemy.destroyer.basic'],
     [4550, 9800, 'hull.cruiser.basic'],
+    [5000, 10450, 'hull.enemy.destroyer.basic'],
     [5550, 9600, 'hull.enemy.destroyer.basic'],
+    [6100, 10850, 'hull.cruiser.basic'],
+    [6900, 8750, 'hull.enemy.destroyer.basic'],
     [10300, 10100, 'hull.cruiser.basic'],
+    [10850, 11050, 'hull.enemy.destroyer.basic'],
     [11300, 9600, 'hull.enemy.destroyer.basic'],
+    [12400, 7900, 'hull.enemy.destroyer.basic'],
     [7600, 5200, 'hull.cruiser.basic'],
+    [8000, 5850, 'hull.enemy.destroyer.basic'],
     [8700, 5400, 'hull.enemy.destroyer.basic'],
+    [7200, 11800, 'hull.enemy.destroyer.basic'],
     [8000, 12800, 'hull.cruiser.basic'],
+    [8550, 12150, 'hull.enemy.destroyer.basic'],
     [9050, 13200, 'hull.enemy.destroyer.basic'],
+    [3650, 13250, 'hull.cruiser.basic'],
+    [4750, 13900, 'hull.enemy.destroyer.basic'],
+    [11250, 13950, 'hull.enemy.destroyer.basic'],
+    [12300, 13250, 'hull.cruiser.basic'],
   ]
 
   for (const [x, y, templateId] of ambushes) {
