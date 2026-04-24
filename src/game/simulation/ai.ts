@@ -126,16 +126,9 @@ export function generateAutoPilotCommands(state: CombatState): Command[] {
     cmds.push({ tick, actorId, type: 'rotate', value: Math.sign(angleDiff) * ship.turnRate })
   }
 
-  const preferred = preferredRange(ship)
-  if (dist > preferred + 150) {
-    // Slow down while turning hard to keep arc tight
-    const factor = Math.abs(angleDiff) > Math.PI / 2 ? 0.4 : 1.0
-    cmds.push({ tick, actorId, type: 'move', value: ship.maxSpeed * factor })
-  } else if (dist < preferred - 250) {
-    cmds.push({ tick, actorId, type: 'move', value: -ship.maxSpeed * 0.4 })
-  } else {
-    cmds.push({ tick, actorId, type: 'stop' })
-  }
+  // Slow down while turning hard to keep arc tight; always advance toward target
+  const factor = Math.abs(angleDiff) > Math.PI / 2 ? 0.4 : 1.0
+  cmds.push({ tick, actorId, type: 'move', value: ship.maxSpeed * factor })
 
   return cmds
 }
@@ -157,14 +150,6 @@ function findTarget(state: CombatState, ship: ShipEntity): Vec3 | undefined {
   return undefined
 }
 
-function preferredRange(ship: ShipEntity): number {
-  let maxRange = 0
-  for (const w of ship.weapons) {
-    const r = getWeaponConfig(w.id, w.type).maxRange
-    if (r > maxRange) maxRange = r
-  }
-  return Math.min(maxRange * 0.75, 1400)
-}
 
 function obstacleSteer(ship: ShipEntity, obstacles: readonly MapObstacle[]): number {
   const LOOKAHEAD = 900
