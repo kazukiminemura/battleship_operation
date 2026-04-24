@@ -5,7 +5,6 @@ import { renderShipExplosions } from './effects-renderer'
 import { renderProjectile as renderProjectileEntity } from './projectile-renderer'
 import { SHIP_DIMS, SHIP_SHAPES, type ShipShapeClass } from './ship-rendering-data'
 import { ShipWakeRenderer } from './wake-renderer'
-import snowmuraSpriteUrl from '../../assets/ships/snowmura-snowman-sprite.png?url'
 
 // Isometric projection parameters
 interface IsoParams {
@@ -27,15 +26,11 @@ export class CanvasRenderer {
   private effectLog: CombatEvent[] = []
   private effectKeys = new Set<string>()
   private shipWakeRenderer = new ShipWakeRenderer()
-  private snowmuraSprite: HTMLImageElement
-
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas
     const ctx = canvas.getContext('2d')
     if (!ctx) throw new Error('Could not get 2D context')
     this.ctx = ctx
-    this.snowmuraSprite = new Image()
-    this.snowmuraSprite.src = snowmuraSpriteUrl
     this.resize()
     window.addEventListener('resize', () => this.resize())
   }
@@ -1034,163 +1029,481 @@ export class CanvasRenderer {
   ): void {
     const { ctx, iso } = this
     const [cx, cy] = this.w2s(ship.pos.x, ship.pos.y)
-    const sprite = this.snowmuraSprite
-    if (sprite.complete && sprite.naturalWidth > 0) {
-      ctx.save()
-      ctx.translate(cx, cy - hPx * 0.72)
-      ctx.rotate(ship.angle + Math.PI / 2)
-      const spriteW = Math.max(88, dim.l * iso.scale * 0.98)
-      const spriteH = spriteW * (sprite.naturalHeight / sprite.naturalWidth)
-      ctx.drawImage(sprite, -spriteW / 2, -spriteH * 0.72, spriteW, spriteH)
-      ctx.restore()
+    const L = dim.l / 2
+    const W = dim.w / 2
+    const hullLocal = shipHullPoints('yukimura', L, W)
+    const worldHull = hullLocal.map(([lon, lat]) => localToWorld(lon, lat))
+    const screenHull = worldHull.map(([x, y]) => this.w2s(x, y)) as [number, number][]
 
-      const barW = dim.l * iso.scale * 0.65
-      const barY = cy - hPx * 1.95 - 14
-      const hpRatio = ship.hp / ship.maxHp
-      ctx.fillStyle = 'rgba(0,0,0,0.6)'
-      ctx.fillRect(cx - barW / 2 - 1, barY - 1, barW + 2, 6)
-      ctx.fillStyle = hpRatio > 0.5 ? '#22c55e' : hpRatio > 0.25 ? '#eab308' : '#ef4444'
-      ctx.fillRect(cx - barW / 2, barY, barW * hpRatio, 4)
-      return
+    let area = 0
+    for (let i = 0; i < screenHull.length; i++) {
+      const [x0, y0] = screenHull[i]!
+      const [x1, y1] = screenHull[(i + 1) % screenHull.length]!
+      area += x0 * y1 - x1 * y0
     }
+    const ccw = area > 0
 
-    const drawSnowPoly = (lon: number, lat: number, rx: number, ry: number, lift: number, facets: number): void => {
+    const drawSnowPoly = (lon: number, lat: number, rx: number, ry: number, lift: number, rows: number, cols: number): void => {
       const [wx, wy] = localToWorld(lon, lat)
       const [sx, sy] = this.w2s(wx, wy)
-      const grad = ctx.createRadialGradient(
-        sx - rx * 0.22,
-        sy - lift - ry * 0.38,
-        Math.max(1, rx * 0.08),
+      const bodyGrad = ctx.createRadialGradient(
+        sx - rx * 0.24,
+        sy - lift - ry * 0.34,
+        Math.max(1, rx * 0.06),
         sx,
         sy - lift,
         Math.max(rx, ry),
       )
-      grad.addColorStop(0, '#ffffff')
-      grad.addColorStop(0.58, '#f8fafc')
-      grad.addColorStop(1, '#cbd5e1')
-      const pts = facetedOvalPoints(sx, sy - lift, rx, ry * 0.72, facets, -Math.PI / 2)
-      drawClosedPath(ctx, pts)
-      ctx.fillStyle = grad
+      bodyGrad.addColorStop(0, '#ffffff')
+      bodyGrad.addColorStop(0.62, '#f8fafc')
+      bodyGrad.addColorStop(1, '#dbe4ee')
+      drawClosedPath(ctx, facetedOvalPoints(sx, sy - lift, rx, ry * 0.74, Math.max(22, Math.floor(cols * 0.7)), -Math.PI / 2))
+      ctx.fillStyle = bodyGrad
       ctx.fill()
-      ctx.strokeStyle = '#e2e8f0'
-      ctx.lineWidth = 1
+      ctx.strokeStyle = '#94a3b8'
+      ctx.lineWidth = 1.6
       ctx.stroke()
+      drawFacetedEllipseMesh(ctx, {
+        cx: sx,
+        cy: sy - lift,
+        rx,
+        ry: ry * 0.74,
+        rows,
+        cols,
+        baseColor: '#f3f4f6',
+        lightColor: '#ffffff',
+        shadowColor: '#cbd5e1',
+        wobble: 0.028,
+        stroke: '#e2e8f0',
+        strokeWidth: 0.28,
+        lightBiasX: -0.38,
+        lightBiasY: -0.52,
+      })
+    }
+    const drawDeckFitting = (lon: number, lat: number, radius: number, lift: number, color: string, rim: string): void => {
+      const [wx, wy] = localToWorld(lon, lat)
+      const [sx, sy] = this.w2s(wx, wy)
+      ctx.save()
+      ctx.translate(sx, sy - lift)
+      ctx.scale(1.18, 0.68)
+      ctx.beginPath()
+      ctx.arc(0, 0, radius, 0, Math.PI * 2)
+      ctx.fillStyle = color
+      ctx.fill()
+      ctx.strokeStyle = rim
+      ctx.lineWidth = 0.7
+      ctx.stroke()
+      ctx.restore()
+    }
+    const drawPorthole = (lon: number, lat: number, lift: number, radius: number): void => {
+      const [wx, wy] = localToWorld(lon, lat)
+      const [sx, sy] = this.w2s(wx, wy)
+      ctx.save()
+      ctx.translate(sx, sy - lift)
+      ctx.scale(1.05, 0.82)
+      ctx.beginPath()
+      ctx.arc(0, 0, radius, 0, Math.PI * 2)
+      ctx.fillStyle = '#334155'
+      ctx.fill()
+      ctx.strokeStyle = '#111827'
+      ctx.lineWidth = 0.6
+      ctx.stroke()
+      ctx.restore()
     }
 
     ctx.save()
     ctx.translate(cx, cy)
     ctx.scale(1.75, 0.70)
-    const shadow = ctx.createRadialGradient(0, 0, 0, 0, 0, dim.l * iso.scale * 0.30)
-    shadow.addColorStop(0, 'rgba(15,23,42,0.34)')
-    shadow.addColorStop(1, 'rgba(15,23,42,0)')
     ctx.beginPath()
     ctx.arc(0, 0, dim.l * iso.scale * 0.30, 0, Math.PI * 2)
-    ctx.fillStyle = shadow
+    ctx.fillStyle = '#334155'
     ctx.fill()
     ctx.restore()
 
-    const baseRx = Math.max(24, dim.w * iso.scale * 1.05)
-    const baseRy = Math.max(16, dim.w * iso.scale * 0.56)
-    drawSnowPoly(-dim.l * 0.08, 0, baseRx, baseRy, hPx * 0.05, 16)
-    drawSnowPoly(dim.l * 0.02, 0, baseRx * 0.74, baseRy * 0.82, hPx * 0.84, 14)
-    drawSnowPoly(dim.l * 0.12, 0, baseRx * 0.56, baseRy * 0.64, hPx * 1.48, 12)
-
-    const [hx, hy] = this.w2s(...localToWorld(dim.l * 0.12, 0))
-    ctx.save()
-    ctx.translate(hx, hy - hPx * 1.48 - baseRy * 0.74)
-    drawClosedPath(ctx, facetedOvalPoints(0, 0, baseRx * 0.60, baseRy * 0.22, 10, Math.PI / 10))
-    ctx.fillStyle = '#166534'
-    ctx.fill()
-    ctx.strokeStyle = '#22c55e'
-    ctx.lineWidth = 1.5
-    ctx.stroke()
     ctx.beginPath()
-    ctx.moveTo(-baseRx * 0.35, 0)
-    ctx.lineTo(-baseRx * 0.16, -baseRy * 0.54)
-    ctx.lineTo(baseRx * 0.22, -baseRy * 0.58)
-    ctx.lineTo(baseRx * 0.40, 0)
+    ctx.moveTo(screenHull[0]![0] + 4, screenHull[0]![1] + 6)
+    for (let i = 1; i < screenHull.length; i++) ctx.lineTo(screenHull[i]![0] + 4, screenHull[i]![1] + 6)
     ctx.closePath()
-    ctx.fillStyle = '#15803d'
+    ctx.fillStyle = '#1e293b'
     ctx.fill()
-    ctx.strokeStyle = '#22c55e'
-    ctx.stroke()
-    ctx.restore()
 
-    const scarfY = hy - hPx * 1.18
-    ctx.lineWidth = Math.max(3, dim.w * iso.scale * 0.08)
-    for (let i = 0; i < 5; i++) {
-      ctx.strokeStyle = i % 2 === 0 ? '#dc2626' : '#15803d'
-      ctx.beginPath()
-      ctx.moveTo(hx - baseRx * 0.55 + i * baseRx * 0.22, scarfY)
-      ctx.lineTo(hx - baseRx * 0.41 + i * baseRx * 0.22, scarfY + baseRy * 0.10)
-      ctx.stroke()
+    for (let i = 0; i < screenHull.length; i++) {
+      const j = (i + 1) % screenHull.length
+      const [x0, y0] = screenHull[i]!
+      const [x1, y1] = screenHull[j]!
+      const ny = ccw ? (x0 - x1) : (x1 - x0)
+      if (ny > 0) {
+        ctx.beginPath()
+        ctx.moveTo(x0, y0)
+        ctx.lineTo(x1, y1)
+        ctx.lineTo(x1, y1 - hPx * 1.18)
+        ctx.lineTo(x0, y0 - hPx * 1.18)
+        ctx.closePath()
+        ctx.fillStyle = lerpHex('#1f2937', '#475569', Math.min(1, ny / 72) * 0.72)
+        ctx.fill()
+      }
     }
 
-    ctx.fillStyle = '#0f172a'
-    for (const lat of [-dim.w * 0.12, dim.w * 0.12]) {
-      const [ex, ey] = this.w2s(...localToWorld(dim.l * 0.24, lat))
-      const eyeR = Math.max(2.3, dim.w * iso.scale * 0.045)
-      drawClosedPath(ctx, [
-        [ex, ey - hPx * 1.48 - baseRy * 0.14 - eyeR],
-        [ex + eyeR * 0.85, ey - hPx * 1.48 - baseRy * 0.14],
-        [ex, ey - hPx * 1.48 - baseRy * 0.14 + eyeR],
-        [ex - eyeR * 0.85, ey - hPx * 1.48 - baseRy * 0.14],
-      ])
+    const topDeck = screenHull.map(([x, y]) => [x, y - hPx * 1.18] as [number, number])
+    drawClosedPath(ctx, topDeck)
+    ctx.fillStyle = '#f8fafc'
+    ctx.fill()
+    ctx.strokeStyle = '#94a3b8'
+    ctx.lineWidth = 0.9
+    ctx.stroke()
+
+    const innerDeck = topDeck.map(([x, y]) => [cx + (x - cx) * 0.90, cy - hPx * 1.10 + (y - (cy - hPx * 1.18)) * 0.90] as [number, number])
+    drawClosedPath(ctx, innerDeck)
+    ctx.fillStyle = '#e2e8f0'
+    ctx.fill()
+
+    const stripeInsets = 0.88
+    const stripeTop = screenHull.map(([x, y]) => [cx + (x - cx) * stripeInsets, y - hPx * 0.50] as [number, number])
+    for (let i = 0; i < stripeTop.length; i++) {
+      const a = stripeTop[i]!
+      const b = stripeTop[(i + 1) % stripeTop.length]!
+      const a0 = screenHull[i]!
+      const b0 = screenHull[(i + 1) % screenHull.length]!
+      ctx.beginPath()
+      ctx.moveTo(a0[0], a0[1] - hPx * 0.18)
+      ctx.lineTo(b0[0], b0[1] - hPx * 0.18)
+      ctx.lineTo(b[0], b[1])
+      ctx.lineTo(a[0], a[1])
+      ctx.closePath()
+      ctx.fillStyle = i % 2 === 0 ? '#b91c1c' : '#166534'
       ctx.fill()
     }
 
-    const [nx, ny] = this.w2s(...localToWorld(dim.l * 0.31, 0))
-    ctx.save()
-    ctx.translate(nx, ny - hPx * 1.48 - baseRy * 0.06)
+    ctx.strokeStyle = '#f8fafc'
+    ctx.lineWidth = 0.9
     ctx.beginPath()
-    const noseR = Math.max(4, dim.w * iso.scale * 0.08)
-    ctx.moveTo(noseR * 1.35, 0)
-    ctx.lineTo(-noseR * 0.42, -noseR * 0.72)
-    ctx.lineTo(-noseR * 0.42, noseR * 0.72)
-    ctx.closePath()
-    ctx.fillStyle = '#f59e0b'
-    ctx.fill()
-    ctx.restore()
-
-    ctx.strokeStyle = '#111827'
-    ctx.lineWidth = 1.2
-    ctx.beginPath()
-    ctx.moveTo(hx - baseRx * 0.21, hy - hPx * 1.42 + baseRy * 0.07)
-    ctx.lineTo(hx - baseRx * 0.08, hy - hPx * 1.42 + baseRy * 0.15)
-    ctx.lineTo(hx + baseRx * 0.07, hy - hPx * 1.42 + baseRy * 0.18)
-    ctx.lineTo(hx + baseRx * 0.22, hy - hPx * 1.42 + baseRy * 0.10)
+    ctx.moveTo(topDeck[0]![0], topDeck[0]![1])
+    for (let i = 1; i < topDeck.length; i++) ctx.lineTo(topDeck[i]![0], topDeck[i]![1])
     ctx.stroke()
 
-    for (const lat of [-dim.w * 0.44, dim.w * 0.44]) {
-      const [ax, ay] = this.w2s(...localToWorld(-dim.l * 0.03, lat))
-      ctx.strokeStyle = '#7f1d1d'
-      ctx.lineWidth = Math.max(2, dim.w * iso.scale * 0.055)
+    const railPoints = [
+      localToWorld(dim.l * 0.36, 0),
+      localToWorld(dim.l * 0.18, 0),
+      localToWorld(-dim.l * 0.06, 0),
+      localToWorld(-dim.l * 0.34, 0),
+    ].map(([x, y]) => this.w2s(x, y)) as [number, number][]
+    const deckUnit = Math.max(8, dim.w * iso.scale * 0.34)
+    ctx.strokeStyle = '#64748b'
+    ctx.lineWidth = 1
+    for (const [sx, sy] of railPoints) {
       ctx.beginPath()
-      ctx.moveTo(ax, ay - hPx * 0.72)
-      ctx.lineTo(ax - Math.sign(lat) * 18, ay - hPx * 0.96)
+      ctx.moveTo(sx - deckUnit * 0.16, sy - hPx * 1.19)
+      ctx.lineTo(sx + deckUnit * 0.16, sy - hPx * 1.19)
       ctx.stroke()
+    }
+
+    const railPairs: Array<[number, number, number]> = [
+      [dim.l * 0.26, dim.w * 0.50, dim.w * 0.82],
+      [dim.l * 0.02, dim.w * 0.58, dim.w * 0.92],
+      [-dim.l * 0.22, dim.w * 0.52, dim.w * 0.84],
+    ]
+    ctx.strokeStyle = '#94a3b8'
+    for (const [lon, latA, latB] of railPairs) {
+      const [ax, ay] = this.w2s(...localToWorld(lon, latA))
+      const [bx, by] = this.w2s(...localToWorld(lon, latB))
+      ctx.beginPath()
+      ctx.moveTo(ax, ay - hPx * 1.17)
+      ctx.lineTo(bx, by - hPx * 1.17)
+      ctx.stroke()
+      const [cx2, cy2] = this.w2s(...localToWorld(lon, -latA))
+      const [dx2, dy2] = this.w2s(...localToWorld(lon, -latB))
+      ctx.beginPath()
+      ctx.moveTo(cx2, cy2 - hPx * 1.17)
+      ctx.lineTo(dx2, dy2 - hPx * 1.17)
+      ctx.stroke()
+    }
+
+    const hullBaseRx = Math.max(26, dim.w * iso.scale * 1.02)
+    const hullBaseRy = Math.max(16, dim.w * iso.scale * 0.48)
+    drawSnowPoly(-dim.l * 0.02, 0, hullBaseRx * 0.98, hullBaseRy * 0.92, hPx * 1.34, 18, 34)
+    drawSnowPoly(dim.l * 0.18, 0, hullBaseRx * 0.62, hullBaseRy * 0.66, hPx * 2.12, 16, 28)
+    drawSnowPoly(-dim.l * 0.32, 0, hullBaseRx * 0.18, hullBaseRy * 0.17, hPx * 1.02, 8, 12)
+
+    for (const lon of [dim.l * 0.32, dim.l * 0.14, -dim.l * 0.04, -dim.l * 0.22]) {
+      drawDeckFitting(lon, -dim.w * 0.10, Math.max(1.4, deckUnit * 0.11), hPx * 1.22, '#94a3b8', '#475569')
+      drawDeckFitting(lon, dim.w * 0.10, Math.max(1.4, deckUnit * 0.11), hPx * 1.22, '#94a3b8', '#475569')
+    }
+    for (const lon of [dim.l * 0.04, -dim.l * 0.12]) {
+      drawDeckFitting(lon, 0, Math.max(2, deckUnit * 0.14), hPx * 1.25, '#64748b', '#e2e8f0')
+    }
+
+    const [hx, hy] = this.w2s(...localToWorld(dim.l * 0.15, 0))
+    const hatCx = hx + hullBaseRx * 0.02
+    const hatCy = hy - hPx * 2.44
+    drawFacetedEllipseMesh(ctx, {
+      cx: hatCx,
+      cy: hatCy,
+      rx: hullBaseRx * 0.56,
+      ry: hullBaseRy * 0.22,
+      rows: 8,
+      cols: 28,
+      baseColor: '#166534',
+      lightColor: '#84cc16',
+      shadowColor: '#14532d',
+      wobble: 0.04,
+      stroke: '#4d7c0f',
+      strokeWidth: 0.45,
+      lightBiasX: -0.34,
+      lightBiasY: -0.30,
+    })
+    drawFacetedEllipseMesh(ctx, {
+      cx: hatCx + hullBaseRx * 0.05,
+      cy: hatCy - hullBaseRy * 0.38,
+      rx: hullBaseRx * 0.48,
+      ry: hullBaseRy * 0.50,
+      rows: 14,
+      cols: 26,
+      baseColor: '#15803d',
+      lightColor: '#a3e635',
+      shadowColor: '#14532d',
+      wobble: 0.036,
+      stroke: '#65a30d',
+      strokeWidth: 0.45,
+      lightBiasX: -0.40,
+      lightBiasY: -0.45,
+    })
+    drawDeckFitting(dim.l * 0.16, 0, Math.max(5, deckUnit * 0.42), hPx * 2.64, '#6b7280', '#d1d5db')
+    drawDeckFitting(dim.l * 0.13, 0, Math.max(3.2, deckUnit * 0.26), hPx * 2.86, '#4b5563', '#e5e7eb')
+
+    const [hatTurretX, hatTurretY] = this.w2s(...localToWorld(dim.l * 0.16, 0))
+    const hatTurretLift = hPx * 2.90
+    ctx.save()
+    ctx.translate(hatTurretX, hatTurretY - hatTurretLift)
+    ctx.beginPath()
+    ctx.moveTo(-deckUnit * 0.46, deckUnit * 0.18)
+    ctx.lineTo(-deckUnit * 0.34, -deckUnit * 0.34)
+    ctx.lineTo(deckUnit * 0.22, -deckUnit * 0.40)
+    ctx.lineTo(deckUnit * 0.54, -deckUnit * 0.06)
+    ctx.lineTo(deckUnit * 0.42, deckUnit * 0.34)
+    ctx.lineTo(-deckUnit * 0.20, deckUnit * 0.38)
+    ctx.closePath()
+    ctx.fillStyle = '#9ca3af'
+    ctx.fill()
+    ctx.strokeStyle = '#e5e7eb'
+    ctx.lineWidth = 0.8
+    ctx.stroke()
+    ctx.restore()
+    for (const offset of [-0.34, 0, 0.34]) {
+      ctx.beginPath()
+      ctx.moveTo(hatTurretX + deckUnit * offset * 0.9, hatTurretY - hatTurretLift - deckUnit * 0.08)
+      ctx.lineTo(hatTurretX + deckUnit * (0.78 + offset * 0.25), hatTurretY - hatTurretLift - deckUnit * 0.44)
+      ctx.strokeStyle = '#d1d5db'
+      ctx.lineWidth = Math.max(1.3, deckUnit * 0.16)
+      ctx.stroke()
+    }
+    ctx.beginPath()
+    ctx.moveTo(hatTurretX + deckUnit * 0.10, hatTurretY - hatTurretLift - deckUnit * 0.30)
+    ctx.lineTo(hatTurretX + deckUnit * 0.10, hatTurretY - hatTurretLift - deckUnit * 0.76)
+    ctx.strokeStyle = '#94a3b8'
+    ctx.lineWidth = 1
+    ctx.stroke()
+    drawDeckFitting(dim.l * 0.12, 0, Math.max(1.6, deckUnit * 0.10), hPx * 3.18, '#94a3b8', '#e2e8f0')
+
+    const scarfY = hy - hPx * 1.88
+    drawFacetedEllipseMesh(ctx, {
+      cx: hx,
+      cy: scarfY,
+      rx: hullBaseRx * 0.58,
+      ry: hullBaseRy * 0.16,
+      rows: 6,
+      cols: 28,
+      baseColor: '#b91c1c',
+      lightColor: '#ef4444',
+      shadowColor: '#7f1d1d',
+      wobble: 0.03,
+      stroke: '#991b1b',
+      strokeWidth: 0.35,
+      lightBiasX: -0.25,
+      lightBiasY: -0.15,
+      stripeEvery: 4,
+      stripeColor: '#166534',
+    })
+    drawFacetedRibbon(ctx, {
+      x: hx + hullBaseRx * 0.04,
+      y: scarfY + hullBaseRy * 0.10,
+      width: hullBaseRx * 0.27,
+      height: hullBaseRy * 1.15,
+      slant: -hullBaseRx * 0.10,
+      rows: 14,
+      cols: 8,
+      baseColor: '#b91c1c',
+      lightColor: '#ef4444',
+      shadowColor: '#7f1d1d',
+      stripeEvery: 4,
+      stripeColor: '#166534',
+    })
+    drawFacetedRibbon(ctx, {
+      x: hx - hullBaseRx * 0.10,
+      y: scarfY + hullBaseRy * 0.03,
+      width: hullBaseRx * 0.18,
+      height: hullBaseRy * 0.74,
+      slant: hullBaseRx * 0.04,
+      rows: 10,
+      cols: 6,
+      baseColor: '#166534',
+      lightColor: '#22c55e',
+      shadowColor: '#14532d',
+      stripeEvery: 2,
+      stripeColor: '#b91c1c',
+    })
+
+    ctx.fillStyle = '#0f172a'
+    for (const lat of [-dim.w * 0.11, dim.w * 0.11]) {
+      const [ex, ey] = this.w2s(...localToWorld(dim.l * 0.26, lat))
+      const eyeR = Math.max(2.3, dim.w * iso.scale * 0.045)
+      drawFacetedEllipseMesh(ctx, {
+        cx: ex,
+        cy: ey - hPx * 2.14,
+        rx: eyeR * 1.02,
+        ry: eyeR * 1.18,
+        rows: 5,
+        cols: 10,
+        baseColor: '#111827',
+        lightColor: '#4b5563',
+        shadowColor: '#020617',
+        wobble: 0.03,
+        stroke: '#374151',
+        strokeWidth: 0.2,
+        lightBiasX: -0.30,
+        lightBiasY: -0.50,
+      })
+    }
+
+    const [nx, ny] = this.w2s(...localToWorld(dim.l * 0.33, 0))
+    const noseR = Math.max(4, dim.w * iso.scale * 0.08)
+    drawFacetedNose(ctx, nx, ny - hPx * 2.06, noseR)
+    drawDeckFitting(dim.l * 0.30, -dim.w * 0.07, Math.max(0.75, deckUnit * 0.05), hPx * 2.18, '#ffffff', '#cbd5e1')
+    drawDeckFitting(dim.l * 0.29, dim.w * 0.08, Math.max(0.75, deckUnit * 0.05), hPx * 2.18, '#ffffff', '#cbd5e1')
+
+    ctx.strokeStyle = '#111827'
+    ctx.lineWidth = 1.6
+    ctx.lineCap = 'round'
+    ctx.lineJoin = 'round'
+    ctx.beginPath()
+    ctx.moveTo(hx - hullBaseRx * 0.21, hy - hPx * 2.02)
+    ctx.bezierCurveTo(
+      hx - hullBaseRx * 0.12,
+      hy - hPx * 1.95,
+      hx + hullBaseRx * 0.08,
+      hy - hPx * 1.92,
+      hx + hullBaseRx * 0.22,
+      hy - hPx * 2.02,
+    )
+    ctx.stroke()
+
+    for (const lon of [dim.l * 0.06, -dim.l * 0.04, -dim.l * 0.14]) {
+      drawPorthole(lon, dim.w * 0.18, hPx * 1.58, Math.max(2, deckUnit * 0.10))
+      drawPorthole(lon, -dim.w * 0.18, hPx * 1.58, Math.max(2, deckUnit * 0.10))
     }
 
     const turrets = turretLayout('yukimura', dim)
+    const aimTick = this.effectLog.length > 0 ? this.effectLog[this.effectLog.length - 1]!.tick : 0
     for (const turret of turrets) {
       const [tx, ty] = localToWorld(turret.lon, turret.lat)
       const [sx, sy] = this.w2s(tx, ty)
-      const r = Math.max(2.6, turret.radius * iso.scale)
+      const r = Math.max(2.8, turret.radius * iso.scale * (Math.abs(turret.lat) > 0 ? 0.92 : 1.04))
+      const lift = Math.abs(turret.lat) > 0 ? hPx * 1.52 : turret.lon > dim.l * 0.2 ? hPx * 1.30 : hPx * 1.08
       ctx.save()
-      ctx.translate(sx, sy - hPx * 0.58)
-      ctx.scale(1.2, 0.62)
+      ctx.translate(sx, sy - lift)
+      ctx.scale(1.22, 0.68)
       ctx.beginPath()
       ctx.arc(0, 0, r, 0, Math.PI * 2)
-      ctx.fillStyle = '#f8fafc'
+      ctx.fillStyle = '#6b7280'
       ctx.fill()
-      ctx.strokeStyle = '#16a34a'
-      ctx.lineWidth = 0.8
+      ctx.strokeStyle = '#d1d5db'
+      ctx.lineWidth = 0.75
+      ctx.stroke()
+      ctx.restore()
+
+      ctx.save()
+      ctx.translate(sx, sy - lift - r * 0.54)
+      ctx.beginPath()
+      ctx.moveTo(-r * 0.9, r * 0.35)
+      ctx.lineTo(-r * 0.55, -r * 0.78)
+      ctx.lineTo(r * 0.48, -r * 0.78)
+      ctx.lineTo(r * 0.92, r * 0.15)
+      ctx.lineTo(r * 0.30, r * 0.82)
+      ctx.lineTo(-r * 0.75, r * 0.72)
+      ctx.closePath()
+      ctx.fillStyle = '#9ca3af'
+      ctx.fill()
+      ctx.strokeStyle = '#e5e7eb'
+      ctx.lineWidth = 0.7
+      ctx.stroke()
+      ctx.restore()
+
+      const aim = this.turretAimDirection(ship, { x: tx, y: ty, z: 0 }, aimTick, dim.l * 0.25)
+      const barrelBaseY = sy - lift - r * 0.46
+      const spread = turret.barrels === 3 ? [-0.72, 0, 0.72] : turret.barrels === 2 ? [-0.42, 0.42] : [0]
+      for (const offset of spread) {
+        const bx = tx + aim.x * dim.l * 0.14
+        const by = ty + aim.y * dim.l * 0.14
+        const [barrelX, barrelY] = this.w2s(bx, by)
+        ctx.beginPath()
+        ctx.moveTo(sx + offset * r * 0.9, barrelBaseY)
+        ctx.lineTo(barrelX + offset * r * 0.22, barrelY - lift - r * 0.20)
+        ctx.strokeStyle = '#d1d5db'
+        ctx.lineWidth = Math.max(1, r * 0.26)
+        ctx.stroke()
+      }
+    }
+
+    for (const lat of [-dim.w * 0.82, dim.w * 0.82]) {
+      const [mx, my] = this.w2s(...localToWorld(dim.l * 0.00, lat))
+      ctx.beginPath()
+      ctx.moveTo(mx, my - hPx * 1.52)
+      ctx.lineTo(mx + Math.sign(lat) * deckUnit * 0.58, my - hPx * 1.58)
+      ctx.strokeStyle = '#cbd5e1'
+      ctx.lineWidth = Math.max(1.1, deckUnit * 0.12)
+      ctx.stroke()
+      drawDeckFitting(dim.l * 0.02, lat, Math.max(3.2, deckUnit * 0.20), hPx * 1.50, '#f8fafc', '#cbd5e1')
+      drawDeckFitting(dim.l * 0.34, lat * 0.94, Math.max(4.2, deckUnit * 0.24), hPx * 1.34, '#f8fafc', '#cbd5e1')
+    }
+
+    const mastBase = this.w2s(...localToWorld(-dim.l * 0.14, dim.w * 0.18))
+    ctx.strokeStyle = '#94a3b8'
+    ctx.lineWidth = 1.2
+    ctx.beginPath()
+    ctx.moveTo(mastBase[0], mastBase[1] - hPx * 1.58)
+    ctx.lineTo(mastBase[0], mastBase[1] - hPx * 2.48)
+    ctx.stroke()
+    ctx.fillStyle = '#dc2626'
+    drawClosedPath(ctx, [
+      [mastBase[0], mastBase[1] - hPx * 2.42],
+      [mastBase[0] + hullBaseRx * 0.22, mastBase[1] - hPx * 2.34],
+      [mastBase[0], mastBase[1] - hPx * 2.24],
+    ])
+    ctx.fill()
+    ctx.fillStyle = '#166534'
+    drawClosedPath(ctx, [
+      [mastBase[0], mastBase[1] - hPx * 2.24],
+      [mastBase[0] + hullBaseRx * 0.16, mastBase[1] - hPx * 2.19],
+      [mastBase[0], mastBase[1] - hPx * 2.11],
+    ])
+    ctx.fill()
+
+    for (const [lon, lat] of [[dim.l * 0.44, 0], [dim.l * 0.52, 0.10 * dim.w], [dim.l * 0.56, -0.08 * dim.w]] as Array<[number, number]>) {
+      const [sx, sy] = this.w2s(...localToWorld(lon, lat))
+      ctx.save()
+      ctx.translate(sx, sy - hPx * 1.10)
+      ctx.scale(1.2, 0.8)
+      ctx.beginPath()
+      ctx.arc(0, 0, Math.max(3.2, deckUnit * 0.16), 0, Math.PI * 2)
+      ctx.fillStyle = '#ffffff'
+      ctx.fill()
+      ctx.strokeStyle = '#cbd5e1'
+      ctx.lineWidth = 0.6
       ctx.stroke()
       ctx.restore()
     }
 
     const barW = dim.l * iso.scale * 0.65
-    const barY = cy - hPx * 1.95 - 14
+    const barY = cy - hPx * 2.72 - 14
     const hpRatio = ship.hp / ship.maxHp
     ctx.fillStyle = 'rgba(0,0,0,0.6)'
     ctx.fillRect(cx - barW / 2 - 1, barY - 1, barW + 2, 6)
@@ -1558,6 +1871,151 @@ function facetedOvalPoints(
     pts.push([cx + Math.cos(a) * rx * wobble, cy + Math.sin(a) * ry * wobble])
   }
   return pts
+}
+
+type FacetedEllipseMeshOptions = {
+  cx: number
+  cy: number
+  rx: number
+  ry: number
+  rows: number
+  cols: number
+  baseColor: string
+  lightColor: string
+  shadowColor: string
+  wobble: number
+  stroke: string
+  strokeWidth: number
+  lightBiasX: number
+  lightBiasY: number
+  stripeEvery?: number
+  stripeColor?: string
+}
+
+function drawFacetedEllipseMesh(ctx: CanvasRenderingContext2D, opts: FacetedEllipseMeshOptions): void {
+  const {
+    cx, cy, rx, ry, rows, cols, baseColor, lightColor, shadowColor, wobble, stroke, strokeWidth, lightBiasX, lightBiasY, stripeEvery, stripeColor,
+  } = opts
+  const ringPoints: [number, number][][] = []
+  for (let row = 0; row <= rows; row++) {
+    const v = row / rows
+    const theta = -Math.PI / 2 + Math.PI * v
+    const ringScaleY = Math.sin(theta)
+    const ringScaleX = Math.cos(theta)
+    const rowRx = Math.max(0.001, rx * ringScaleX)
+    const rowCy = cy + ringScaleY * ry
+    const ring: [number, number][] = []
+    for (let col = 0; col <= cols; col++) {
+      const u = col / cols
+      const angle = u * Math.PI * 2
+      const noise = 1 + signedNoise(u * 4.7, v * 5.3, row + col + 11) * wobble
+      ring.push([
+        cx + Math.cos(angle) * rowRx * noise,
+        rowCy + Math.sin(angle) * ry * 0.04 * noise,
+      ])
+    }
+    ringPoints.push(ring)
+  }
+
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const p00 = ringPoints[row]![col]!
+      const p01 = ringPoints[row]![col + 1]!
+      const p10 = ringPoints[row + 1]![col]!
+      const p11 = ringPoints[row + 1]![col + 1]!
+      const cellColor = stripeEvery && stripeColor && Math.floor(col / stripeEvery) % 2 === 1 ? stripeColor : baseColor
+      fillFacetTriangle(ctx, p00, p10, p11, cellColor, lightColor, shadowColor, lightBiasX, lightBiasY, stroke, strokeWidth)
+      fillFacetTriangle(ctx, p00, p11, p01, cellColor, lightColor, shadowColor, lightBiasX, lightBiasY, stroke, strokeWidth)
+    }
+  }
+}
+
+type FacetedRibbonOptions = {
+  x: number
+  y: number
+  width: number
+  height: number
+  slant: number
+  rows: number
+  cols: number
+  baseColor: string
+  lightColor: string
+  shadowColor: string
+  stripeEvery: number
+  stripeColor: string
+}
+
+function drawFacetedRibbon(ctx: CanvasRenderingContext2D, opts: FacetedRibbonOptions): void {
+  const { x, y, width, height, slant, rows, cols, baseColor, lightColor, shadowColor, stripeEvery, stripeColor } = opts
+  const grid: [number, number][][] = []
+  for (let row = 0; row <= rows; row++) {
+    const t = row / rows
+    const rowWidth = width * (1 - t * 0.18)
+    const centerX = x + slant * t + Math.sin(t * Math.PI * 1.2) * width * 0.08
+    const rowY = y + height * t
+    const rowPoints: [number, number][] = []
+    for (let col = 0; col <= cols; col++) {
+      const u = col / cols
+      const bend = Math.sin((u - 0.5) * Math.PI) * width * 0.08
+      rowPoints.push([
+        centerX + (u - 0.5) * rowWidth + signedNoise(u * 7.1, t * 6.2, row + col + 31) * width * 0.012,
+        rowY + bend * 0.22,
+      ])
+    }
+    grid.push(rowPoints)
+  }
+
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const p00 = grid[row]![col]!
+      const p01 = grid[row]![col + 1]!
+      const p10 = grid[row + 1]![col]!
+      const p11 = grid[row + 1]![col + 1]!
+      const color = Math.floor(col / stripeEvery) % 2 === 0 ? baseColor : stripeColor
+      fillFacetTriangle(ctx, p00, p10, p11, color, lightColor, shadowColor, -0.18, -0.34, shadowColor, 0.35)
+      fillFacetTriangle(ctx, p00, p11, p01, color, lightColor, shadowColor, -0.18, -0.34, shadowColor, 0.35)
+    }
+  }
+}
+
+function drawFacetedNose(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number): void {
+  const tip: [number, number] = [cx + r * 1.3, cy]
+  const top: [number, number] = [cx - r * 0.42, cy - r * 0.72]
+  const bottom: [number, number] = [cx - r * 0.42, cy + r * 0.72]
+  const midTop: [number, number] = [cx + r * 0.36, cy - r * 0.30]
+  const midBottom: [number, number] = [cx + r * 0.36, cy + r * 0.30]
+  fillFacetTriangle(ctx, tip, midTop, midBottom, '#f59e0b', '#fdba74', '#c2410c', -0.25, -0.4, '#c2410c', 0.28)
+  fillFacetTriangle(ctx, top, midTop, bottom, '#ea580c', '#fdba74', '#9a3412', -0.25, -0.4, '#9a3412', 0.28)
+  fillFacetTriangle(ctx, bottom, midTop, midBottom, '#f97316', '#fdba74', '#c2410c', -0.25, -0.4, '#c2410c', 0.28)
+}
+
+function fillFacetTriangle(
+  ctx: CanvasRenderingContext2D,
+  a: [number, number],
+  b: [number, number],
+  c: [number, number],
+  baseColor: string,
+  lightColor: string,
+  shadowColor: string,
+  lightBiasX: number,
+  lightBiasY: number,
+  stroke: string,
+  strokeWidth: number,
+): void {
+  const mx = (a[0] + b[0] + c[0]) / 3
+  const my = (a[1] + b[1] + c[1]) / 3
+  const nx = ((b[1] - a[1]) + (c[1] - b[1]) + (a[1] - c[1])) * 0.02 + lightBiasX
+  const ny = -((b[0] - a[0]) + (c[0] - b[0]) + (a[0] - c[0])) * 0.02 + lightBiasY
+  const light = Math.max(-1, Math.min(1, nx * 0.85 + ny * 1.1 + signedNoise(mx * 0.01, my * 0.01, 97) * 0.18))
+  const tone = light >= 0
+    ? lerpHex(baseColor, lightColor, Math.min(0.78, light * 0.72))
+    : lerpHex(baseColor, shadowColor, Math.min(0.82, -light * 0.70))
+  drawClosedPath(ctx, [a, b, c])
+  ctx.fillStyle = tone
+  ctx.fill()
+  ctx.strokeStyle = stroke
+  ctx.lineWidth = strokeWidth
+  ctx.stroke()
 }
 
 function signedNoise(x: number, y: number, salt: number): number {
