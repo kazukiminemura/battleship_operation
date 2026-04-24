@@ -55,6 +55,9 @@ export interface StageDefinition {
   boss?: boolean
 }
 
+// Speed reduction per armor point: heavier armor = more displacement = slower hull
+const ARMOR_WEIGHT_K = 0.004
+
 const DEBUG_STAGE_NUMBER = 99
 const DEBUG_ENEMY_HP_MULTIPLIER = 4
 const DEBUG_BOSS_HP_MULTIPLIER = 2.5
@@ -119,7 +122,7 @@ function makeShipFromTemplate(spawn: ShipSpawn): ShipEntity {
     speed: 0,
     targetSpeed: 0,
     speedLevel: 'stop',
-    maxSpeed: template.maxSpeed,
+    maxSpeed: template.maxSpeed / (1 + (template.armor ?? 0) * ARMOR_WEIGHT_K),
     turnRate: template.turnRate,
     detectionRange: template.detectionRange,
     weapons: template.weapons.slice(0, MAX_WEAPON_SLOTS).map(makeWeaponState),
