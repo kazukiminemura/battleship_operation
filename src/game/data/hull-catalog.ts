@@ -16,6 +16,7 @@ export interface HullCatalogEntry {
   className: string
   minStage: number
   hp: number
+  armor: number
   maxSpeed: number
   turnRate: number
   slots: HullSlot[]
@@ -36,7 +37,7 @@ export const HULL_CATALOG: HullCatalogEntry[] = [
     name: '駆逐艦 I型',
     className: '汎用駆逐艦',
     minStage: 1,
-    hp: 420, maxSpeed: 6.25, turnRate: 0.04,
+    hp: 420, armor: 12, maxSpeed: 6.25, turnRate: 0.04,
     slots: [
       { id: 's0', label: '主砲',     x:  0.0, y: -0.70, compatibleTypes: GUN },
       { id: 's1', label: '魚雷(左)', x: -0.5, y:  0.05, compatibleTypes: TRP },
@@ -50,7 +51,7 @@ export const HULL_CATALOG: HullCatalogEntry[] = [
     name: '駆逐艦 II型',
     className: '改良型駆逐艦',
     minStage: 3,
-    hp: 530, maxSpeed: 6.8, turnRate: 0.043,
+    hp: 530, armor: 15, maxSpeed: 6.8, turnRate: 0.043,
     slots: [
       { id: 's0', label: '前主砲',   x:  0.0, y: -0.75, compatibleTypes: GUN },
       { id: 's1', label: '後主砲',   x:  0.0, y: -0.20, compatibleTypes: GUN },
@@ -65,7 +66,7 @@ export const HULL_CATALOG: HullCatalogEntry[] = [
     name: '駆逐艦 III型',
     className: '精鋭駆逐艦',
     minStage: 6,
-    hp: 660, maxSpeed: 7.2, turnRate: 0.046,
+    hp: 660, armor: 18, maxSpeed: 7.2, turnRate: 0.046,
     slots: [
       { id: 's0', label: '前主砲',   x:  0.0, y: -0.75, compatibleTypes: GUN },
       { id: 's1', label: '後主砲',   x:  0.0, y: -0.20, compatibleTypes: GUN },
@@ -83,7 +84,7 @@ export const HULL_CATALOG: HullCatalogEntry[] = [
     name: '巡洋艦 I型',
     className: '軽巡洋艦',
     minStage: 3,
-    hp: 760, maxSpeed: 4.4, turnRate: 0.03,
+    hp: 760, armor: 35, maxSpeed: 4.4, turnRate: 0.03,
     slots: [
       { id: 's0', label: '前主砲',   x:  0.0, y: -0.70, compatibleTypes: GUN_ONLY },
       { id: 's1', label: '後主砲',   x:  0.0, y: -0.10, compatibleTypes: GUN_ONLY },
@@ -99,7 +100,7 @@ export const HULL_CATALOG: HullCatalogEntry[] = [
     name: '巡洋艦 II型',
     className: '重巡洋艦',
     minStage: 5,
-    hp: 980, maxSpeed: 4.0, turnRate: 0.027,
+    hp: 980, armor: 42, maxSpeed: 4.0, turnRate: 0.027,
     slots: [
       { id: 's0', label: '前主砲',   x:  0.0, y: -0.75, compatibleTypes: GUN_ONLY },
       { id: 's1', label: '中央主砲', x:  0.0, y: -0.15, compatibleTypes: GUN_ONLY },
@@ -116,7 +117,7 @@ export const HULL_CATALOG: HullCatalogEntry[] = [
     name: '巡洋艦 III型',
     className: '精鋭重巡',
     minStage: 8,
-    hp: 1200, maxSpeed: 3.6, turnRate: 0.025,
+    hp: 1200, armor: 50, maxSpeed: 3.6, turnRate: 0.025,
     slots: [
       { id: 's0', label: '前砲(左)',   x: -0.22, y: -0.75, compatibleTypes: GUN_ONLY },
       { id: 's1', label: '前砲(右)',   x:  0.22, y: -0.75, compatibleTypes: GUN_ONLY },
@@ -136,7 +137,7 @@ export const HULL_CATALOG: HullCatalogEntry[] = [
     name: '戦艦 I型',
     className: '標準型戦艦',
     minStage: 5,
-    hp: 1400, maxSpeed: 2.6, turnRate: 0.02,
+    hp: 1400, armor: 65, maxSpeed: 2.6, turnRate: 0.02,
     slots: [
       { id: 's0', label: '前主砲',   x:  0.0, y: -0.75, compatibleTypes: GUN_ONLY },
       { id: 's1', label: '中央主砲', x:  0.0, y: -0.25, compatibleTypes: GUN_ONLY },
@@ -154,7 +155,7 @@ export const HULL_CATALOG: HullCatalogEntry[] = [
     name: '戦艦 II型',
     className: '高速戦艦',
     minStage: 7,
-    hp: 1650, maxSpeed: 3.8, turnRate: 0.022,
+    hp: 1650, armor: 70, maxSpeed: 3.8, turnRate: 0.022,
     slots: [
       { id: 's0', label: '前砲(左)', x: -0.22, y: -0.75, compatibleTypes: GUN_ONLY },
       { id: 's1', label: '前砲(右)', x:  0.22, y: -0.75, compatibleTypes: GUN_ONLY },
@@ -172,7 +173,7 @@ export const HULL_CATALOG: HullCatalogEntry[] = [
     name: '戦艦 III型',
     className: '超弩級戦艦',
     minStage: 9,
-    hp: 2100, maxSpeed: 2.5, turnRate: 0.018,
+    hp: 2100, armor: 85, maxSpeed: 2.5, turnRate: 0.018,
     slots: [
       { id: 's0', label: '第一主砲', x:  0.00, y: -0.80, compatibleTypes: GUN_ONLY },
       { id: 's1', label: '第二主砲', x:  0.00, y: -0.45, compatibleTypes: GUN_ONLY },
@@ -190,7 +191,7 @@ export const HULL_CATALOG: HullCatalogEntry[] = [
     name: '雪村',
     className: '雪帽特別戦艦',
     minStage: 1,
-    hp: 1800, maxSpeed: 4.2, turnRate: 0.024,
+    hp: 1800, armor: 72, maxSpeed: 4.2, turnRate: 0.024,
     slots: [
       { id: 's0', label: '雪玉主砲(前)', x:  0.00, y: -0.76, compatibleTypes: GUN_ONLY },
       { id: 's1', label: '雪玉主砲(中)', x:  0.00, y: -0.34, compatibleTypes: GUN_ONLY },

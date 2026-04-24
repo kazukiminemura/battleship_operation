@@ -56,7 +56,7 @@ export interface StageDefinition {
 }
 
 // Speed reduction per armor point: heavier armor = more displacement = slower hull
-const ARMOR_WEIGHT_K = 0.004
+export const ARMOR_WEIGHT_K = 0.004
 
 const DEBUG_STAGE_NUMBER = 99
 const DEBUG_ENEMY_HP_MULTIPLIER = 4
@@ -132,6 +132,16 @@ function makeShipFromTemplate(spawn: ShipSpawn): ShipEntity {
   }
 }
 
+function applyArmorBonus(ship: ShipEntity, bonus: number): ShipEntity {
+  const template = STATIC_DATA.ships[ship.templateId]!
+  const totalArmor = template.armor + bonus
+  return {
+    ...ship,
+    armor: totalArmor,
+    maxSpeed: template.maxSpeed / (1 + totalArmor * ARMOR_WEIGHT_K),
+  }
+}
+
 function makeWeaponState(template: WeaponTemplate): WeaponState {
   return {
     id: template.id,
@@ -164,13 +174,15 @@ export function createInitialState(
   stageNumber = 1,
   customLoadout?: WeaponTemplate[],
   customTemplateId?: string,
+  armorBonus = 0,
 ): CombatState {
   const stage = getStageDefinition(stageNumber)
   const entities = new Map<string, Entity>()
   const playerShip = makePlayerShip(playerType, customTemplateId)
+  const armoredShip = armorBonus > 0 ? applyArmorBonus(playerShip, armorBonus) : playerShip
   const finalPlayer = customLoadout
-    ? { ...playerShip, weapons: customLoadout.slice(0, MAX_WEAPON_SLOTS).map(makeWeaponState) }
-    : playerShip
+    ? { ...armoredShip, weapons: customLoadout.slice(0, MAX_WEAPON_SLOTS).map(makeWeaponState) }
+    : armoredShip
   entities.set('ship.player', finalPlayer)
 
   for (const [index, x, y, angle] of makeEnemyFormation(stage.destroyers, 1200, 7200)) {

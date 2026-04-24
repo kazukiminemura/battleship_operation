@@ -52,6 +52,7 @@ function main(): void {
   let selectedShip: PlayerShipType = 'destroyer'
   let selectedTemplateId: string | undefined = undefined
   let selectedLoadout: WeaponTemplate[] = getDefaultLoadout('destroyer')
+  let selectedArmorBonus = 0
   let currentStage = 1
   let normalShip: PlayerShipType = selectedShip
   let normalStage = currentStage
@@ -108,7 +109,7 @@ function main(): void {
     paused = false
     input.setSuspended(false)
     debugMode = false
-    state = createInitialState(selectedShip, currentStage, selectedLoadout, selectedTemplateId)
+    state = createInitialState(selectedShip, currentStage, selectedLoadout, selectedTemplateId, selectedArmorBonus)
     rng = createRngStreams(BASE_SEED + currentStage * 1009)
     sound.reset()
     sound.setBgmEnabled(bgmEnabled, isBossStage(state) ? 'boss' : 'normal')
@@ -241,6 +242,7 @@ function main(): void {
           selectedShip = result.shipType
           selectedTemplateId = result.templateId
           selectedLoadout = result.loadout
+          selectedArmorBonus = result.armorBonus
           goToStageIntro(currentStage)
         }
         if (cue || result) {
@@ -314,6 +316,7 @@ function main(): void {
           selectedShip = result.shipType
           selectedTemplateId = result.templateId
           selectedLoadout = result.loadout
+          selectedArmorBonus = result.armorBonus
           goToStageIntro(currentStage)
         }
         return
@@ -370,6 +373,7 @@ function main(): void {
         selectedShip = result.shipType
         selectedTemplateId = result.templateId
         selectedLoadout = result.loadout
+        selectedArmorBonus = result.armorBonus
         goToStageIntro(currentStage)
       }
       e.stopImmediatePropagation()

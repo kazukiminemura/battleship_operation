@@ -1,4 +1,5 @@
 import type { WeaponTemplate, PlayerShipType } from '../data/masterdata'
+import { ARMOR_WEIGHT_K } from '../data/masterdata'
 import { getHullsByClass, type HullCatalogEntry, type HullSlot } from '../data/hull-catalog'
 import { WEAPON_SHOP, TYPE_COLOR, TYPE_JP, type ShopWeapon } from '../data/weapon-shop'
 import type { WeaponType } from '../simulation/types'
@@ -28,6 +29,7 @@ export interface PrepResult {
   templateId: string
   shipType: PlayerShipType
   loadout: WeaponTemplate[]
+  armorBonus: number
 }
 
 type ScreenTab = 'hull' | 'armament'
@@ -43,6 +45,8 @@ type Region =
   | { tag: 'grid-tower';                                x: number; y: number; w: number; h: number; accessKey?: string }
   | { tag: 'grid-empty';  c: number; r: number;        x: number; y: number; w: number; h: number; accessKey?: string }
   | { tag: 'weapon-card'; weaponId: string;            x: number; y: number; w: number; h: number; accessKey?: string }
+  | { tag: 'armor-up';                                  x: number; y: number; w: number; h: number; accessKey?: string }
+  | { tag: 'armor-down';                                x: number; y: number; w: number; h: number; accessKey?: string }
   | { tag: 'deploy';                                    x: number; y: number; w: number; h: number; accessKey?: string }
   | { tag: 'back';                                      x: number; y: number; w: number; h: number; accessKey?: string }
 
@@ -81,6 +85,9 @@ const LOCKED = '#090f0a'
 const SEL    = '#0a3018'
 type ShipPreviewMode = 'card' | 'grid'
 
+const ARMOR_BONUS_STEP = 5
+const ARMOR_BONUS_MAX  = 100
+
 export class PrepScreen {
   private canvas: HTMLCanvasElement
   private ctx: CanvasRenderingContext2D
@@ -98,6 +105,7 @@ export class PrepScreen {
   private slotWeapons = new Map<string, ShopWeapon>()  // slotId → weapon
   private slotCells = new Map<string, { c: number; r: number }>()
   private towerCell: GridCell | null = null
+  private armorBonus = 0
   private lastAudioCue: PrepAudioCue | null = null
 
   constructor(canvas: HTMLCanvasElement) {
@@ -117,6 +125,7 @@ export class PrepScreen {
     this.slotWeapons = new Map()
     this.slotCells = new Map()
     this.towerCell = null
+    this.armorBonus = 0
     this.canvas.addEventListener('mousemove', this.onMoveRef)
   }
 
@@ -270,6 +279,16 @@ export class PrepScreen {
         break
       }
 
+      case 'armor-up':
+        this.armorBonus = Math.min(ARMOR_BONUS_MAX, this.armorBonus + ARMOR_BONUS_STEP)
+        this.lastAudioCue = 'select'
+        break
+
+      case 'armor-down':
+        this.armorBonus = Math.max(0, this.armorBonus - ARMOR_BONUS_STEP)
+        this.lastAudioCue = 'select'
+        break
+
       case 'deploy':
         this.lastAudioCue = 'confirm'
         return this.buildResult()
@@ -319,7 +338,7 @@ export class PrepScreen {
       if (w) loadout.push({ id: w.id, name: w.name, type: w.type, ammo: w.ammo, mount: cellToMount(cell.c, cell.r, spec) })
     }
     if (loadout.length === 0) return null
-    return { templateId: hull.templateId, shipType: hull.shipType, loadout }
+    return { templateId: hull.templateId, shipType: hull.shipType, loadout, armorBonus: this.armorBonus }
   }
 
   private defaultWeapon(hull: HullCatalogEntry, slot: HullSlot): ShopWeapon | null {
@@ -749,14 +768,18 @@ export class PrepScreen {
       return
     }
 
+    const totalArmor = hull.armor + this.armorBonus
+    const effectiveSpeed = hull.maxSpeed / (1 + totalArmor * ARMOR_WEIGHT_K)
+
     const stats = [
-      { label: '耐久力', value: `${hull.hp}`,                     barR: hull.hp / 2100,       col: '#22c55e' },
-      { label: '速力',   value: `${hull.maxSpeed.toFixed(1)}kt`,  barR: hull.maxSpeed / 7.2,  col: '#38bdf8' },
-      { label: '旋回',   value: `${(hull.turnRate * 1000 | 0) / 10}`, barR: hull.turnRate / 0.046, col: '#fb923c' },
+      { label: '耐久力', value: `${hull.hp}`,                         barR: hull.hp / 2100,         col: '#22c55e' },
+      { label: '速力',   value: `${effectiveSpeed.toFixed(1)}kt`,     barR: effectiveSpeed / 7.2,   col: '#38bdf8' },
+      { label: '旋回',   value: `${(hull.turnRate * 1000 | 0) / 10}`, barR: hull.turnRate / 0.046,  col: '#fb923c' },
       { label: '尺度',   value: `${Math.round(hullDimensions(hull).lengthM)}m`, barR: hullDimensions(hull).lengthM / 270, col: '#a78bfa' },
     ]
 
-    const colW = (cw * 0.74) / stats.length
+    const statAreaW = cw * 0.68
+    const colW = statAreaW / stats.length
     for (let i = 0; i < stats.length; i++) {
       const s = stats[i]!; const sx = x + colW * i + 14
       ctx.font = '14px sans-serif'; ctx.fillStyle = DIM; ctx.textAlign = 'left'
@@ -768,12 +791,61 @@ export class PrepScreen {
       ctx.fillText(s.value, sx, y + 66)
     }
 
+    // Armor control section
+    const armX = x + statAreaW + 8
+    const armW = cw * 0.19
+    this.drawArmorControl(armX, y, armW, ch, hull, totalArmor)
+
+    // Weapon count (far right)
     const filled = this.slotWeapons.size
     ctx.font = '14px sans-serif'; ctx.fillStyle = DIM; ctx.textAlign = 'right'
-    ctx.fillText('兵装', cw - 14, y + 21)
-    ctx.font = `bold 23px sans-serif`
+    ctx.fillText('兵装', x + cw - 14, y + 21)
+    ctx.font = 'bold 23px sans-serif'
     ctx.fillStyle = filled === hull.slots.length ? GREEN : YELLOW
-    ctx.fillText(`${filled} / ${hull.slots.length}`, cw - 14, y + 66)
+    ctx.fillText(`${filled} / ${hull.slots.length}`, x + cw - 14, y + 66)
+  }
+
+  private drawArmorControl(ax: number, ay: number, aw: number, ah: number, hull: HullCatalogEntry, totalArmor: number): void {
+    const ctx = this.ctx
+    const mitigation = totalArmor / (totalArmor + 100)
+
+    ctx.font = '13px sans-serif'; ctx.fillStyle = DIM; ctx.textAlign = 'left'
+    ctx.fillText('装甲', ax, ay + 19)
+    ctx.fillStyle = '#6a9a6a'; ctx.textAlign = 'right'
+    ctx.fillText(`軽減${(mitigation * 100 | 0)}%`, ax + aw - 4, ay + 19)
+
+    const bw = aw - 8
+    ctx.fillStyle = '#0a1810'; ctx.fillRect(ax, ay + 27, bw, 8)
+    ctx.fillStyle = '#3a7a4a'; ctx.fillRect(ax, ay + 27, bw * mitigation, 8)
+
+    const btnW = 26, btnH = 22, btnY = ay + 46
+    const midX = ax + aw / 2
+
+    const canDown = this.armorBonus > 0
+    const canUp   = this.armorBonus < ARMOR_BONUS_MAX
+    const downX = midX - 56
+    const upX   = midX + 30
+
+    ctx.fillStyle = canDown ? '#0d2010' : '#08100a'
+    ctx.fillRect(downX, btnY, btnW, btnH)
+    ctx.strokeStyle = canDown ? '#2a6030' : '#1a2a1a'; ctx.lineWidth = 1
+    ctx.strokeRect(downX, btnY, btnW, btnH)
+    ctx.font = 'bold 15px sans-serif'; ctx.fillStyle = canDown ? '#70b070' : DIM; ctx.textAlign = 'center'
+    ctx.fillText('−', downX + btnW / 2, btnY + 15)
+
+    const bonusLabel = this.armorBonus > 0 ? `${hull.armor}+${this.armorBonus}` : `${hull.armor}`
+    ctx.font = 'bold 17px sans-serif'; ctx.fillStyle = '#b0d8b0'; ctx.textAlign = 'center'
+    ctx.fillText(bonusLabel, midX, btnY + 16)
+
+    ctx.fillStyle = canUp ? '#0d2010' : '#08100a'
+    ctx.fillRect(upX, btnY, btnW, btnH)
+    ctx.strokeStyle = canUp ? '#2a6030' : '#1a2a1a'
+    ctx.strokeRect(upX, btnY, btnW, btnH)
+    ctx.font = 'bold 15px sans-serif'; ctx.fillStyle = canUp ? '#70b070' : DIM; ctx.textAlign = 'center'
+    ctx.fillText('+', upX + btnW / 2, btnY + 15)
+
+    if (canDown) this.addRegion({ tag: 'armor-down', x: downX, y: btnY, w: btnW, h: btnH })
+    if (canUp)   this.addRegion({ tag: 'armor-up',   x: upX,   y: btnY, w: btnW, h: btnH })
   }
 
   private visibleWeapons(hull: HullCatalogEntry): ShopWeapon[] {
@@ -1277,6 +1349,8 @@ export class PrepScreen {
       const index = visibleWeaponCards.findIndex(x => x === r)
       return index >= 0 && index < 9 ? String(index + 1) : null
     }
+    if (r.tag === 'armor-down') return '-'
+    if (r.tag === 'armor-up') return '+'
     if (r.tag === 'deploy') return 'P'
     if (r.tag === 'back') return 'H'
     return null
