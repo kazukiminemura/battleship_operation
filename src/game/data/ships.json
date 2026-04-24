@@ -2,6 +2,7 @@
   "hull.destroyer.basic": {
     "id": "hull.destroyer.basic",
     "hp": 420,
+    "armor": 12,
     "maxSpeed": 6.25,
     "turnRate": 0.04,
     "detectionRange": 2200,
@@ -13,6 +14,7 @@
   "hull.dd.improved": {
     "id": "hull.dd.improved",
     "hp": 530,
+    "armor": 15,
     "maxSpeed": 6.8,
     "turnRate": 0.043,
     "detectionRange": 2400,
@@ -27,6 +29,7 @@
   "hull.dd.elite": {
     "id": "hull.dd.elite",
     "hp": 660,
+    "armor": 18,
     "maxSpeed": 7.2,
     "turnRate": 0.046,
     "detectionRange": 2600,
@@ -42,6 +45,7 @@
   "hull.cruiser.player": {
     "id": "hull.cruiser.player",
     "hp": 760,
+    "armor": 35,
     "maxSpeed": 4.4,
     "turnRate": 0.03,
     "detectionRange": 2600,
@@ -57,6 +61,7 @@
   "hull.cl.heavy": {
     "id": "hull.cl.heavy",
     "hp": 980,
+    "armor": 42,
     "maxSpeed": 4.0,
     "turnRate": 0.027,
     "detectionRange": 2800,
@@ -73,6 +78,7 @@
   "hull.ca.elite": {
     "id": "hull.ca.elite",
     "hp": 1200,
+    "armor": 50,
     "maxSpeed": 3.6,
     "turnRate": 0.025,
     "detectionRange": 3000,
@@ -90,6 +96,7 @@
   "hull.battleship.basic": {
     "id": "hull.battleship.basic",
     "hp": 1400,
+    "armor": 65,
     "maxSpeed": 2.6,
     "turnRate": 0.02,
     "detectionRange": 3000,
@@ -107,6 +114,7 @@
   "hull.bb.fast": {
     "id": "hull.bb.fast",
     "hp": 1650,
+    "armor": 70,
     "maxSpeed": 3.8,
     "turnRate": 0.022,
     "detectionRange": 2800,
@@ -124,6 +132,7 @@
   "hull.bb.super": {
     "id": "hull.bb.super",
     "hp": 2100,
+    "armor": 85,
     "maxSpeed": 2.5,
     "turnRate": 0.018,
     "detectionRange": 3400,
@@ -141,6 +150,7 @@
   "hull.bb.yukimura": {
     "id": "hull.bb.yukimura",
     "hp": 1800,
+    "armor": 72,
     "maxSpeed": 4.2,
     "turnRate": 0.024,
     "detectionRange": 3600,
@@ -158,6 +168,7 @@
   "hull.enemy.destroyer.basic": {
     "id": "hull.enemy.destroyer.basic",
     "hp": 105,
+    "armor": 8,
     "maxSpeed": 3.75,
     "turnRate": 0.05,
     "detectionRange": 1600,
@@ -168,6 +179,7 @@
   "hull.cruiser.basic": {
     "id": "hull.cruiser.basic",
     "hp": 200,
+    "armor": 22,
     "maxSpeed": 3.15,
     "turnRate": 0.03,
     "detectionRange": 2000,
@@ -179,6 +191,7 @@
   "hull.enemy.boss.dreadnought": {
     "id": "hull.enemy.boss.dreadnought",
     "hp": 3800,
+    "armor": 80,
     "maxSpeed": 2.1,
     "turnRate": 0.014,
     "detectionRange": 2600,

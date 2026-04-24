@@ -13,6 +13,7 @@ function makeShip(hp: number, maxHp: number): ShipEntity {
     maxHp,
     speed: 0, targetSpeed: 0, speedLevel: 'stop' as const,
     maxSpeed: 3, turnRate: 0.04,
+    armor: 0,
     weapons: [],
     team: 'player',
     destroyed: false,

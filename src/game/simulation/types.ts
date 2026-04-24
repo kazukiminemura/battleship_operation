@@ -42,6 +42,7 @@ export interface ShipEntity {
   turnRate: number
   detectionRange: number  // visual detection radius in world units
   weapons: WeaponState[]
+  armor: number
   team: 'player' | 'enemy'
   destroyed: boolean
   templateId: string

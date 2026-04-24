@@ -7,6 +7,7 @@ export type PlayerShipType = 'destroyer' | 'cruiser' | 'battleship'
 export interface ShipTemplate {
   id: string
   hp: number
+  armor: number
   maxSpeed: number
   turnRate: number
   detectionRange: number
@@ -114,6 +115,7 @@ function makeShipFromTemplate(spawn: ShipSpawn): ShipEntity {
     angle: spawn.angle,
     hp: template.hp,
     maxHp: template.hp,
+    armor: template.armor ?? 0,
     speed: 0,
     targetSpeed: 0,
     speedLevel: 'stop',
@@ -240,6 +242,7 @@ export function createDebugState(playerType: PlayerShipType = 'battleship'): Com
     speedLevel: 'full',
     maxSpeed: DEBUG_PLAYER_SPEED,
     detectionRange: DEBUG_PLAYER_DETECTION_RANGE,
+    armor: 9900,
   })
 
   for (const [index, x, y, angle, templateId] of makeDebugEnemySpawns()) {

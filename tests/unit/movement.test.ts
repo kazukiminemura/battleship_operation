@@ -15,6 +15,7 @@ function makeShip(overrides: Partial<ShipEntity> = {}): ShipEntity {
     hp: 100, maxHp: 100,
     speed: 0, targetSpeed: 0, speedLevel: 'stop',
     maxSpeed: 5, turnRate: 0.04,
+    armor: 0,
     weapons: [],
     team: 'player', destroyed: false,
     templateId: 'hull.destroyer.basic',
