@@ -275,21 +275,32 @@ export class StageIntroScreen {
 
     const sx = w / 10000
     const sy = h / 10000
+    const islandLayers: [number, string, string | null][] = [
+      [1.00, 'rgba(212,176,92,0.55)', 'rgba(225,240,220,0.35)'],
+      [0.91, 'rgba(186,152,74,0.82)', null],
+      [0.74, 'rgba(72,108,52,0.90)',  null],
+    ]
     for (const obstacle of stage.mapObstacles) {
-      ctx.beginPath()
-      ctx.ellipse(
-        x + obstacle.x * sx,
-        y + obstacle.y * sy,
-        Math.max(5, obstacle.rx * sx),
-        Math.max(3, obstacle.ry * sy),
-        0,
-        0,
-        Math.PI * 2,
-      )
-      ctx.fillStyle = 'rgba(74,93,61,0.78)'
-      ctx.fill()
-      ctx.strokeStyle = 'rgba(164,196,126,0.42)'
-      ctx.stroke()
+      const ox = x + obstacle.x * sx
+      const oy = y + obstacle.y * sy
+      const rx = Math.max(5, obstacle.rx * sx)
+      const ry = Math.max(3, obstacle.ry * sy)
+      for (const [scale, fill, stroke] of islandLayers) {
+        ctx.beginPath()
+        for (let i = 0; i < 48; i++) {
+          const a = (i / 48) * Math.PI * 2
+          const n1 = signedNoise(obstacle.x, obstacle.y, i)
+          const n2 = signedNoise(obstacle.y, obstacle.x, i + 19)
+          const r = 1 + n1 * 0.08 + n2 * 0.04
+          const px = ox + Math.cos(a) * rx * scale * r
+          const py = oy + Math.sin(a) * ry * scale * r
+          i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py)
+        }
+        ctx.closePath()
+        ctx.fillStyle = fill
+        ctx.fill()
+        if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 0.8; ctx.stroke() }
+      }
     }
 
     ctx.fillStyle = '#22c55e'
@@ -380,6 +391,11 @@ function wrapText(
     }
   }
   if (line && lineCount < maxLines) ctx.fillText(line, x, y + lineCount * lineHeight)
+}
+
+function signedNoise(x: number, y: number, salt: number): number {
+  const n = Math.sin(x * 12.9898 + y * 78.233 + salt * 37.719) * 43758.5453
+  return (n - Math.floor(n)) * 2 - 1
 }
 
 function isClosingPunctuation(char: string): boolean {
