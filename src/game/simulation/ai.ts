@@ -1,4 +1,4 @@
-import type { CombatState, ShipEntity, BuildingEntity, Command, Vec3 } from './types'
+import type { CombatState, ShipEntity, BuildingEntity, Command, Vec3, MapObstacle } from './types'
 import type { SeededRandom } from './random'
 import { getWeaponConfig, WEAPON_CONFIGS } from './weapon-strategies'
 import { enemyCanDetectPlayer } from './detection'
@@ -94,6 +94,9 @@ export function generateAiCommands(state: CombatState, rng: SeededRandom): Comma
   return commands
 }
 
+// Search waypoint: north-center of the map, toward typical enemy positions
+const SEARCH_WAYPOINT: Vec3 = { x: 5000, y: 3500, z: 0 }
+
 export function generateAutoPilotCommands(state: CombatState): Command[] {
   const player = state.entities.get('ship.player')
   if (!player || player.kind !== 'ship') return []
@@ -102,55 +105,94 @@ export function generateAutoPilotCommands(state: CombatState): Command[] {
 
   const actorId = 'ship.player'
   const tick = state.tick
+  const cmds: Command[] = []
 
-  // Target priority: detected enemy ships > detected buildings > last known contacts
-  const detectedEnemies = [...state.entities.values()].filter(
-    e => e.kind === 'ship' && (e as ShipEntity).team === 'enemy' &&
-         !(e as ShipEntity).destroyed && state.detectedByPlayer.has(e.id)
-  ) as ShipEntity[]
-
-  const detectedBuildings = [...state.entities.values()].filter(
-    e => e.kind === 'building' && !(e as BuildingEntity).destroyed &&
-         state.detectedByPlayer.has(e.id)
-  ) as BuildingEntity[]
-
-  let targetPos: Vec3 | undefined
-  if (detectedEnemies.length > 0) {
-    targetPos = nearest(ship.pos, detectedEnemies.map(e => e.pos))
-  } else if (detectedBuildings.length > 0) {
-    targetPos = nearest(ship.pos, detectedBuildings.map(b => b.pos))
-  } else if (state.enemyContacts.size > 0) {
-    let freshest: Vec3 | undefined
-    let maxTick = -1
-    for (const contact of state.enemyContacts.values()) {
-      if (contact.tick > maxTick) { maxTick = contact.tick; freshest = contact.pos }
-    }
-    targetPos = freshest
+  // Obstacle avoidance has top priority
+  const steer = obstacleSteer(ship, state.mapObstacles)
+  if (steer !== 0) {
+    cmds.push({ tick, actorId, type: 'rotate', value: steer * ship.turnRate })
+    cmds.push({ tick, actorId, type: 'move', value: ship.maxSpeed })
+    return cmds
   }
 
-  if (!targetPos) return []
+  const targetPos = findTarget(state, ship) ?? SEARCH_WAYPOINT
 
   const dx = targetPos.x - ship.pos.x
   const dy = targetPos.y - ship.pos.y
   const dist = Math.sqrt(dx * dx + dy * dy)
   const angleDiff = normalizeAngle(Math.atan2(dy, dx) - ship.angle)
 
-  const cmds: Command[] = []
-
   if (Math.abs(angleDiff) > 0.05) {
     cmds.push({ tick, actorId, type: 'rotate', value: Math.sign(angleDiff) * ship.turnRate })
   }
 
-  const preferred = 800
-  if (dist > preferred + 100) {
-    cmds.push({ tick, actorId, type: 'move', value: ship.maxSpeed })
-  } else if (dist < preferred - 100) {
+  const preferred = preferredRange(ship)
+  if (dist > preferred + 150) {
+    // Slow down while turning hard to keep arc tight
+    const factor = Math.abs(angleDiff) > Math.PI / 2 ? 0.4 : 1.0
+    cmds.push({ tick, actorId, type: 'move', value: ship.maxSpeed * factor })
+  } else if (dist < preferred - 250) {
     cmds.push({ tick, actorId, type: 'move', value: -ship.maxSpeed * 0.4 })
   } else {
     cmds.push({ tick, actorId, type: 'stop' })
   }
 
   return cmds
+}
+
+function findTarget(state: CombatState, ship: ShipEntity): Vec3 | undefined {
+  const enemies = [...state.entities.values()].filter(
+    e => e.kind === 'ship' && (e as ShipEntity).team === 'enemy' &&
+         !(e as ShipEntity).destroyed && state.detectedByPlayer.has(e.id)
+  ) as ShipEntity[]
+
+  if (enemies.length > 0) return nearest(ship.pos, enemies.map(e => e.pos))
+
+  const buildings = [...state.entities.values()].filter(
+    e => e.kind === 'building' && !(e as BuildingEntity).destroyed &&
+         state.detectedByPlayer.has(e.id)
+  ) as BuildingEntity[]
+
+  if (buildings.length > 0) return nearest(ship.pos, buildings.map(b => b.pos))
+
+  // Fall back to last known enemy contact (freshest)
+  let freshest: Vec3 | undefined
+  let maxTick = -1
+  for (const contact of state.enemyContacts.values()) {
+    if (contact.tick > maxTick) { maxTick = contact.tick; freshest = contact.pos }
+  }
+  return freshest
+}
+
+function preferredRange(ship: ShipEntity): number {
+  let maxRange = 0
+  for (const w of ship.weapons) {
+    const r = getWeaponConfig(w.id, w.type).maxRange
+    if (r > maxRange) maxRange = r
+  }
+  return Math.min(maxRange * 0.75, 1400)
+}
+
+function obstacleSteer(ship: ShipEntity, obstacles: readonly MapObstacle[]): number {
+  const LOOKAHEAD = 900
+  const MARGIN   = 380
+
+  const fx = ship.pos.x + Math.cos(ship.angle) * LOOKAHEAD
+  const fy = ship.pos.y + Math.sin(ship.angle) * LOOKAHEAD
+
+  let worstObs: MapObstacle | undefined
+  let worstDepth = 0
+  for (const obs of obstacles) {
+    const nx = (fx - obs.x) / (obs.rx + MARGIN)
+    const ny = (fy - obs.y) / (obs.ry + MARGIN)
+    const depth = 1 - (nx * nx + ny * ny)
+    if (depth > worstDepth) { worstDepth = depth; worstObs = obs }
+  }
+  if (!worstObs) return 0
+
+  // Turn away from the side the obstacle center is on
+  const rel = normalizeAngle(Math.atan2(worstObs.y - ship.pos.y, worstObs.x - ship.pos.x) - ship.angle)
+  return rel >= 0 ? -1 : 1
 }
 
 function nearest(from: Vec3, positions: Vec3[]): Vec3 {
