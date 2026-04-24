@@ -2,6 +2,7 @@ import type { CombatState, ShipEntity, Command, MapObstacle, SpeedLevel } from '
 
 export const WORLD_SIZE = 16000
 export const KNOTS_PER_UNIT = 10  // 1 game unit/tick = 10 knots for display
+export const MOVEMENT_SCALE = 1.5  // visual movement multiplier (knot display is unaffected)
 export const ISLAND_COLLIDER: MapObstacle = { id: 'island.central', x: 5000, y: 5050, rx: 620, ry: 430 }
 
 // speed level order from slowest to fastest
@@ -44,8 +45,8 @@ export function stepMovement(state: CombatState, dt = 1): CombatState {
     const vx = Math.cos(ship.angle) * newSpeed
     const vy = Math.sin(ship.angle) * newSpeed
 
-    let px = ship.pos.x + vx * dt
-    let py = ship.pos.y + vy * dt
+    let px = ship.pos.x + vx * dt * MOVEMENT_SCALE
+    let py = ship.pos.y + vy * dt * MOVEMENT_SCALE
     let finalSpeed = newSpeed
     let finalTargetSpeed = ship.targetSpeed
 
@@ -66,7 +67,7 @@ export function stepMovement(state: CombatState, dt = 1): CombatState {
       ...ship,
       speed: finalSpeed,
       targetSpeed: finalTargetSpeed,
-      vel: { x: Math.cos(ship.angle) * finalSpeed, y: Math.sin(ship.angle) * finalSpeed, z: 0 },
+      vel: { x: Math.cos(ship.angle) * finalSpeed * MOVEMENT_SCALE, y: Math.sin(ship.angle) * finalSpeed * MOVEMENT_SCALE, z: 0 },
       pos: { x: px, y: py, z: 0 },
     })
   }

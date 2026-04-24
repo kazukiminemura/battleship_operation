@@ -1,3 +1,5 @@
+import { drawAccessKeyHint } from './accesskeys'
+
 interface Region { x: number; y: number; w: number; h: number }
 
 export class StartScreen {
@@ -49,7 +51,7 @@ export class StartScreen {
     this.hovered = mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h
   }
 
-  render(): void {
+  render(showAccessKeys = false): void {
     const { ctx, canvas } = this
     const W = canvas.width
     const H = canvas.height
@@ -102,6 +104,7 @@ export class StartScreen {
     ctx.fillStyle = active ? '#ffffff' : '#7dd3fc'
     ctx.font = `bold ${Math.round(btnH * 0.50)}px sans-serif`
     ctx.fillText('BATTLE START', cx, btnY + btnH * 0.67)
+    if (showAccessKeys) drawAccessKeyHint(ctx, 'SPACE', btnX + 8, btnY + 8)
 
     ctx.fillStyle = '#1e293b'
     ctx.font = `${Math.round(H * 0.022)}px sans-serif`

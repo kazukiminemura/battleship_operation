@@ -15,6 +15,7 @@ export class InputAdapter {
   private canvas: HTMLCanvasElement
   private renderer: CanvasRenderer
   private feedback: InputFeedback
+  private suspended = false
 
   constructor(canvas: HTMLCanvasElement, renderer: CanvasRenderer, feedback: InputFeedback = {}) {
     this.canvas = canvas
@@ -35,9 +36,19 @@ export class InputAdapter {
     this.keys.delete(code)
   }
 
+  setSuspended(suspended: boolean): void {
+    this.suspended = suspended
+    if (suspended) {
+      this.keys.clear()
+      this.commands = []
+    }
+  }
+
   private bindEvents(): void {
     window.addEventListener('keydown', (e) => {
+      if (this.suspended) return
       this.keys.add(e.code)
+      if (e.altKey) return
 
       if (e.code.startsWith('Digit')) {
         const slot = Number(e.code.slice(5)) - 1
@@ -69,6 +80,7 @@ export class InputAdapter {
     })
 
     this.canvas.addEventListener('click', (e) => {
+      if (this.suspended) return
       const rect = this.canvas.getBoundingClientRect()
       const cx = e.clientX - rect.left
       const cy = e.clientY - rect.top

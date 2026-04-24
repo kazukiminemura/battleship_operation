@@ -93,7 +93,7 @@ export class CanvasRenderer {
         this.effectLog.push(ev)
       }
     }
-    const MAX_EFFECT_AGE = 70
+    const MAX_EFFECT_AGE = 120
     this.effectLog = this.effectLog.filter(ev => state.tick - ev.tick < MAX_EFFECT_AGE)
     this.effectKeys = new Set(this.effectLog.map(combatEventEffectKey))
 

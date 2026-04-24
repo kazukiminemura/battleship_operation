@@ -7,6 +7,7 @@ import {
   durabilityColor,
   estimateHullSections,
 } from './hullstatus'
+import { drawAccessKeyHint, isAccessKey } from './accesskeys'
 
 export type WeaponMode = number
 
@@ -56,12 +57,20 @@ export class HUD {
     return this.clickRegions
   }
 
-  render(state: CombatState, weaponMode: WeaponMode, worldSize: number, bgmEnabled: boolean, subtitle = ''): void {
+  checkAccessKey(e: KeyboardEvent): string | null {
+    for (const region of this.clickRegions) {
+      const key = accessKeyForClickRegion(region.id)
+      if (key && isAccessKey(e, key)) return region.id
+    }
+    return null
+  }
+
+  render(state: CombatState, weaponMode: WeaponMode, worldSize: number, bgmEnabled: boolean, subtitle = '', showAccessKeys = false): void {
     const player = state.entities.get('ship.player') as ShipEntity | undefined
     if (!player) return
 
     this.clickRegions = []
-    this.renderTopBar(state, player, weaponMode, bgmEnabled)
+    this.renderTopBar(state, player, weaponMode, bgmEnabled, showAccessKeys)
     this.renderRadar(state, player, worldSize)
     this.renderGlobalMap(state, player, worldSize)
     this.renderBottomBar()
@@ -97,7 +106,7 @@ export class HUD {
     ctx.textAlign = 'left'
   }
 
-  private renderTopBar(state: CombatState, player: ShipEntity, weaponMode: WeaponMode, bgmEnabled: boolean): void {
+  private renderTopBar(state: CombatState, player: ShipEntity, weaponMode: WeaponMode, bgmEnabled: boolean, showAccessKeys: boolean): void {
     const { ctx, canvas } = this
     const barH = 130
     const coverH = barH + 8
@@ -197,7 +206,14 @@ export class HUD {
       ctx.fillText(!weapon ? 'EMPTY' : isAuto ? '● AUTO' : '○ MAN', btnX + btnW / 2, btnY + 11)
       ctx.textAlign = 'left'
 
-      if (weapon) this.clickRegions.push({ id: `toggle:${i}`, x: btnX, y: btnY, w: btnW, h: btnH })
+      if (weapon) {
+        const region = { id: `toggle:${i}`, x: btnX, y: btnY, w: btnW, h: btnH }
+        if (showAccessKeys) {
+          const key = accessKeyForClickRegion(region.id)
+          if (key) drawAccessKeyHint(ctx, key, btnX + 3, btnY - 2)
+        }
+        this.clickRegions.push(region)
+      }
     }
 
     // ALL AUTO button (to the right of weapon slots)
@@ -217,8 +233,12 @@ export class HUD {
     ctx.textAlign = 'center'
     ctx.fillText(allAuto ? 'ALL AUTO' : 'ALL MAN', allBtnX + allBtnW / 2, allBtnY + 16)
     ctx.textAlign = 'left'
-
-    this.clickRegions.push({ id: 'toggle-all', x: allBtnX, y: allBtnY, w: allBtnW, h: allBtnH })
+    const allRegion = { id: 'toggle-all', x: allBtnX, y: allBtnY, w: allBtnW, h: allBtnH }
+    if (showAccessKeys) {
+      const key = accessKeyForClickRegion(allRegion.id)
+      if (key) drawAccessKeyHint(ctx, key, allBtnX + 4, allBtnY + 2)
+    }
+    this.clickRegions.push(allRegion)
 
     const bgmBtnY = allBtnY + 32
     ctx.fillStyle = bgmEnabled ? '#12356b' : '#172033'
@@ -232,8 +252,12 @@ export class HUD {
     ctx.textAlign = 'center'
     ctx.fillText(bgmEnabled ? 'BGM ON' : 'BGM OFF', allBtnX + allBtnW / 2, bgmBtnY + 16)
     ctx.textAlign = 'left'
-
-    this.clickRegions.push({ id: 'toggle-bgm', x: allBtnX, y: bgmBtnY, w: allBtnW, h: allBtnH })
+    const bgmRegion = { id: 'toggle-bgm', x: allBtnX, y: bgmBtnY, w: allBtnW, h: allBtnH }
+    if (showAccessKeys) {
+      const key = accessKeyForClickRegion(bgmRegion.id)
+      if (key) drawAccessKeyHint(ctx, key, allBtnX + 4, bgmBtnY + 2)
+    }
+    this.clickRegions.push(bgmRegion)
 
     ctx.fillStyle = '#020812'
     ctx.fillRect(0, barH, canvas.width, coverH - barH)
@@ -676,6 +700,7 @@ export class HUD {
       ['← → / A E', '旋回'],
       ['Click', '射撃'],
       ['1-8', '兵装選択'],
+      ['P / Esc', 'ポーズ'],
       ['D', 'デバッグ'],
       ['R', 'タイトル'],
     ]
@@ -744,4 +769,14 @@ function fitText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number):
 function angularDistance(a: number, b: number): number {
   const diff = Math.abs(a - b) % (Math.PI * 2)
   return Math.min(diff, Math.PI * 2 - diff)
+}
+
+function accessKeyForClickRegion(id: string): string | null {
+  if (id === 'toggle-all') return 'O'
+  if (id === 'toggle-bgm') return 'B'
+  if (id.startsWith('toggle:')) {
+    const slot = Number(id.slice(7))
+    return slot >= 0 && slot < MAX_WEAPON_SLOTS ? String(slot + 1) : null
+  }
+  return null
 }

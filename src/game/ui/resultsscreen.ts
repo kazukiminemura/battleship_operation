@@ -1,5 +1,6 @@
 import type { CombatState, Metrics } from '../simulation/types'
 import { displayWeaponName } from '../data/weapon-names'
+import { drawAccessKeyHint, isAccessKey } from './accesskeys'
 
 export type ResultAction = 'next' | 'retry' | 'title'
 
@@ -44,6 +45,16 @@ export class ResultsScreen {
     if (actions.length === 0) return null
     this.ensureSelected(actions)
 
+    if (e.altKey) {
+      for (const action of actions) {
+        if (isAccessKey(e, accessKeyForAction(action))) {
+          this.selected = action
+          return action
+        }
+      }
+      return null
+    }
+
     if (e.code === 'KeyN' && actions.includes('next')) {
       this.selected = 'next'
       return 'next'
@@ -79,7 +90,7 @@ export class ResultsScreen {
     }
   }
 
-  render(state: CombatState): void {
+  render(state: CombatState, showAccessKeys = false): void {
     const { ctx, canvas } = this
     const W = canvas.width
     const H = canvas.height
@@ -145,13 +156,13 @@ export class ResultsScreen {
     const btnH = H * 0.075
 
     if (completed && !allClear) {
-      this.drawBtn(ctx, 'next',  cx - W * 0.24, btnY, W * 0.20, btnH, H, '次のステージへ', headColor)
-      this.drawBtn(ctx, 'title', cx + W * 0.04,  btnY, W * 0.20, btnH, H, 'タイトルへ',     '#475569')
+      this.drawBtn(ctx, 'next',  cx - W * 0.24, btnY, W * 0.20, btnH, H, '次のステージへ', headColor, showAccessKeys)
+      this.drawBtn(ctx, 'title', cx + W * 0.04,  btnY, W * 0.20, btnH, H, 'タイトルへ',     '#475569', showAccessKeys)
     } else if (allClear) {
-      this.drawBtn(ctx, 'title', cx - W * 0.10, btnY, W * 0.20, btnH, H, 'タイトルへ', '#fbbf24')
+      this.drawBtn(ctx, 'title', cx - W * 0.10, btnY, W * 0.20, btnH, H, 'タイトルへ', '#fbbf24', showAccessKeys)
     } else {
-      this.drawBtn(ctx, 'retry', cx - W * 0.24, btnY, W * 0.20, btnH, H, 'リトライ',  headColor)
-      this.drawBtn(ctx, 'title', cx + W * 0.04,  btnY, W * 0.20, btnH, H, 'タイトルへ', '#475569')
+      this.drawBtn(ctx, 'retry', cx - W * 0.24, btnY, W * 0.20, btnH, H, 'リトライ',  headColor, showAccessKeys)
+      this.drawBtn(ctx, 'title', cx + W * 0.04,  btnY, W * 0.20, btnH, H, 'タイトルへ', '#475569', showAccessKeys)
     }
   }
 
@@ -281,6 +292,7 @@ export class ResultsScreen {
     H: number,
     label: string,
     accentColor: string,
+    showAccessKeys: boolean,
   ): void {
     const active = this.hovered === id || this.selected === id
     ctx.fillStyle = active ? `${accentColor}30` : 'rgba(10,24,46,0.88)'
@@ -294,6 +306,7 @@ export class ResultsScreen {
     ctx.textAlign = 'center'
     ctx.font = `bold ${Math.round(H * 0.030)}px sans-serif`
     ctx.fillText(label, x + w / 2, y + h * 0.66)
+    if (showAccessKeys) drawAccessKeyHint(ctx, accessKeyForAction(id), x + 8, y + 8)
     this.regions.push({ id, x, y, w, h })
   }
 
@@ -318,6 +331,11 @@ export class ResultsScreen {
     const next = (current + direction + actions.length) % actions.length
     this.selected = actions[next]!
   }
+}
+
+function accessKeyForAction(action: ResultAction): string {
+  if (action === 'next' || action === 'retry') return 'SPACE'
+  return 'T'
 }
 
 function divider(ctx: CanvasRenderingContext2D, x: number, y: number, w: number): void {

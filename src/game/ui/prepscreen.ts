@@ -2,6 +2,7 @@ import type { WeaponTemplate, PlayerShipType } from '../data/masterdata'
 import { getHullsByClass, type HullCatalogEntry, type HullSlot } from '../data/hull-catalog'
 import { WEAPON_SHOP, TYPE_COLOR, TYPE_JP, type ShopWeapon } from '../data/weapon-shop'
 import type { WeaponType } from '../simulation/types'
+import { drawAccessKeyHint, isAccessKey } from './accesskeys'
 import {
   GRID_CELL_METERS,
   buildPlacements,
@@ -34,16 +35,16 @@ type WeaponFilter = WeaponType | 'all'
 export type PrepAudioCue = 'select' | 'place' | 'equip' | 'back' | 'confirm' | 'denied'
 
 type Region =
-  | { tag: 'class-tab';   shipType: PlayerShipType;   x: number; y: number; w: number; h: number }
-  | { tag: 'hull-card';   index: number;               x: number; y: number; w: number; h: number }
-  | { tag: 'main-tab';    tab: ScreenTab;              x: number; y: number; w: number; h: number }
-  | { tag: 'type-tab';    filter: WeaponFilter;        x: number; y: number; w: number; h: number }
-  | { tag: 'grid-slot';   slotId: string;              x: number; y: number; w: number; h: number }
-  | { tag: 'grid-tower';                                x: number; y: number; w: number; h: number }
-  | { tag: 'grid-empty';  c: number; r: number;        x: number; y: number; w: number; h: number }
-  | { tag: 'weapon-card'; weaponId: string;            x: number; y: number; w: number; h: number }
-  | { tag: 'deploy';                                    x: number; y: number; w: number; h: number }
-  | { tag: 'back';                                      x: number; y: number; w: number; h: number }
+  | { tag: 'class-tab';   shipType: PlayerShipType;   x: number; y: number; w: number; h: number; accessKey?: string }
+  | { tag: 'hull-card';   index: number;               x: number; y: number; w: number; h: number; accessKey?: string }
+  | { tag: 'main-tab';    tab: ScreenTab;              x: number; y: number; w: number; h: number; accessKey?: string }
+  | { tag: 'type-tab';    filter: WeaponFilter;        x: number; y: number; w: number; h: number; accessKey?: string }
+  | { tag: 'grid-slot';   slotId: string;              x: number; y: number; w: number; h: number; accessKey?: string }
+  | { tag: 'grid-tower';                                x: number; y: number; w: number; h: number; accessKey?: string }
+  | { tag: 'grid-empty';  c: number; r: number;        x: number; y: number; w: number; h: number; accessKey?: string }
+  | { tag: 'weapon-card'; weaponId: string;            x: number; y: number; w: number; h: number; accessKey?: string }
+  | { tag: 'deploy';                                    x: number; y: number; w: number; h: number; accessKey?: string }
+  | { tag: 'back';                                      x: number; y: number; w: number; h: number; accessKey?: string }
 
 const CLASS_TABS: { type: PlayerShipType; label: string }[] = [
   { type: 'destroyer',  label: '駆逐艦' },
@@ -128,7 +129,30 @@ export class PrepScreen {
     this.lastAudioCue = null
     const r = this.hitRegion(e)
     if (!r) return null
+    return this.activateRegion(r)
+  }
 
+  checkKeyDown(e: KeyboardEvent): PrepResult | null {
+    this.lastAudioCue = null
+    const hull = this.selectedHull()
+
+    if (!e.altKey && e.code === 'Space' && hull) {
+      return this.activateRegion(this.tab === 'hull'
+        ? { tag: 'main-tab', tab: 'armament', x: 0, y: 0, w: 0, h: 0, accessKey: 'SPACE' }
+        : { tag: 'deploy', x: 0, y: 0, w: 0, h: 0, accessKey: 'SPACE' })
+    }
+
+    if (e.altKey) {
+      for (let i = this.regions.length - 1; i >= 0; i--) {
+        const region = this.regions[i]!
+        const key = this.accessKeyForRegion(region)
+        if (key && isAccessKey(e, key)) return this.activateRegion(region)
+      }
+    }
+    return null
+  }
+
+  private activateRegion(r: Region): PrepResult | null {
     switch (r.tag) {
       case 'main-tab':
         if (r.tab === 'armament' && !this.selectedHull()) {
@@ -264,18 +288,18 @@ export class PrepScreen {
     return cue
   }
 
-  render(): void {
+  render(showAccessKeys = false): void {
     const { width: cw, height: ch } = this.canvas
     this.regions = []
     this.drawBackground(cw, ch)
     const TAB_H = 56, STAT_H = 76, BTN_H = 64
     const mainY = TAB_H
     const mainH = ch - TAB_H - STAT_H - BTN_H
-    this.drawTopTabs(cw, TAB_H)
-    if (this.tab === 'hull') this.renderHullTab(0, mainY, cw, mainH)
-    else                     this.renderArmamentTab(0, mainY, cw, mainH)
+    this.drawTopTabs(cw, TAB_H, showAccessKeys)
+    if (this.tab === 'hull') this.renderHullTab(0, mainY, cw, mainH, showAccessKeys)
+    else                     this.renderArmamentTab(0, mainY, cw, mainH, showAccessKeys)
     this.renderStatsBar(0, ch - STAT_H - BTN_H, cw, STAT_H)
-    this.renderButtons(0, ch - BTN_H, cw, BTN_H)
+    this.renderButtons(0, ch - BTN_H, cw, BTN_H, showAccessKeys)
   }
 
   // ── Data helpers ─────────────────────────────────────────────────────────
@@ -332,7 +356,7 @@ export class PrepScreen {
 
   // ── Top tabs ──────────────────────────────────────────────────────────────
 
-  private drawTopTabs(cw: number, h: number): void {
+  private drawTopTabs(cw: number, h: number, showAccessKeys: boolean): void {
     const ctx = this.ctx
     ctx.fillStyle = '#080f08'; ctx.fillRect(0, 0, cw, h)
     ctx.strokeStyle = BORDER; ctx.lineWidth = 1
@@ -352,13 +376,15 @@ export class PrepScreen {
       ctx.strokeStyle = active ? '#3a9a4a' : BORDER; ctx.lineWidth = 1; ctx.strokeRect(tx, 5, tw, th)
       ctx.font = 'bold 18px sans-serif'; ctx.fillStyle = active ? '#cce8cc' : DIM; ctx.textAlign = 'center'
       ctx.fillText(t.label, tx + tw / 2, 5 + th / 2 + 7)
-      this.addRegion({ tag: 'main-tab', tab: t.tab, x: tx, y: 5, w: tw, h: th })
+      const region: Region = { tag: 'main-tab', tab: t.tab, x: tx, y: 5, w: tw, h: th }
+      if (showAccessKeys) this.drawRegionAccessHint(ctx, region, tx + 7, 12)
+      this.addRegion(region)
     }
   }
 
   // ── Hull tab ──────────────────────────────────────────────────────────────
 
-  private renderHullTab(x: number, y: number, cw: number, ch: number): void {
+  private renderHullTab(x: number, y: number, cw: number, ch: number, showAccessKeys: boolean): void {
     const ctx = this.ctx
     const ctW = 118, ctH = 58
     for (let i = 0; i < CLASS_TABS.length; i++) {
@@ -368,7 +394,9 @@ export class PrepScreen {
       ctx.strokeStyle = active ? '#3a9a4a' : BORDER; ctx.lineWidth = 1; ctx.strokeRect(x + 8, ty, ctW, ctH)
       ctx.font = 'bold 18px sans-serif'; ctx.fillStyle = active ? '#cce8cc' : TEXT; ctx.textAlign = 'center'
       ctx.fillText(tab.label, x + 8 + ctW / 2, ty + ctH / 2 + 7)
-      this.addRegion({ tag: 'class-tab', shipType: tab.type, x: x + 8, y: ty, w: ctW, h: ctH })
+      const region: Region = { tag: 'class-tab', shipType: tab.type, x: x + 8, y: ty, w: ctW, h: ctH }
+      if (showAccessKeys) this.drawRegionAccessHint(ctx, region, x + 14, ty + 8)
+      this.addRegion(region)
     }
 
     const hulls = getHullsByClass(this.selectedClass)
@@ -384,7 +412,11 @@ export class PrepScreen {
       const locked = hull.minStage > this.stage
       const selected = i === this.selectedHullIdx && !locked
       this.drawHullCard(cx2, cardY, cardW, cardH, hull, locked, selected)
-      if (!locked) this.addRegion({ tag: 'hull-card', index: i, x: cx2, y: cardY, w: cardW, h: cardH })
+      if (!locked) {
+        const region: Region = { tag: 'hull-card', index: i, x: cx2, y: cardY, w: cardW, h: cardH }
+        if (showAccessKeys) this.drawRegionAccessHint(ctx, region, cx2 + 8, cardY + 8)
+        this.addRegion(region)
+      }
     }
   }
 
@@ -427,7 +459,7 @@ export class PrepScreen {
 
   // ── Armament tab ──────────────────────────────────────────────────────────
 
-  private renderArmamentTab(x: number, y: number, cw: number, ch: number): void {
+  private renderArmamentTab(x: number, y: number, cw: number, ch: number, showAccessKeys: boolean): void {
     const hull = this.selectedHull()
     if (!hull) return
 
@@ -441,7 +473,7 @@ export class PrepScreen {
     ctx.fillStyle = '#080e08'; ctx.fillRect(x + gridAreaW, y, PALETTE_W, ch)
     ctx.strokeStyle = BORDER; ctx.lineWidth = 1
     ctx.beginPath(); ctx.moveTo(x + gridAreaW, y); ctx.lineTo(x + gridAreaW, y + ch); ctx.stroke()
-    this.drawWeaponPalette(x + gridAreaW, y, PALETTE_W, ch, hull)
+    this.drawWeaponPalette(x + gridAreaW, y, PALETTE_W, ch, hull, showAccessKeys)
   }
 
   // ── Grid area (left/center) ───────────────────────────────────────────────
@@ -595,7 +627,7 @@ export class PrepScreen {
 
   // ── Weapon palette (right) ────────────────────────────────────────────────
 
-  private drawWeaponPalette(px: number, py: number, pw: number, ph: number, hull: HullCatalogEntry): void {
+  private drawWeaponPalette(px: number, py: number, pw: number, ph: number, hull: HullCatalogEntry, showAccessKeys: boolean): void {
     const ctx = this.ctx
 
     // Hull title
@@ -632,7 +664,9 @@ export class PrepScreen {
       ctx.font = `${active ? 'bold ' : ''}12px sans-serif`
       ctx.fillStyle = active ? '#cce8cc' : DIM; ctx.textAlign = 'center'
       ctx.fillText(t.label, tx + tabW / 2, tabY + 22)
-      this.addRegion({ tag: 'type-tab', filter: t.filter, x: tx, y: tabY, w: tabW, h: 32 })
+      const region: Region = { tag: 'type-tab', filter: t.filter, x: tx, y: tabY, w: tabW, h: 32 }
+      if (showAccessKeys) this.drawRegionAccessHint(ctx, region, tx + 4, tabY + 5)
+      this.addRegion(region)
     }
 
     // Weapon cards
@@ -643,12 +677,7 @@ export class PrepScreen {
 
     // Determine which weapons to show
     const showAll = !selSlot
-    const weapons = WEAPON_SHOP.filter(w => {
-      if (w.minStage > this.stage) return false
-      if (this.weaponFilter !== 'all' && w.type !== this.weaponFilter) return false
-      if (!showAll && !selSlot!.compatibleTypes.includes(w.type)) return false
-      return true
-    })
+    const weapons = this.visibleWeapons(hull)
 
     // Clip to list area
     ctx.save(); ctx.beginPath(); ctx.rect(px, listY, pw, listH); ctx.clip()
@@ -691,7 +720,9 @@ export class PrepScreen {
       }
 
       if (compatible && selSlot) {
-        this.addRegion({ tag: 'weapon-card', weaponId: w.id, x: px + 6, y: cy, w: cardW, h: cardH })
+        const region: Region = { tag: 'weapon-card', weaponId: w.id, x: px + 6, y: cy, w: cardW, h: cardH }
+        this.addRegion(region)
+        if (showAccessKeys) this.drawRegionAccessHint(ctx, region, px + pw - 56, cy + 17)
       }
       cy += cardH + 4
     }
@@ -745,9 +776,20 @@ export class PrepScreen {
     ctx.fillText(`${filled} / ${hull.slots.length}`, cw - 14, y + 66)
   }
 
+  private visibleWeapons(hull: HullCatalogEntry): ShopWeapon[] {
+    const selSlot = hull.slots.find(s => s.id === this.selectedSlotId)
+    const showAll = !selSlot
+    return WEAPON_SHOP.filter(w => {
+      if (w.minStage > this.stage) return false
+      if (this.weaponFilter !== 'all' && w.type !== this.weaponFilter) return false
+      if (!showAll && !selSlot!.compatibleTypes.includes(w.type)) return false
+      return true
+    })
+  }
+
   // ── Button bar ────────────────────────────────────────────────────────────
 
-  private renderButtons(x: number, y: number, cw: number, ch: number): void {
+  private renderButtons(x: number, y: number, cw: number, ch: number, showAccessKeys: boolean): void {
     const ctx = this.ctx
     ctx.fillStyle = '#060c06'; ctx.fillRect(x, y, cw, ch)
     ctx.strokeStyle = BORDER; ctx.lineWidth = 1
@@ -755,17 +797,25 @@ export class PrepScreen {
 
     if (this.tab === 'armament') {
       this.drawBtn(x + 12, y + 8, 154, ch - 16, '← 艦体選択', PANEL, TEXT, 18)
-      this.addRegion({ tag: 'back', x: x + 12, y: y + 8, w: 154, h: ch - 16 })
+      const region: Region = { tag: 'back', x: x + 12, y: y + 8, w: 154, h: ch - 16 }
+      if (showAccessKeys) this.drawRegionAccessHint(ctx, region, x + 20, y + 16)
+      this.addRegion(region)
     }
     if (this.tab === 'hull' && this.selectedHull()) {
       this.drawBtn(x + 12, y + 8, 164, ch - 16, '兵装配置 →', ACCENT, '#cceccc', 18)
-      this.addRegion({ tag: 'main-tab', tab: 'armament', x: x + 12, y: y + 8, w: 164, h: ch - 16 })
+      const region: Region = { tag: 'main-tab', tab: 'armament', x: x + 12, y: y + 8, w: 164, h: ch - 16, accessKey: 'SPACE' }
+      if (showAccessKeys) this.drawRegionAccessHint(ctx, region, x + 20, y + 16)
+      this.addRegion(region)
     }
 
     const hull = this.selectedHull()
     const bw = 260, bx2 = x + cw - bw - 12
     this.drawBtn(bx2, y + 8, bw, ch - 16, '出撃準備完了 →', hull ? GREEN : '#0a1810', hull ? '#fff' : DIM, 19)
-    if (hull) this.addRegion({ tag: 'deploy', x: bx2, y: y + 8, w: bw, h: ch - 16 })
+    if (hull) {
+      const region: Region = { tag: 'deploy', x: bx2, y: y + 8, w: bw, h: ch - 16, accessKey: 'SPACE' }
+      if (showAccessKeys) this.drawRegionAccessHint(ctx, region, bx2 + 8, y + 16)
+      this.addRegion(region)
+    }
   }
 
   // ── Drawing utilities ─────────────────────────────────────────────────────
@@ -1211,6 +1261,27 @@ export class PrepScreen {
 
   private addRegion(r: Region): void { this.regions.push(r) }
 
+  private drawRegionAccessHint(ctx: CanvasRenderingContext2D, r: Region, x: number, y: number): void {
+    const key = this.accessKeyForRegion(r)
+    if (key) drawAccessKeyHint(ctx, key, x, y)
+  }
+
+  private accessKeyForRegion(r: Region): string | null {
+    if (r.accessKey) return r.accessKey
+    if (r.tag === 'main-tab') return r.tab === 'hull' ? 'H' : 'A'
+    if (r.tag === 'class-tab') return classAccessKey(r.shipType)
+    if (r.tag === 'type-tab') return filterAccessKey(r.filter)
+    if (r.tag === 'hull-card') return r.index < 9 ? String(r.index + 1) : null
+    if (r.tag === 'weapon-card') {
+      const visibleWeaponCards = this.regions.filter(x => x.tag === 'weapon-card')
+      const index = visibleWeaponCards.findIndex(x => x === r)
+      return index >= 0 && index < 9 ? String(index + 1) : null
+    }
+    if (r.tag === 'deploy') return 'P'
+    if (r.tag === 'back') return 'H'
+    return null
+  }
+
   private hitRegion(e: MouseEvent): Region | null {
     const rect = this.canvas.getBoundingClientRect()
     const mx = e.clientX - rect.left, my = e.clientY - rect.top
@@ -1222,6 +1293,21 @@ export class PrepScreen {
   }
 
   private onMouseMove(e: MouseEvent): void { this.hovered = this.hitRegion(e) }
+}
+
+function classAccessKey(shipType: PlayerShipType): string {
+  if (shipType === 'destroyer') return 'D'
+  if (shipType === 'cruiser') return 'C'
+  return 'B'
+}
+
+function filterAccessKey(filter: WeaponFilter): string {
+  if (filter === 'all') return 'L'
+  if (filter === 'gun') return 'G'
+  if (filter === 'secondary') return 'S'
+  if (filter === 'torpedo') return 'T'
+  if (filter === 'aa') return 'F'
+  return 'M'
 }
 
 function polygonPath(ctx: CanvasRenderingContext2D, points: [number, number][]): void {
