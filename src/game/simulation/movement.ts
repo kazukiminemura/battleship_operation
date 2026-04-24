@@ -124,12 +124,22 @@ export function applyRotateCommand(ship: ShipEntity, cmd: Command): ShipEntity {
   return { ...ship, angle }
 }
 
-// used by AI: directly sets targetSpeed without changing speedLevel label
 export function applyMoveCommand(ship: ShipEntity, cmd: Command): ShipEntity {
   if (cmd.type !== 'move') return ship
   const speed = cmd.value ?? ship.maxSpeed
   const clamped = Math.min(Math.abs(speed), ship.maxSpeed) * Math.sign(speed)
-  return { ...ship, targetSpeed: clamped }
+  const speedLevel = inferSpeedLevel(clamped, ship.maxSpeed)
+  return { ...ship, targetSpeed: clamped, speedLevel }
+}
+
+function inferSpeedLevel(target: number, max: number): SpeedLevel {
+  if (target < 0) return 'reverse'
+  if (max === 0 || target === 0) return 'stop'
+  const r = target / max
+  if (r < 0.15) return 'stop'
+  if (r < 0.50) return 'slow'
+  if (r < 0.85) return 'cruise'
+  return 'full'
 }
 
 export function applyStopCommand(ship: ShipEntity): ShipEntity {
