@@ -141,27 +141,20 @@ export function generateAutoPilotCommands(state: CombatState): Command[] {
 }
 
 function findTarget(state: CombatState, ship: ShipEntity): Vec3 | undefined {
+  // Auto-pilot treats all enemies as known (full map awareness)
   const enemies = [...state.entities.values()].filter(
-    e => e.kind === 'ship' && (e as ShipEntity).team === 'enemy' &&
-         !(e as ShipEntity).destroyed && state.detectedByPlayer.has(e.id)
+    e => e.kind === 'ship' && (e as ShipEntity).team === 'enemy' && !(e as ShipEntity).destroyed
   ) as ShipEntity[]
 
   if (enemies.length > 0) return nearest(ship.pos, enemies.map(e => e.pos))
 
   const buildings = [...state.entities.values()].filter(
-    e => e.kind === 'building' && !(e as BuildingEntity).destroyed &&
-         state.detectedByPlayer.has(e.id)
+    e => e.kind === 'building' && !(e as BuildingEntity).destroyed
   ) as BuildingEntity[]
 
   if (buildings.length > 0) return nearest(ship.pos, buildings.map(b => b.pos))
 
-  // Fall back to last known enemy contact (freshest)
-  let freshest: Vec3 | undefined
-  let maxTick = -1
-  for (const contact of state.enemyContacts.values()) {
-    if (contact.tick > maxTick) { maxTick = contact.tick; freshest = contact.pos }
-  }
-  return freshest
+  return undefined
 }
 
 function preferredRange(ship: ShipEntity): number {
