@@ -45,6 +45,7 @@ export interface ShipEntity {
   team: 'player' | 'enemy'
   destroyed: boolean
   templateId: string
+  autoPilot?: boolean
 }
 
 export interface ProjectileEntity {

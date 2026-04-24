@@ -5,7 +5,7 @@ import { stepMovement, applyMoveCommand, applySpeedUpCommand, applySpeedDownComm
 import { stepWeaponCooldowns, fireWeapon, fireWeaponAtSlot } from './weapons'
 import { stepProjectiles } from './projectiles'
 import { getWeaponConfig } from './weapon-strategies'
-import { generateAiCommands } from './ai'
+import { generateAiCommands, generateAutoPilotCommands } from './ai'
 import { evaluateMission } from './mission'
 import { stepDetection } from './detection'
 
@@ -23,8 +23,13 @@ export function combatStep(
   // 1.5. update current visibility before command generation
   s = stepDetection(s)
 
-  // 2. apply player commands
-  s = applyCommands(s, commands, rng)
+  // 2. apply player commands (auto-pilot overrides movement; fire commands always pass through)
+  const playerShip = s.entities.get('ship.player') as ShipEntity | undefined
+  const effectiveCmds = playerShip?.autoPilot
+    ? [...commands.filter(c => c.type === 'fire.slot' || c.type.startsWith('fire.')),
+       ...generateAutoPilotCommands(s)]
+    : commands
+  s = applyCommands(s, effectiveCmds, rng)
 
   // 3. auto-fire commands for weapons in auto mode
   s = applyCommands(s, generateAutoFireCommands(s), rng)

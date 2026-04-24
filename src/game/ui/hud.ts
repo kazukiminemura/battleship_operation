@@ -65,12 +65,12 @@ export class HUD {
     return null
   }
 
-  render(state: CombatState, weaponMode: WeaponMode, worldSize: number, bgmEnabled: boolean, subtitle = '', showAccessKeys = false): void {
+  render(state: CombatState, weaponMode: WeaponMode, worldSize: number, bgmEnabled: boolean, subtitle = '', showAccessKeys = false, autoPilot = false): void {
     const player = state.entities.get('ship.player') as ShipEntity | undefined
     if (!player) return
 
     this.clickRegions = []
-    this.renderTopBar(state, player, weaponMode, bgmEnabled, showAccessKeys)
+    this.renderTopBar(state, player, weaponMode, bgmEnabled, showAccessKeys, autoPilot)
     this.renderRadar(state, player, worldSize)
     this.renderGlobalMap(state, player, worldSize)
     this.renderBottomBar()
@@ -106,7 +106,7 @@ export class HUD {
     ctx.textAlign = 'left'
   }
 
-  private renderTopBar(state: CombatState, player: ShipEntity, weaponMode: WeaponMode, bgmEnabled: boolean, showAccessKeys: boolean): void {
+  private renderTopBar(state: CombatState, player: ShipEntity, weaponMode: WeaponMode, bgmEnabled: boolean, showAccessKeys: boolean, autoPilot = false): void {
     const { ctx, canvas } = this
     const barH = 130
     const coverH = barH + 8
@@ -258,6 +258,24 @@ export class HUD {
       if (key) drawAccessKeyHint(ctx, key, allBtnX + 4, bgmBtnY + 2)
     }
     this.clickRegions.push(bgmRegion)
+
+    const navBtnY = bgmBtnY + 32
+    ctx.fillStyle = autoPilot ? '#12235a' : '#172033'
+    ctx.strokeStyle = autoPilot ? '#818cf8' : '#475569'
+    ctx.lineWidth = 1.5
+    roundRect(ctx, allBtnX, navBtnY, allBtnW, allBtnH, 4)
+    ctx.fill(); ctx.stroke()
+    ctx.font = 'bold 11px monospace'
+    ctx.fillStyle = autoPilot ? '#a5b4fc' : '#94a3b8'
+    ctx.textAlign = 'center'
+    ctx.fillText(autoPilot ? '● AUTO NAV' : '○ MAN NAV', allBtnX + allBtnW / 2, navBtnY + 16)
+    ctx.textAlign = 'left'
+    const navRegion = { id: 'toggle-autopilot', x: allBtnX, y: navBtnY, w: allBtnW, h: allBtnH }
+    if (showAccessKeys) {
+      const key = accessKeyForClickRegion(navRegion.id)
+      if (key) drawAccessKeyHint(ctx, key, allBtnX + 4, navBtnY + 2)
+    }
+    this.clickRegions.push(navRegion)
 
     ctx.fillStyle = '#020812'
     ctx.fillRect(0, barH, canvas.width, coverH - barH)
@@ -774,6 +792,7 @@ function angularDistance(a: number, b: number): number {
 function accessKeyForClickRegion(id: string): string | null {
   if (id === 'toggle-all') return 'O'
   if (id === 'toggle-bgm') return 'B'
+  if (id === 'toggle-autopilot') return 'N'
   if (id.startsWith('toggle:')) {
     const slot = Number(id.slice(7))
     return slot >= 0 && slot < MAX_WEAPON_SLOTS ? String(slot + 1) : null

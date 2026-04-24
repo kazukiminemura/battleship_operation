@@ -1,4 +1,4 @@
-import type { CombatState, ShipEntity, Command } from './types'
+import type { CombatState, ShipEntity, BuildingEntity, Command, Vec3 } from './types'
 import type { SeededRandom } from './random'
 import { getWeaponConfig, WEAPON_CONFIGS } from './weapon-strategies'
 import { enemyCanDetectPlayer } from './detection'
@@ -92,6 +92,73 @@ export function generateAiCommands(state: CombatState, rng: SeededRandom): Comma
   }
 
   return commands
+}
+
+export function generateAutoPilotCommands(state: CombatState): Command[] {
+  const player = state.entities.get('ship.player')
+  if (!player || player.kind !== 'ship') return []
+  const ship = player as ShipEntity
+  if (!ship.autoPilot) return []
+
+  const actorId = 'ship.player'
+  const tick = state.tick
+
+  // Target priority: detected enemy ships > detected buildings > last known contacts
+  const detectedEnemies = [...state.entities.values()].filter(
+    e => e.kind === 'ship' && (e as ShipEntity).team === 'enemy' &&
+         !(e as ShipEntity).destroyed && state.detectedByPlayer.has(e.id)
+  ) as ShipEntity[]
+
+  const detectedBuildings = [...state.entities.values()].filter(
+    e => e.kind === 'building' && !(e as BuildingEntity).destroyed &&
+         state.detectedByPlayer.has(e.id)
+  ) as BuildingEntity[]
+
+  let targetPos: Vec3 | undefined
+  if (detectedEnemies.length > 0) {
+    targetPos = nearest(ship.pos, detectedEnemies.map(e => e.pos))
+  } else if (detectedBuildings.length > 0) {
+    targetPos = nearest(ship.pos, detectedBuildings.map(b => b.pos))
+  } else if (state.enemyContacts.size > 0) {
+    let freshest: Vec3 | undefined
+    let maxTick = -1
+    for (const contact of state.enemyContacts.values()) {
+      if (contact.tick > maxTick) { maxTick = contact.tick; freshest = contact.pos }
+    }
+    targetPos = freshest
+  }
+
+  if (!targetPos) return []
+
+  const dx = targetPos.x - ship.pos.x
+  const dy = targetPos.y - ship.pos.y
+  const dist = Math.sqrt(dx * dx + dy * dy)
+  const angleDiff = normalizeAngle(Math.atan2(dy, dx) - ship.angle)
+
+  const cmds: Command[] = []
+
+  if (Math.abs(angleDiff) > 0.05) {
+    cmds.push({ tick, actorId, type: 'rotate', value: Math.sign(angleDiff) * ship.turnRate })
+  }
+
+  const preferred = 800
+  if (dist > preferred + 100) {
+    cmds.push({ tick, actorId, type: 'move', value: ship.maxSpeed })
+  } else if (dist < preferred - 100) {
+    cmds.push({ tick, actorId, type: 'move', value: -ship.maxSpeed * 0.4 })
+  } else {
+    cmds.push({ tick, actorId, type: 'stop' })
+  }
+
+  return cmds
+}
+
+function nearest(from: Vec3, positions: Vec3[]): Vec3 {
+  return positions.reduce((best, p) => {
+    const d1 = (p.x - from.x) ** 2 + (p.y - from.y) ** 2
+    const d2 = (best.x - from.x) ** 2 + (best.y - from.y) ** 2
+    return d1 < d2 ? p : best
+  })
 }
 
 function normalizeAngle(a: number): number {

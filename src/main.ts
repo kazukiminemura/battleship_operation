@@ -182,6 +182,10 @@ function main(): void {
 
   const applyHudAction = (id: string | null): boolean => {
     if (!id) return false
+    if (id === 'toggle-autopilot') {
+      state = toggleAutoPilot(state)
+      return true
+    }
     if (id === 'toggle-all') {
       state = toggleAllAutoFire(state)
       return true
@@ -438,14 +442,15 @@ function main(): void {
       }
 
       renderer.render(state, selectedWeapon(state, input.getWeaponMode()), input.getAimPoint())
+      const autoPilotOn = ((state.entities.get('ship.player') as ShipEntity | undefined)?.autoPilot) ?? false
       if (paused) {
-        hud.render(state, input.getWeaponMode(), WORLD_SIZE, bgmEnabled, '', accessKeysVisible)
+        hud.render(state, input.getWeaponMode(), WORLD_SIZE, bgmEnabled, '', accessKeysVisible, autoPilotOn)
         pauseRegions = renderPauseOverlay(canvas, accessKeysVisible)
         return
       }
 
       navigator.update(state)
-      hud.render(state, input.getWeaponMode(), WORLD_SIZE, bgmEnabled, navigator.getSubtitle(), accessKeysVisible)
+      hud.render(state, input.getWeaponMode(), WORLD_SIZE, bgmEnabled, navigator.getSubtitle(), accessKeysVisible, autoPilotOn)
       sound.processEvents(state.eventLog, state.tick)
     },
   })
@@ -573,6 +578,15 @@ function toggleWeaponAutoFire(state: CombatState, weaponSlot: number): CombatSta
   )
   const entities = new Map(state.entities)
   entities.set('ship.player', { ...ship, weapons })
+  return { ...state, entities }
+}
+
+function toggleAutoPilot(state: CombatState): CombatState {
+  const player = state.entities.get('ship.player')
+  if (!player || player.kind !== 'ship') return state
+  const ship = player as ShipEntity
+  const entities = new Map(state.entities)
+  entities.set('ship.player', { ...ship, autoPilot: !ship.autoPilot })
   return { ...state, entities }
 }
 
