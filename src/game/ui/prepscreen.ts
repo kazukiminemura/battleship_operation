@@ -78,6 +78,7 @@ const YUKIMURA_DEFAULT_WEAPONS: Record<string, ShopWeapon> = {
 }
 const LOCKED = '#090f0a'
 const SEL    = '#0a3018'
+type ShipPreviewMode = 'card' | 'grid'
 
 export class PrepScreen {
   private canvas: HTMLCanvasElement
@@ -469,14 +470,17 @@ export class PrepScreen {
     const hh = spec.lengthCells / 2
 
     // Hull background silhouette (draw first, behind grid)
-    ctx.save()
-    ctx.translate(gx + cellCenter(spec.centerC) * CW, gy + (spec.topR + spec.lengthCells / 2) * CH)
-    ctx.beginPath()
-    this.buildHullPath(ctx, 0, 0, CW * hw * 1.02, CH * hh * 1.02)
-    ctx.fillStyle = '#0d1e12'
-    ctx.fill()
-    ctx.strokeStyle = '#2a4a30'; ctx.lineWidth = 2; ctx.stroke()
-    ctx.restore()
+    this.drawShipTopDown(
+      ctx,
+      gx + cellCenter(spec.centerC) * CW,
+      gy + (spec.topR + spec.lengthCells / 2) * CH,
+      CW * hw * 1.02,
+      CH * hh * 1.02,
+      hull,
+      false,
+      'grid',
+      false,
+    )
 
     this.drawDeckStructure(gx, gy, CW, CH, hull, spec)
 
@@ -766,43 +770,68 @@ export class PrepScreen {
 
   // ── Drawing utilities ─────────────────────────────────────────────────────
 
-  private drawShipTopDown(ctx: CanvasRenderingContext2D, cx: number, cy: number, hw: number, hh: number, hull: HullCatalogEntry, locked: boolean): void {
+  private drawShipTopDown(
+    ctx: CanvasRenderingContext2D,
+    cx: number,
+    cy: number,
+    hw: number,
+    hh: number,
+    hull: HullCatalogEntry,
+    locked: boolean,
+    mode: ShipPreviewMode = 'card',
+    showSlots = true,
+  ): void {
     if (hull.templateId === 'hull.bb.yukimura') {
-      this.drawYukimuraTopDown(ctx, cx, cy, hw, hh, locked)
+      this.drawYukimuraTopDown(ctx, cx, cy, hw, hh, locked, mode)
       return
     }
 
     ctx.beginPath(); this.buildHullPath(ctx, cx, cy, hw, hh)
     ctx.fillStyle = locked ? '#090f0a'
-      : hull.shipType === 'destroyer'  ? '#0d1e12'
-      : hull.shipType === 'cruiser'    ? '#112018'
-      : '#162a1c'
+      : mode === 'grid'
+        ? hull.shipType === 'destroyer' ? '#102218'
+          : hull.shipType === 'cruiser' ? '#14271c'
+          : '#193022'
+        : hull.shipType === 'destroyer'  ? '#0d1e12'
+          : hull.shipType === 'cruiser'  ? '#112018'
+          : '#162a1c'
     ctx.fill(); ctx.strokeStyle = locked ? '#1a2a1a' : BORDER; ctx.lineWidth = 1; ctx.stroke()
-    ctx.strokeStyle = locked ? '#152015' : 'rgba(170,210,170,0.22)'
+    ctx.strokeStyle = locked ? '#152015' : (mode === 'grid' ? '#365740' : 'rgba(170,210,170,0.22)')
     ctx.beginPath(); ctx.moveTo(cx, cy - hh * 0.82); ctx.lineTo(cx, cy + hh * 0.72); ctx.stroke()
     ctx.beginPath(); ctx.moveTo(cx - hw * 0.36, cy - hh * 0.20); ctx.lineTo(cx + hw * 0.36, cy - hh * 0.20); ctx.stroke()
     const towerW = hull.shipType === 'battleship' ? hw * 0.42 : hw * 0.32
     const towerH = hull.shipType === 'destroyer' ? hh * 0.15 : hh * 0.20
-    ctx.fillStyle = locked ? '#101a10' : '#243827'
+    ctx.fillStyle = locked ? '#101a10' : (mode === 'grid' ? '#2a4030' : '#243827')
     ctx.fillRect(cx - towerW / 2, cy - towerH * 0.2, towerW, towerH)
     ctx.strokeStyle = locked ? '#1a2a1a' : '#d6b86a'
     ctx.strokeRect(cx - towerW / 2, cy - towerH * 0.2, towerW, towerH)
-    for (const slot of hull.slots) {
-      const sx = cx + slot.x * hw * 0.82
-      const sy = cy + slot.y * hh * 0.88
-      ctx.beginPath(); ctx.ellipse(sx, sy, 3.2, 2.1, 0, 0, Math.PI * 2)
-      ctx.fillStyle = locked ? DIM : (TYPE_COLOR[slot.compatibleTypes[0]!] ?? '#2a6a3a'); ctx.fill()
+    if (showSlots) {
+      for (const slot of hull.slots) {
+        const sx = cx + slot.x * hw * 0.82
+        const sy = cy + slot.y * hh * 0.88
+        ctx.beginPath(); ctx.ellipse(sx, sy, 3.2, 2.1, 0, 0, Math.PI * 2)
+        ctx.fillStyle = locked ? DIM : (TYPE_COLOR[slot.compatibleTypes[0]!] ?? '#2a6a3a'); ctx.fill()
+      }
     }
   }
 
-  private drawYukimuraTopDown(ctx: CanvasRenderingContext2D, cx: number, cy: number, hw: number, hh: number, locked: boolean): void {
+  private drawYukimuraTopDown(
+    ctx: CanvasRenderingContext2D,
+    cx: number,
+    cy: number,
+    hw: number,
+    hh: number,
+    locked: boolean,
+    mode: ShipPreviewMode = 'card',
+  ): void {
     const snow = locked ? '#1d2528' : '#f8fafc'
     const shade = locked ? '#334155' : '#cbd5e1'
     const green = locked ? '#1f3a2d' : '#166534'
     const red = locked ? '#4a1d1d' : '#dc2626'
+    const hullFill = mode === 'grid' ? '#15261c' : 'rgba(0,0,0,0.22)'
 
     ctx.save()
-    ctx.fillStyle = 'rgba(0,0,0,0.22)'
+    ctx.fillStyle = hullFill
     polygonPath(ctx, facetedOvalPoints(cx, cy + hh * 0.12, hw * 0.92, hh * 0.62, 16, -Math.PI / 2))
     ctx.fill()
 
