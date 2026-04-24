@@ -1,4 +1,6 @@
-import { drawAccessKeyHint } from './accesskeys'
+import { drawAccessKeyHint, isAccessKey } from './accesskeys'
+
+const BATTLE_KEY = 'SPACE'
 
 interface Region { x: number; y: number; w: number; h: number }
 
@@ -28,9 +30,9 @@ export class StartScreen {
   }
 
   checkKeyDown(e: KeyboardEvent): boolean {
-    if (e.code !== 'Enter' && e.code !== 'Space') return false
-    this.keyboardFocused = true
-    return true
+    const matched = e.altKey ? isAccessKey(e, BATTLE_KEY) : (e.code === 'Enter' || e.code === 'Space')
+    if (matched) this.keyboardFocused = true
+    return matched
   }
 
   checkClick(e: MouseEvent): boolean {
@@ -104,7 +106,7 @@ export class StartScreen {
     ctx.fillStyle = active ? '#ffffff' : '#7dd3fc'
     ctx.font = `bold ${Math.round(btnH * 0.50)}px sans-serif`
     ctx.fillText('BATTLE START', cx, btnY + btnH * 0.67)
-    if (showAccessKeys) drawAccessKeyHint(ctx, 'SPACE', btnX + 8, btnY + 8)
+    if (showAccessKeys) drawAccessKeyHint(ctx, BATTLE_KEY, btnX + 8, btnY + 8)
 
     ctx.fillStyle = '#1e293b'
     ctx.font = `${Math.round(H * 0.022)}px sans-serif`

@@ -1,6 +1,8 @@
 import type { StageDefinition } from '../data/masterdata'
 import type { PlayerShipType } from '../data/masterdata'
-import { drawAccessKeyHint } from './accesskeys'
+import { drawAccessKeyHint, isAccessKey } from './accesskeys'
+
+const SORTIE_KEY = 'SPACE'
 
 type BtnId = 'sortie'
 
@@ -53,7 +55,8 @@ export class StageIntroScreen {
   }
 
   checkKeyDown(e: KeyboardEvent): BtnId | null {
-    return e.code === 'Enter' || e.code === 'Space' ? 'sortie' : null
+    const matched = e.altKey ? isAccessKey(e, SORTIE_KEY) : (e.code === 'Enter' || e.code === 'Space')
+    return matched ? 'sortie' : null
   }
 
   private onMouseMove(e: MouseEvent): void {
@@ -212,7 +215,7 @@ export class StageIntroScreen {
     ctx.textAlign = 'center'
     ctx.font = `bold ${Math.round(btnH * 0.50)}px sans-serif`
     ctx.fillText('出撃', cx, btnY + btnH * 0.67)
-    if (showAccessKeys) drawAccessKeyHint(ctx, 'SPACE', btnX + 8, btnY + 8)
+    if (showAccessKeys) drawAccessKeyHint(ctx, SORTIE_KEY, btnX + 8, btnY + 8)
   }
 
   private drawPanel(

@@ -20,6 +20,7 @@ import { drawAccessKeyHint, isAccessKey } from './game/ui/accesskeys'
 const BASE_SEED = 12345
 type GameMode = 'start' | 'prep' | 'stage-intro' | 'combat' | 'results'
 type PauseAction = 'resume' | 'title'
+function pauseAccessKey(action: PauseAction): string { return action === 'resume' ? 'P' : 'T' }
 interface PauseRegion { id: PauseAction; x: number; y: number; w: number; h: number }
 
 function main(): void {
@@ -259,12 +260,12 @@ function main(): void {
       }
 
       if (mode === 'combat' && paused) {
-        if (isAccessKey(e, 'P')) {
+        if (isAccessKey(e, pauseAccessKey('resume'))) {
           e.preventDefault()
           if (!e.repeat) applyPauseAction('resume')
           return
         }
-        if (isAccessKey(e, 'T')) {
+        if (isAccessKey(e, pauseAccessKey('title'))) {
           e.preventDefault()
           if (!e.repeat) applyPauseAction('title')
           return
@@ -506,8 +507,8 @@ function renderPauseOverlay(canvas: HTMLCanvasElement, showAccessKeys: boolean):
   drawPauseButton(ctx, resumeX, btnY, btnW, btnH, '再開', '#22c55e')
   drawPauseButton(ctx, titleX, btnY, btnW, btnH, 'タイトルへ', '#475569')
   if (showAccessKeys) {
-    drawAccessKeyHint(ctx, 'P', resumeX + 8, btnY + 8)
-    drawAccessKeyHint(ctx, 'T', titleX + 8, btnY + 8)
+    drawAccessKeyHint(ctx, pauseAccessKey('resume'), resumeX + 8, btnY + 8)
+    drawAccessKeyHint(ctx, pauseAccessKey('title'),  titleX + 8, btnY + 8)
   }
 
   ctx.fillStyle = '#64748b'
