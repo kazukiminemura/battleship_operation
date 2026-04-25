@@ -67,6 +67,10 @@ export function renderProjectile(
     renderMarshmallow(ctx, sx, sy, hx, hy, thx, thy, angle, arcPx)
     return
   }
+  if (proj.weaponId?.includes('yukimura.yukidaru')) {
+    renderYukidaru(ctx, hx, hy, angle)
+    return
+  }
 
   PROJECTILE_RENDERERS[proj.weaponType](ctx, { sx, sy, hx, hy, thx, thy, angle, arcPx, progress: p })
 }
@@ -263,6 +267,54 @@ function renderMarshmallow(
   ctx.ellipse(-2.2, -1.1, 2.4, 0.8, 0, 0, Math.PI * 2)
   ctx.fillStyle = 'rgba(255,255,255,0.72)'
   ctx.fill()
+  ctx.restore()
+}
+
+function renderYukidaru(
+  ctx: CanvasRenderingContext2D,
+  hx: number,
+  hy: number,
+  angle: number,
+): void {
+  ctx.save()
+  ctx.translate(hx, hy)
+  ctx.rotate(angle)
+
+  // Water wake trail
+  ctx.strokeStyle = 'rgba(160,215,255,0.50)'
+  ctx.lineWidth = 3.5
+  ctx.beginPath()
+  ctx.moveTo(-5, 0)
+  ctx.lineTo(-14, 0)
+  ctx.stroke()
+
+  // Barrel body with wood grain gradient
+  const grad = ctx.createLinearGradient(-7.5, 0, 7.5, 0)
+  grad.addColorStop(0,   '#5C3317')
+  grad.addColorStop(0.3, '#8B5E3C')
+  grad.addColorStop(0.7, '#8B5E3C')
+  grad.addColorStop(1,   '#5C3317')
+  ctx.fillStyle = grad
+  ctx.beginPath()
+  ctx.ellipse(0, 0, 7.5, 5, 0, 0, Math.PI * 2)
+  ctx.fill()
+
+  // Metal hoops
+  ctx.strokeStyle = '#1e1828'
+  ctx.lineWidth = 1.5
+  for (const xPos of [-5, 0, 5] as const) {
+    const ry = Math.sqrt(Math.max(0, 25 - (xPos * 5 / 7.5) ** 2)) * 0.82
+    ctx.beginPath()
+    ctx.ellipse(xPos, 0, 1.4, ry, 0, 0, Math.PI * 2)
+    ctx.stroke()
+  }
+
+  // Snow mound on top
+  ctx.fillStyle = 'rgba(228,243,255,0.92)'
+  ctx.beginPath()
+  ctx.ellipse(-0.5, -2.1, 3.8, 1.5, -0.18, 0, Math.PI * 2)
+  ctx.fill()
+
   ctx.restore()
 }
 

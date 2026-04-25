@@ -90,6 +90,10 @@ export const WEAPON_CONFIGS: Record<WeaponType, WeaponConfig> = {
 }
 
 const WEAPON_CONFIG_OVERRIDES: Record<string, WeaponConfigOverride> = {
+  // ── 雪村 専用武器 ────────────────────────────────────────────────────
+  'weapon.torpedo.yukimura.yukidaru': {
+    speed: 5.5, damageMin: 75, damageMax: 115, lifetime: 180, cooldown: 55, hitRadius: 34, maxRange: 990, maxHeight: 0,
+  },
   // ── 駆逐艦 追加武器 ──────────────────────────────────────────────────
   'weapon.gun.127mm.ap': {
     speed: 23, damageMin: 45, damageMax: 72, lifetime: 68, cooldown: 18, hitRadius: 20, maxRange: 1380, maxHeight: 230,

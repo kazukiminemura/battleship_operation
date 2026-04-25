@@ -160,7 +160,7 @@
       { "id": "weapon.gun.yukimura.snowball.aft",        "name": "雪玉主砲(後)",     "type": "gun",       "ammo": 260 },
       { "id": "weapon.secondary.yukimura.marshmallow.port",      "name": "左舷マシュマロ砲", "type": "secondary", "ammo": 520 },
       { "id": "weapon.secondary.yukimura.marshmallow.starboard", "name": "右舷マシュマロ砲", "type": "secondary", "ammo": 520 },
-      { "id": "weapon.torpedo.610mm.bb",              "name": "赤緑重魚雷",     "type": "torpedo",   "ammo": 40 },
+      { "id": "weapon.torpedo.yukimura.yukidaru",      "name": "雪樽",           "type": "torpedo",   "ammo": 60 },
       { "id": "weapon.aa.ciws.bb",                    "name": "緑帽CIWS",       "type": "aa",        "ammo": 2600 },
       { "id": "weapon.missile.antiship.bb",           "name": "ホリデーミサイル", "type": "missile",   "ammo": 92 }
     ]

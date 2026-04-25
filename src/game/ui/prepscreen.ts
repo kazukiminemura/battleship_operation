@@ -84,6 +84,7 @@ const YUKIMURA_DEFAULT_WEAPONS: Record<string, ShopWeapon> = {
   s2: { id: 'weapon.gun.yukimura.snowball.aft', name: '雪玉主砲(後)', type: 'gun', ammo: 260, desc: '丸い雪玉を高弾道で撃ち出す', cost: 0, minStage: 1 },
   s3: { id: 'weapon.secondary.yukimura.marshmallow.port', name: '左舷マシュマロ砲', type: 'secondary', ammo: 520, desc: 'ふわっと白いマシュマロ弾を速射する', cost: 0, minStage: 1 },
   s4: { id: 'weapon.secondary.yukimura.marshmallow.starboard', name: '右舷マシュマロ砲', type: 'secondary', ammo: 520, desc: 'ふわっと白いマシュマロ弾を速射する', cost: 0, minStage: 1 },
+  s5: { id: 'weapon.torpedo.yukimura.yukidaru', name: '雪樽', type: 'torpedo', ammo: 60, desc: '雪を詰めた大樽を転がして放つ', cost: 0, minStage: 1 },
 }
 const LOCKED = '#090f0a'
 const SEL    = '#0a3018'
