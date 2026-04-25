@@ -18,6 +18,7 @@ import {
   hullDimensions,
   hullMaxHalfWidth,
   isInsideHullCell,
+  mountToCell,
   moveTargetState,
   occupiedCells,
   type GridCell,
@@ -30,6 +31,8 @@ export interface PrepResult {
   shipType: PlayerShipType
   loadout: WeaponTemplate[]
   armorBonus: number
+  slotCells?: Record<string, GridCell>
+  towerCell?: GridCell | null
 }
 
 type ScreenTab = 'hull' | 'armament'
@@ -47,6 +50,7 @@ type Region =
   | { tag: 'weapon-card'; weaponId: string;            x: number; y: number; w: number; h: number; accessKey?: string }
   | { tag: 'armor-up';                                  x: number; y: number; w: number; h: number; accessKey?: string }
   | { tag: 'armor-down';                                x: number; y: number; w: number; h: number; accessKey?: string }
+  | { tag: 'armor-bar';                                 x: number; y: number; w: number; h: number; accessKey?: string }
   | { tag: 'deploy';                                    x: number; y: number; w: number; h: number; accessKey?: string }
   | { tag: 'back';                                      x: number; y: number; w: number; h: number; accessKey?: string }
 
@@ -114,7 +118,7 @@ export class PrepScreen {
     this.onMoveRef = (e) => this.onMouseMove(e)
   }
 
-  attach(stage: number): void {
+  attach(stage: number, inheritedDesign: PrepResult | null = null): void {
     this.stage = stage
     this.tab = 'hull'
     this.selectedClass = 'destroyer'
@@ -126,6 +130,7 @@ export class PrepScreen {
     this.slotCells = new Map()
     this.towerCell = null
     this.armorBonus = 0
+    if (inheritedDesign) this.applyInheritedDesign(inheritedDesign)
     this.canvas.addEventListener('mousemove', this.onMoveRef)
   }
 
@@ -138,6 +143,13 @@ export class PrepScreen {
     this.lastAudioCue = null
     const r = this.hitRegion(e)
     if (!r) return null
+    if (r.tag === 'armor-bar') {
+      const rect = this.canvas.getBoundingClientRect()
+      const mx = e.clientX - rect.left
+      this.setArmorBonusFromBar(mx, r)
+      this.lastAudioCue = 'select'
+      return null
+    }
     return this.activateRegion(r)
   }
 
@@ -199,6 +211,7 @@ export class PrepScreen {
           this.selectedSlotId = null
           this.selectedTower = false
         }
+        this.tab = 'armament'
         this.lastAudioCue = 'select'
         break
       }
@@ -289,6 +302,10 @@ export class PrepScreen {
         this.lastAudioCue = 'select'
         break
 
+      case 'armor-bar':
+        this.lastAudioCue = 'select'
+        break
+
       case 'deploy':
         this.lastAudioCue = 'confirm'
         return this.buildResult()
@@ -338,7 +355,52 @@ export class PrepScreen {
       if (w) loadout.push({ id: w.id, name: w.name, type: w.type, ammo: w.ammo, mount: cellToMount(cell.c, cell.r, spec) })
     }
     if (loadout.length === 0) return null
-    return { templateId: hull.templateId, shipType: hull.shipType, loadout, armorBonus: this.armorBonus }
+    return {
+      templateId: hull.templateId,
+      shipType: hull.shipType,
+      loadout,
+      armorBonus: this.armorBonus,
+      slotCells: Object.fromEntries(this.slotCells),
+      towerCell: this.towerCell ? { ...this.towerCell } : null,
+    }
+  }
+
+  private applyInheritedDesign(design: PrepResult): void {
+    const hulls = getHullsByClass(design.shipType)
+    const hullIdx = hulls.findIndex(h => h.templateId === design.templateId && h.minStage <= this.stage)
+    const hull = hullIdx >= 0 ? hulls[hullIdx]! : null
+    if (!hull) return
+
+    this.selectedClass = design.shipType
+    this.selectedHullIdx = hullIdx
+    this.tab = 'armament'
+    this.armorBonus = Math.max(0, Math.min(ARMOR_BONUS_MAX, design.armorBonus))
+    this.slotWeapons = new Map()
+    this.slotCells = new Map()
+    this.towerCell = design.towerCell ? { ...design.towerCell } : null
+
+    const spec = gridSpec(hull)
+    for (let i = 0; i < hull.slots.length; i++) {
+      const slot = hull.slots[i]!
+      const weapon = design.loadout[i]
+      if (!weapon || !slot.compatibleTypes.includes(weapon.type)) continue
+      this.slotWeapons.set(slot.id, this.shopWeaponFromTemplate(weapon))
+      const savedCell = design.slotCells?.[slot.id]
+      if (savedCell) this.slotCells.set(slot.id, { ...savedCell })
+      else if (weapon.mount) this.slotCells.set(slot.id, mountToCell(weapon.mount, spec))
+    }
+  }
+
+  private shopWeaponFromTemplate(weapon: WeaponTemplate): ShopWeapon {
+    return WEAPON_SHOP.find(w => w.id === weapon.id) ?? {
+      id: weapon.id,
+      name: weapon.name ?? weapon.id,
+      type: weapon.type,
+      ammo: weapon.ammo,
+      desc: '',
+      cost: 0,
+      minStage: 1,
+    }
   }
 
   private defaultWeapon(hull: HullCatalogEntry, slot: HullSlot): ShopWeapon | null {
@@ -815,8 +877,24 @@ export class PrepScreen {
     ctx.fillText(`軽減${(mitigation * 100 | 0)}%`, ax + aw - 4, ay + 19)
 
     const bw = aw - 8
-    ctx.fillStyle = '#0a1810'; ctx.fillRect(ax, ay + 27, bw, 8)
-    ctx.fillStyle = '#3a7a4a'; ctx.fillRect(ax, ay + 27, bw * mitigation, 8)
+    const barY = ay + 27
+    const barH = 10
+    const maxTotalArmor = hull.armor + ARMOR_BONUS_MAX
+    const totalRatio = maxTotalArmor > 0 ? totalArmor / maxTotalArmor : 0
+    const baseRatio = maxTotalArmor > 0 ? hull.armor / maxTotalArmor : 0
+    const isBarHovered = this.hovered?.tag === 'armor-bar'
+
+    ctx.fillStyle = isBarHovered ? '#102414' : '#0a1810'
+    ctx.fillRect(ax, barY, bw, barH)
+    ctx.fillStyle = '#1f4a2a'
+    ctx.fillRect(ax, barY, bw * baseRatio, barH)
+    ctx.fillStyle = isBarHovered ? '#58b86a' : '#3a7a4a'
+    ctx.fillRect(ax, barY, bw * Math.min(1, totalRatio), barH)
+    ctx.strokeStyle = isBarHovered ? '#70c878' : '#245a2e'
+    ctx.strokeRect(ax, barY, bw, barH)
+    ctx.fillStyle = '#d6b86a'
+    ctx.fillRect(ax + bw * baseRatio - 1, barY - 2, 2, barH + 4)
+    this.addRegion({ tag: 'armor-bar', x: ax, y: barY - 6, w: bw, h: barH + 12 })
 
     const btnW = 26, btnH = 22, btnY = ay + 46
     const midX = ax + aw / 2
@@ -846,6 +924,12 @@ export class PrepScreen {
 
     if (canDown) this.addRegion({ tag: 'armor-down', x: downX, y: btnY, w: btnW, h: btnH })
     if (canUp)   this.addRegion({ tag: 'armor-up',   x: upX,   y: btnY, w: btnW, h: btnH })
+  }
+
+  private setArmorBonusFromBar(mx: number, r: Extract<Region, { tag: 'armor-bar' }>): void {
+    const ratio = Math.max(0, Math.min(1, (mx - r.x) / Math.max(1, r.w)))
+    const stepped = Math.round((ratio * ARMOR_BONUS_MAX) / ARMOR_BONUS_STEP) * ARMOR_BONUS_STEP
+    this.armorBonus = Math.max(0, Math.min(ARMOR_BONUS_MAX, stepped))
   }
 
   private visibleWeapons(hull: HullCatalogEntry): ShopWeapon[] {

@@ -9,8 +9,9 @@ import type { CombatState, ShipEntity, WeaponState } from './game/simulation/typ
 import { WORLD_SIZE } from './game/simulation/movement'
 import { SoundSystem } from './game/audio/sounds'
 import { NavigatorVoice } from './game/audio/navigator-voice'
+import { StageBriefingVoice } from './game/audio/stage-briefing-voice'
 import { StartScreen } from './game/ui/startscreen'
-import { PrepScreen, type PrepAudioCue } from './game/ui/prepscreen'
+import { PrepScreen, type PrepAudioCue, type PrepResult } from './game/ui/prepscreen'
 import { StageIntroScreen } from './game/ui/stageintroscreen'
 import { ResultsScreen } from './game/ui/resultsscreen'
 import type { WeaponTemplate } from './game/data/masterdata'
@@ -38,6 +39,7 @@ function main(): void {
   const results  = new ResultsScreen(canvas)
   const sound    = new SoundSystem()
   const navigator = new NavigatorVoice()
+  const briefingVoice = new StageBriefingVoice()
   const input    = new InputAdapter(canvas, renderer, {
     onWeaponSelected: (weaponMode) => {
       const weapon = selectedWeapon(state, weaponMode)
@@ -53,6 +55,7 @@ function main(): void {
   let selectedTemplateId: string | undefined = undefined
   let selectedLoadout: WeaponTemplate[] = getDefaultLoadout('destroyer')
   let selectedArmorBonus = 0
+  let selectedDesign: PrepResult | null = null
   let currentStage = 1
   let normalShip: PlayerShipType = selectedShip
   let normalStage = currentStage
@@ -79,6 +82,7 @@ function main(): void {
     input.setSuspended(false)
     mode = 'start'
     start.attach()
+    briefingVoice.stop()
     sound.setBgmEnabled(bgmEnabled, 'title')
     sound.reset()
   }
@@ -89,8 +93,9 @@ function main(): void {
     currentStage = stage
     start.detach()
     results.detach()
+    briefingVoice.stop()
     mode = 'prep'
-    prep.attach(stage)
+    prep.attach(stage, selectedDesign)
     sound.setBgmEnabled(bgmEnabled, 'prep')
   }
 
@@ -102,6 +107,7 @@ function main(): void {
     results.detach()
     mode = 'stage-intro'
     stageIntro.attach()
+    briefingVoice.play(stage)
     sound.setBgmEnabled(bgmEnabled, 'intro')
   }
 
@@ -116,6 +122,7 @@ function main(): void {
     navigator.reset()
     navigator.announceCombatStart()
     mode = 'combat'
+    briefingVoice.stop()
     stageIntro.detach()
   }
 
@@ -141,6 +148,7 @@ function main(): void {
     prep.detach()
     stageIntro.detach()
     results.detach()
+    briefingVoice.stop()
   }
 
   const toggleDebugMap = (): void => {
@@ -157,6 +165,7 @@ function main(): void {
     paused = false
     input.setSuspended(false)
     mode = 'results'
+    briefingVoice.stop()
     sound.reset()
     sound.setBgmEnabled(bgmEnabled, 'results')
     results.attach()
@@ -179,6 +188,14 @@ function main(): void {
     else if (cue === 'back') sound.playDesignBack()
     else if (cue === 'confirm') sound.playDesignConfirm()
     else if (cue === 'denied') sound.playDesignDenied()
+  }
+
+  const applyPrepResult = (result: PrepResult): void => {
+    selectedShip = result.shipType
+    selectedTemplateId = result.templateId
+    selectedLoadout = result.loadout
+    selectedArmorBonus = result.armorBonus
+    selectedDesign = result
   }
 
   const applyHudAction = (id: string | null): boolean => {
@@ -239,10 +256,7 @@ function main(): void {
         const cue = prep.consumeAudioCue()
         playPrepAudioCue(cue)
         if (result) {
-          selectedShip = result.shipType
-          selectedTemplateId = result.templateId
-          selectedLoadout = result.loadout
-          selectedArmorBonus = result.armorBonus
+          applyPrepResult(result)
           goToStageIntro(currentStage)
         }
         if (cue || result) {
@@ -313,10 +327,7 @@ function main(): void {
       if (result) {
         e.preventDefault()
         if (!e.repeat) {
-          selectedShip = result.shipType
-          selectedTemplateId = result.templateId
-          selectedLoadout = result.loadout
-          selectedArmorBonus = result.armorBonus
+          applyPrepResult(result)
           goToStageIntro(currentStage)
         }
         return
@@ -370,10 +381,7 @@ function main(): void {
       const result = prep.checkClick(e)
       playPrepAudioCue(prep.consumeAudioCue())
       if (result) {
-        selectedShip = result.shipType
-        selectedTemplateId = result.templateId
-        selectedLoadout = result.loadout
-        selectedArmorBonus = result.armorBonus
+        applyPrepResult(result)
         goToStageIntro(currentStage)
       }
       e.stopImmediatePropagation()

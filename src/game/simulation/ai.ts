@@ -1,10 +1,17 @@
-import type { CombatState, ShipEntity, BuildingEntity, Command, Vec3, MapObstacle } from './types'
+import type { CombatState, ShipEntity, BuildingEntity, Command, Vec3, MapObstacle, WeaponState, WeaponType } from './types'
 import type { SeededRandom } from './random'
 import { getWeaponConfig, WEAPON_CONFIGS } from './weapon-strategies'
 import { enemyCanDetectPlayer } from './detection'
 
 // AI keeps this margin inside weapon maxRange before firing
 const RANGE_MARGIN = 0.85
+const ENEMY_AIM_ERROR_BY_WEAPON: Record<WeaponType, number> = {
+  gun: 90,
+  secondary: 75,
+  torpedo: 80,
+  aa: 55,
+  missile: 130,
+}
 
 export function generateAiCommands(state: CombatState, rng: SeededRandom): Command[] {
   const commands: Command[] = []
@@ -50,10 +57,9 @@ export function generateAiCommands(state: CombatState, rng: SeededRandom): Comma
       } else {
         commands.push({ tick: state.tick, actorId: enemy.id, type: 'stop' })
         if (gun && gun.cooldownTick === 0 && gun.ammo > 0) {
-          const spread = rng.nextFloat(-30, 30)
           commands.push({
             tick: state.tick, actorId: enemy.id, type: 'fire.primary',
-            target: { x: player.pos.x + spread, y: player.pos.y + spread, z: 0 },
+            target: enemyAimTarget(enemy, player, gun, gunRange, dist, rng),
           })
         }
       }
@@ -78,13 +84,12 @@ export function generateAiCommands(state: CombatState, rng: SeededRandom): Comma
         if (weapon.type === 'torpedo') {
           commands.push({
             tick: state.tick, actorId: enemy.id, type: 'fire.slot', value: slot,
-            target: { x: player.pos.x, y: player.pos.y, z: 0 },
+            target: enemyAimTarget(enemy, player, weapon, range, dist, rng),
           })
         } else {
-          const spread = enemy.templateId === 'hull.enemy.boss.dreadnought' ? rng.nextFloat(-45, 45) : 0
           commands.push({
             tick: state.tick, actorId: enemy.id, type: 'fire.slot', value: slot,
-            target: { x: player.pos.x + spread, y: player.pos.y + spread, z: 0 },
+            target: enemyAimTarget(enemy, player, weapon, range, dist, rng),
           })
         }
       }
@@ -92,6 +97,32 @@ export function generateAiCommands(state: CombatState, rng: SeededRandom): Comma
   }
 
   return commands
+}
+
+function enemyAimTarget(
+  enemy: ShipEntity,
+  player: ShipEntity,
+  weapon: WeaponState,
+  effectiveRange: number,
+  dist: number,
+  rng: SeededRandom,
+): Vec3 {
+  const baseError = ENEMY_AIM_ERROR_BY_WEAPON[weapon.type]
+  const shipFactor = enemy.templateId === 'hull.enemy.boss.dreadnought'
+    ? 1.45
+    : enemy.templateId === 'hull.cruiser.basic'
+      ? 1.18
+      : 1.0
+  const distanceFactor = 0.55 + Math.min(1, dist / Math.max(1, effectiveRange)) * 0.75
+  const radius = baseError * shipFactor * distanceFactor
+  const angle = rng.nextFloat(0, Math.PI * 2)
+  const offset = radius * Math.sqrt(rng.nextFloat(0, 1))
+
+  return {
+    x: player.pos.x + Math.cos(angle) * offset,
+    y: player.pos.y + Math.sin(angle) * offset,
+    z: 0,
+  }
 }
 
 // Search waypoint: north-center of the map, toward typical enemy positions

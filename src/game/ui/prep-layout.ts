@@ -43,6 +43,15 @@ export function cellToMount(c: number, r: number, spec: GridSpec): { x: number; 
   }
 }
 
+export function mountToCell(mount: { x: number; y: number }, spec: GridSpec): GridCell {
+  const c = Math.round(cellCenter(spec.centerC) + mount.x * (spec.beamCells / 2) - 0.5)
+  const r = Math.round(spec.topR + ((mount.y + 1) / 2) * Math.max(1, spec.lengthCells - 1) - 0.5)
+  return {
+    c: Math.max(0, Math.min(spec.cols - 1, c)),
+    r: Math.max(0, Math.min(spec.rows - 1, r)),
+  }
+}
+
 export function cellCenter(index: number): number {
   return index + 0.5
 }

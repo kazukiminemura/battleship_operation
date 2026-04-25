@@ -199,7 +199,7 @@ export class ResultsScreen {
     const rows: [string, string, string][] = [
       ['撃破数',   `${m.enemiesDestroyed} 隻`,  '#22c55e'],
       ['作戦時間', duration,                      '#7dd3fc'],
-      ['被弾ダメージ', `${m.playerDamageTaken}`, '#f97316'],
+      ['被弾ダメージ', `${Math.round(m.playerDamageTaken)}`, '#f97316'],
       ['弾薬消費', `${m.playerAmmoSpent} 発`,    '#a78bfa'],
       ['総命中率', `${hitRate}%`,                '#38bdf8'],
     ]
@@ -264,7 +264,7 @@ export class ResultsScreen {
       const wid = weaponIds[i]!
       const shots  = m.shotCountByWeapon[wid] ?? 0
       const hits   = m.hitCountByWeapon[wid]  ?? 0
-      const damage = m.damageByWeapon[wid]     ?? 0
+      const damage = Math.round(m.damageByWeapon[wid] ?? 0)
       const label  = displayWeaponName(wid)
 
       const ry = y + h * 0.295 + i * rowH
