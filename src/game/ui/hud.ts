@@ -402,29 +402,56 @@ export class HUD {
     // land masses
     for (const land of state.mapObstacles) {
       if (!isInRadarRange(land.x, land.y, Math.max(land.rx, land.ry))) continue
-      const [lx, ly] = toRadar(land.x, land.y)
-      const rx = (land.rx / RADAR_WORLD_RANGE) * radarR
-      const ry = (land.ry / RADAR_WORLD_RANGE) * radarR
 
-      ctx.beginPath()
-      ctx.ellipse(lx, ly, rx * 1.18, ry * 1.18, 0, 0, Math.PI * 2)
-      ctx.strokeStyle = 'rgba(125,211,252,0.22)'
-      ctx.lineWidth = 2
-      ctx.stroke()
+      if (land.points && land.points.length >= 3) {
+        // Outer glow ring (scaled 8% out from center)
+        ctx.beginPath()
+        land.points.forEach((p, i) => {
+          const [sx, sy] = toRadar(land.x + (p.x - land.x) * 1.08, land.y + (p.y - land.y) * 1.08)
+          if (i === 0) ctx.moveTo(sx, sy); else ctx.lineTo(sx, sy)
+        })
+        ctx.closePath()
+        ctx.strokeStyle = 'rgba(125,211,252,0.22)'
+        ctx.lineWidth = 1.5
+        ctx.stroke()
 
-      ctx.beginPath()
-      ctx.ellipse(lx, ly, rx * 1.08, ry * 1.08, 0, 0, Math.PI * 2)
-      ctx.strokeStyle = 'rgba(186,230,253,0.18)'
-      ctx.lineWidth = 1
-      ctx.stroke()
+        // Filled polygon
+        ctx.beginPath()
+        land.points.forEach((p, i) => {
+          const [sx, sy] = toRadar(p.x, p.y)
+          if (i === 0) ctx.moveTo(sx, sy); else ctx.lineTo(sx, sy)
+        })
+        ctx.closePath()
+        ctx.fillStyle = 'rgba(132,204,22,0.20)'
+        ctx.fill()
+        ctx.strokeStyle = 'rgba(190,242,100,0.48)'
+        ctx.lineWidth = 0.8
+        ctx.stroke()
+      } else {
+        const [lx, ly] = toRadar(land.x, land.y)
+        const rx = (land.rx / RADAR_WORLD_RANGE) * radarR
+        const ry = (land.ry / RADAR_WORLD_RANGE) * radarR
 
-      ctx.beginPath()
-      ctx.ellipse(lx, ly, rx, ry, 0, 0, Math.PI * 2)
-      ctx.fillStyle = 'rgba(132,204,22,0.20)'
-      ctx.fill()
-      ctx.strokeStyle = 'rgba(190,242,100,0.48)'
-      ctx.lineWidth = 0.8
-      ctx.stroke()
+        ctx.beginPath()
+        ctx.ellipse(lx, ly, rx * 1.18, ry * 1.18, 0, 0, Math.PI * 2)
+        ctx.strokeStyle = 'rgba(125,211,252,0.22)'
+        ctx.lineWidth = 2
+        ctx.stroke()
+
+        ctx.beginPath()
+        ctx.ellipse(lx, ly, rx * 1.08, ry * 1.08, 0, 0, Math.PI * 2)
+        ctx.strokeStyle = 'rgba(186,230,253,0.18)'
+        ctx.lineWidth = 1
+        ctx.stroke()
+
+        ctx.beginPath()
+        ctx.ellipse(lx, ly, rx, ry, 0, 0, Math.PI * 2)
+        ctx.fillStyle = 'rgba(132,204,22,0.20)'
+        ctx.fill()
+        ctx.strokeStyle = 'rgba(190,242,100,0.48)'
+        ctx.lineWidth = 0.8
+        ctx.stroke()
+      }
     }
 
     // sweep rings
@@ -661,16 +688,30 @@ export class HUD {
 
     // islands
     for (const land of state.mapObstacles) {
-      const [lx, ly] = toMap(land.x, land.y)
-      const rx = land.rx * scale
-      const ry = land.ry * scale
-      ctx.beginPath()
-      ctx.ellipse(lx, ly, Math.max(rx, 1.5), Math.max(ry, 1.5), 0, 0, Math.PI * 2)
-      ctx.fillStyle = 'rgba(132,204,22,0.35)'
-      ctx.fill()
-      ctx.strokeStyle = 'rgba(190,242,100,0.55)'
-      ctx.lineWidth = 0.8
-      ctx.stroke()
+      if (land.points && land.points.length >= 3) {
+        ctx.beginPath()
+        land.points.forEach((p, i) => {
+          const [lx, ly] = toMap(p.x, p.y)
+          if (i === 0) ctx.moveTo(lx, ly); else ctx.lineTo(lx, ly)
+        })
+        ctx.closePath()
+        ctx.fillStyle = 'rgba(132,204,22,0.35)'
+        ctx.fill()
+        ctx.strokeStyle = 'rgba(190,242,100,0.55)'
+        ctx.lineWidth = 0.8
+        ctx.stroke()
+      } else {
+        const [lx, ly] = toMap(land.x, land.y)
+        const rx = land.rx * scale
+        const ry = land.ry * scale
+        ctx.beginPath()
+        ctx.ellipse(lx, ly, Math.max(rx, 1.5), Math.max(ry, 1.5), 0, 0, Math.PI * 2)
+        ctx.fillStyle = 'rgba(132,204,22,0.35)'
+        ctx.fill()
+        ctx.strokeStyle = 'rgba(190,242,100,0.55)'
+        ctx.lineWidth = 0.8
+        ctx.stroke()
+      }
     }
 
     // player blip

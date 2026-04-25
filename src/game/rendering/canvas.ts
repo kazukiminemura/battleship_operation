@@ -606,6 +606,14 @@ export class CanvasRenderer {
   }
 
   private renderIsland(obstacle: MapObstacle): void {
+    if (obstacle.points && obstacle.points.length >= 3) {
+      this.renderIslandPoly(obstacle)
+    } else {
+      this.renderIslandEllipse(obstacle)
+    }
+  }
+
+  private renderIslandEllipse(obstacle: MapObstacle): void {
     const { ctx } = this
     const steps = 72
     const shoreline: [number, number][] = []
@@ -653,7 +661,6 @@ export class CanvasRenderer {
     ctx.fillStyle = grassGrad
     ctx.fill()
 
-    // Small elevation patches make the island read as land rather than a flat decal.
     for (let i = 0; i < 11; i++) {
       const px = obstacle.x + signedNoise(obstacle.x, obstacle.y, i + 100) * obstacle.rx * 0.42
       const py = obstacle.y + signedNoise(obstacle.y, obstacle.x, i + 130) * obstacle.ry * 0.34
@@ -668,11 +675,81 @@ export class CanvasRenderer {
       ctx.restore()
     }
 
-    // Thin surf strokes around the coast.
     for (let i = 0; i < steps; i += 6) {
       const a = (i / steps) * Math.PI * 2
       const [x0, y0] = this.w2s(obstacle.x + Math.cos(a) * obstacle.rx * 1.03, obstacle.y + Math.sin(a) * obstacle.ry * 1.03)
       const [x1, y1] = this.w2s(obstacle.x + Math.cos(a + 0.10) * obstacle.rx * 1.03, obstacle.y + Math.sin(a + 0.10) * obstacle.ry * 1.03)
+      ctx.beginPath()
+      ctx.moveTo(x0, y0)
+      ctx.lineTo(x1, y1)
+      ctx.strokeStyle = 'rgba(220,245,255,0.26)'
+      ctx.lineWidth = 0.8
+      ctx.stroke()
+    }
+  }
+
+  private renderIslandPoly(obstacle: MapObstacle): void {
+    const { ctx } = this
+    const pts = obstacle.points!
+    const cx = obstacle.x
+    const cy = obstacle.y
+
+    // Build screen-space point array with optional inward scaling and a small noise perturbation.
+    const screenLayer = (factor: number): [number, number][] =>
+      pts.map((p, i) => {
+        const n = signedNoise(p.x * 0.0015, p.y * 0.0015, i + 37) * 0.04
+        return this.w2s(
+          cx + (p.x - cx) * factor * (1 + n),
+          cy + (p.y - cy) * factor * (1 + n),
+        ) as [number, number]
+      })
+
+    const shoreline = screenLayer(1.0)
+    const beach     = screenLayer(0.91)
+    const grass     = screenLayer(0.74)
+
+    drawSmoothClosedPath(ctx, shoreline)
+    ctx.fillStyle = 'rgba(212,176,92,0.52)'
+    ctx.fill()
+    ctx.strokeStyle = 'rgba(225,240,220,0.34)'
+    ctx.lineWidth = 1.2
+    ctx.stroke()
+
+    drawSmoothClosedPath(ctx, beach)
+    const beachGrad = ctx.createLinearGradient(0, this.canvas.height * 0.35, 0, this.canvas.height * 0.72)
+    beachGrad.addColorStop(0, '#d8bd73')
+    beachGrad.addColorStop(1, '#8c7441')
+    ctx.fillStyle = beachGrad
+    ctx.fill()
+
+    drawSmoothClosedPath(ctx, grass)
+    const grassGrad = ctx.createLinearGradient(0, this.canvas.height * 0.30, 0, this.canvas.height * 0.78)
+    grassGrad.addColorStop(0, '#597f3d')
+    grassGrad.addColorStop(0.55, '#335f36')
+    grassGrad.addColorStop(1, '#1d3f2e')
+    ctx.fillStyle = grassGrad
+    ctx.fill()
+
+    for (let i = 0; i < 11; i++) {
+      const px = cx + signedNoise(cx, cy, i + 100) * obstacle.rx * 0.42
+      const py = cy + signedNoise(cy, cx, i + 130) * obstacle.ry * 0.34
+      const [sx, sy] = this.w2s(px, py)
+      ctx.save()
+      ctx.translate(sx, sy)
+      ctx.scale(1.5, 0.62)
+      ctx.beginPath()
+      ctx.arc(0, 0, (45 + Math.abs(signedNoise(px, py, i)) * 45) * this.iso.scale, 0, Math.PI * 2)
+      ctx.fillStyle = i % 3 === 0 ? 'rgba(104,132,74,0.28)' : 'rgba(38,77,44,0.30)'
+      ctx.fill()
+      ctx.restore()
+    }
+
+    // Surf strokes along each polygon edge.
+    for (let i = 0; i < pts.length; i++) {
+      const p0 = pts[i]!
+      const p1 = pts[(i + 1) % pts.length]!
+      const [x0, y0] = this.w2s(cx + (p0.x - cx) * 1.03, cy + (p0.y - cy) * 1.03)
+      const [x1, y1] = this.w2s(cx + (p1.x - cx) * 1.03, cy + (p1.y - cy) * 1.03)
       ctx.beginPath()
       ctx.moveTo(x0, y0)
       ctx.lineTo(x1, y1)
@@ -1853,6 +1930,26 @@ function drawClosedPath(ctx: CanvasRenderingContext2D, points: [number, number][
   ctx.beginPath()
   ctx.moveTo(points[0]![0], points[0]![1])
   for (const [x, y] of points.slice(1)) ctx.lineTo(x, y)
+  ctx.closePath()
+}
+
+// Catmull-Rom spline through all points (closed loop) — smoother coastlines.
+function drawSmoothClosedPath(ctx: CanvasRenderingContext2D, points: [number, number][]): void {
+  if (points.length < 3) { drawClosedPath(ctx, points); return }
+  const n = points.length
+  ctx.beginPath()
+  ctx.moveTo(points[0]![0], points[0]![1])
+  for (let i = 0; i < n; i++) {
+    const p0 = points[(i - 1 + n) % n]!
+    const p1 = points[i]!
+    const p2 = points[(i + 1) % n]!
+    const p3 = points[(i + 2) % n]!
+    const cp1x = p1[0] + (p2[0] - p0[0]) / 6
+    const cp1y = p1[1] + (p2[1] - p0[1]) / 6
+    const cp2x = p2[0] - (p3[0] - p1[0]) / 6
+    const cp2y = p2[1] - (p3[1] - p1[1]) / 6
+    ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2[0], p2[1])
+  }
   ctx.closePath()
 }
 

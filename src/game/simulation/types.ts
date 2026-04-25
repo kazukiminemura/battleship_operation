@@ -8,6 +8,7 @@ export interface MapObstacle {
   y: number
   rx: number
   ry: number
+  points?: { x: number; y: number }[]  // polygon coastline for rendering (collision still uses rx/ry ellipse)
 }
 
 export type WeaponType = 'gun' | 'secondary' | 'torpedo' | 'aa' | 'missile'
