@@ -73,7 +73,7 @@ export class HUD {
     this.renderTopBar(state, player, weaponMode, bgmEnabled, showAccessKeys, autoPilot)
     this.renderRadar(state, player, worldSize)
     this.renderGlobalMap(state, player, worldSize)
-    this.renderBottomBar()
+    this.renderBottomBar(player)
     if (subtitle) this.renderSubtitle(subtitle)
   }
 
@@ -143,7 +143,6 @@ export class HUD {
     // speed level + knots
     this.renderSpeedIndicator(player, pad, 86)
     this.renderHullSectionStatus(player, pad, 111)
-
     // weapon slots
     const slotGap = 5
     const allBtnW = 80
@@ -285,6 +284,59 @@ export class HUD {
     ctx.moveTo(0, barH + 0.5)
     ctx.lineTo(canvas.width, barH + 0.5)
     ctx.stroke()
+  }
+
+  private renderBearingTape(player: ShipEntity, x: number, y: number): void {
+    const { ctx } = this
+    const w = 220
+    const h = 38
+    const heading = ((player.angle * 180 / Math.PI) + 360) % 360
+    const center = x + w / 2
+
+    ctx.save()
+    ctx.fillStyle = 'rgba(1,5,10,0.86)'
+    ctx.strokeStyle = 'rgba(71,85,105,0.90)'
+    ctx.lineWidth = 1.2
+    roundRect(ctx, x, y, w, h, 4)
+    ctx.fill()
+    ctx.stroke()
+
+    ctx.beginPath()
+    ctx.rect(x + 7, y + 5, w - 14, h - 10)
+    ctx.clip()
+    ctx.strokeStyle = 'rgba(148,163,184,0.42)'
+    ctx.lineWidth = 1
+    for (let offset = -90; offset <= 90; offset += 15) {
+      const px = center + offset * 1.05
+      const major = offset % 45 === 0
+      ctx.beginPath()
+      ctx.moveTo(px, y + (major ? 8 : 13))
+      ctx.lineTo(px, y + h - 8)
+      ctx.stroke()
+      if (major) {
+        const value = (heading + offset + 360) % 360
+        ctx.font = 'bold 9px monospace'
+        ctx.fillStyle = 'rgba(203,213,225,0.78)'
+        ctx.textAlign = 'center'
+        ctx.fillText(`${Math.round(value).toString().padStart(3, '0')}`, px, y + 15)
+      }
+    }
+    ctx.restore()
+
+    ctx.save()
+    ctx.fillStyle = '#fbbf24'
+    ctx.beginPath()
+    ctx.moveTo(center, y + 4)
+    ctx.lineTo(center - 5, y + 13)
+    ctx.lineTo(center + 5, y + 13)
+    ctx.closePath()
+    ctx.fill()
+    ctx.font = 'bold 12px monospace'
+    ctx.fillStyle = '#e2e8f0'
+    ctx.textAlign = 'center'
+    ctx.fillText(`HDG ${Math.round(heading).toString().padStart(3, '0')}`, center, y + h - 8)
+    ctx.restore()
+    ctx.textAlign = 'left'
   }
 
   private renderHullSectionStatus(player: ShipEntity, x: number, y: number): void {
@@ -739,14 +791,14 @@ export class HUD {
     ctx.textAlign = 'left'
   }
 
-  private renderBottomBar(): void {
+  private renderBottomBar(player: ShipEntity): void {
     const { ctx, canvas } = this
     const barH = 40
     const y = canvas.height - barH
 
-    ctx.fillStyle = '#020812'
+    ctx.fillStyle = '#010409'
     ctx.fillRect(0, y, canvas.width, barH)
-    ctx.strokeStyle = '#12395a'
+    ctx.strokeStyle = '#172033'
     ctx.lineWidth = 1.5
     ctx.beginPath()
     ctx.moveTo(0, y + 0.5)
@@ -754,43 +806,51 @@ export class HUD {
     ctx.stroke()
 
     const items: Array<[string, string]> = [
-      ['↑ / W', '増速'],
-      ['↓ / S', '減速'],
-      ['← → / A E', '旋回'],
-      ['Click', '射撃'],
-      ['1-8', '兵装選択'],
-      ['P / Esc', 'ポーズ'],
-      ['D', 'デバッグ'],
-      ['R', 'タイトル'],
+      ['ENG+', '↑ / W'],
+      ['ENG-', '↓ / S'],
+      ['RUDDER', '← → / A E'],
+      ['FIRE', 'Click'],
+      ['WEAPON', '1-8'],
+      ['PAUSE', 'P / Esc'],
+      ['SIM', 'D'],
+      ['RTB', 'R'],
     ]
 
     let x = 14
     const cy = y + 24
     ctx.textBaseline = 'middle'
-    for (const [key, label] of items) {
-      ctx.font = 'bold 13px monospace'
-      const keyW = ctx.measureText(key).width + 14
-      const labelW = ctx.measureText(label).width + 12
+    ctx.font = 'bold 10px monospace'
+    ctx.fillStyle = '#64748b'
+    ctx.fillText('COMMAND', x, y + 10)
+    x += 74
 
-      ctx.fillStyle = '#0b2742'
-      roundRect(ctx, x, y + 8, keyW, 24, 4)
+    for (const [label, key] of items) {
+      ctx.font = 'bold 13px monospace'
+      const keyW = Math.max(54, ctx.measureText(key).width + 14)
+      const labelW = Math.max(44, ctx.measureText(label).width + 10)
+
+      ctx.fillStyle = '#07111d'
+      roundRect(ctx, x, y + 8, keyW, 24, 3)
       ctx.fill()
-      ctx.strokeStyle = '#25638c'
+      ctx.strokeStyle = '#334155'
       ctx.lineWidth = 1
-      roundRect(ctx, x, y + 8, keyW, 24, 4)
+      roundRect(ctx, x, y + 8, keyW, 24, 3)
       ctx.stroke()
 
-      ctx.fillStyle = '#93c5fd'
+      ctx.fillStyle = '#f8fafc'
       ctx.textAlign = 'center'
       ctx.fillText(key, x + keyW / 2, cy)
 
-      ctx.fillStyle = '#cbd5e1'
+      ctx.fillStyle = '#94a3b8'
       ctx.textAlign = 'left'
-      ctx.font = '13px sans-serif'
+      ctx.font = 'bold 10px monospace'
       ctx.fillText(label, x + keyW + 7, cy)
 
-      x += keyW + labelW + 18
-      if (x > canvas.width - 140) break
+      x += keyW + labelW + 15
+      if (x > canvas.width - 270) break
+    }
+    if (canvas.width >= 620) {
+      this.renderBearingTape(player, canvas.width - 236, y + 1)
     }
     ctx.textBaseline = 'alphabetic'
     ctx.textAlign = 'left'

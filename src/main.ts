@@ -48,6 +48,18 @@ function main(): void {
     onSpeedChanged: (direction) => {
       if (mode === 'combat') sound.playSpeedChange(direction)
     },
+    onZoomIn: () => {
+      if (mode === 'combat') {
+        const currentZoom = renderer.getZoom()
+        renderer.setZoom(currentZoom + 0.1)
+      }
+    },
+    onZoomOut: () => {
+      if (mode === 'combat') {
+        const currentZoom = renderer.getZoom()
+        renderer.setZoom(currentZoom - 0.1)
+      }
+    },
   })
   let rng = createRngStreams(BASE_SEED)
 

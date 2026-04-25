@@ -5,6 +5,8 @@ import type { CanvasRenderer } from '../rendering/canvas'
 export interface InputFeedback {
   onWeaponSelected?: (weaponMode: WeaponMode) => void
   onSpeedChanged?: (direction: 'up' | 'down') => void
+  onZoomIn?: () => void
+  onZoomOut?: () => void
 }
 
 export class InputAdapter {
@@ -62,6 +64,12 @@ export class InputAdapter {
         } else if (e.code === 'ArrowDown' || e.code === 'KeyS') {
           this.commands.push({ tick: 0, actorId: 'ship.player', type: 'speed.down' })
           this.feedback.onSpeedChanged?.('down')
+        } else if (e.code === 'Equal' || e.code === 'NumpadAdd') {
+          // Zoom in: + key or numpad +
+          this.feedback.onZoomIn?.()
+        } else if (e.code === 'Minus' || e.code === 'NumpadSubtract') {
+          // Zoom out: - key or numpad -
+          this.feedback.onZoomOut?.()
         }
       }
     })

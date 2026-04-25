@@ -4,6 +4,7 @@ import { getWeaponConfig } from '../simulation/weapon-strategies'
 import { renderShipExplosions } from './effects-renderer'
 import { renderProjectile as renderProjectileEntity } from './projectile-renderer'
 import { SHIP_DIMS, SHIP_SHAPES, type ShipShapeClass } from './ship-rendering-data'
+import { ThreeBattlefieldRenderer } from './three-battlefield-renderer'
 import { ShipWakeRenderer } from './wake-renderer'
 
 // Isometric projection parameters
@@ -15,6 +16,7 @@ interface IsoParams {
 
 const HUD_TOP    = 134
 const HUD_BOTTOM = 32
+export type WeatherMode = 'clear' | 'storm'
 
 export class CanvasRenderer {
   private ctx: CanvasRenderingContext2D
@@ -22,15 +24,19 @@ export class CanvasRenderer {
   private iso: IsoParams = { scale: 0.08, ox: 0, oy: 0 }
   private camX = 5000
   private camY = 5000
+  private zoomLevel = 1.0  // ズーム倍率 (1.0 = デフォルト)
+  private tiltAngle = 0.6  // カメラ틸ト角度 (ラジアン) - 斜め上から見下ろす角度
   // イベントはシミュレーション毎ティック消去されるためレンダラー側で蓄積
   private effectLog: CombatEvent[] = []
   private effectKeys = new Set<string>()
   private shipWakeRenderer = new ShipWakeRenderer()
+  private threeRenderer: ThreeBattlefieldRenderer
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas
     const ctx = canvas.getContext('2d')
     if (!ctx) throw new Error('Could not get 2D context')
     this.ctx = ctx
+    this.threeRenderer = new ThreeBattlefieldRenderer(canvas)
     this.resize()
     window.addEventListener('resize', () => this.resize())
   }
@@ -40,9 +46,27 @@ export class CanvasRenderer {
     this.camY = y
   }
 
+  setZoom(level: number): void {
+    // ズーム範囲: 0.5 (拡大) 〜 2.0 (縮小)
+    this.zoomLevel = Math.max(0.5, Math.min(2.0, level))
+  }
+
+  getZoom(): number {
+    return this.zoomLevel
+  }
+
+  setTilt(angle: number): void {
+    this.tiltAngle = Math.max(0.3, Math.min(1.2, angle))
+  }
+
+  getTilt(): number {
+    return this.tiltAngle
+  }
+
   private resize(): void {
     this.canvas.width = window.innerWidth
     this.canvas.height = window.innerHeight
+    this.threeRenderer.resize(this.canvas.width, this.canvas.height)
     this.recalcIso()
   }
 
@@ -50,7 +74,9 @@ export class CanvasRenderer {
     const W = this.canvas.width
     const contentH = this.canvas.height - HUD_TOP - HUD_BOTTOM
     // Tactical zoom: keep ships small and show a wider battle area.
-    const scale = Math.min(W / 6200, contentH / 3500)
+    const baseScale = Math.min(W / 6200, contentH / 3500)
+    // Apply zoom level (zoomLevel > 1 = zoom in, zoomLevel < 1 = zoom out)
+    const scale = baseScale * this.zoomLevel
     this.iso = {
       scale,
       ox: W / 2,
@@ -58,25 +84,28 @@ export class CanvasRenderer {
     }
   }
 
-  // World → screen (camera-relative isometric)
+  // World → screen (camera-relative isometric with tilt for 3D perspective)
   w2s(wx: number, wy: number): [number, number] {
     const { scale, ox, oy } = this.iso
     const rx = wx - this.camX
     const ry = wy - this.camY
+    // Apply tilt angle to create more 3D-like perspective from above
+    const tiltFactor = Math.sin(this.tiltAngle)
     return [
       ox + (rx - ry) * scale,
-      oy + (rx + ry) * scale * 0.5,
+      oy + (rx + ry) * scale * tiltFactor,
     ]
   }
 
-  // Screen → world (inverse isometric)
+  // Screen → world (inverse isometric with tilt)
   s2w(sx: number, sy: number): [number, number] {
     const { scale, ox, oy } = this.iso
+    const tiltFactor = Math.sin(this.tiltAngle)
     const dx = sx - ox
     const dy = sy - oy
     return [
-      (dx / scale + dy / (scale * 0.5)) / 2 + this.camX,
-      (dy / (scale * 0.5) - dx / scale) / 2 + this.camY,
+      (dx / scale + dy / (scale * tiltFactor)) / 2 + this.camX,
+      (dy / (scale * tiltFactor) - dx / scale) / 2 + this.camY,
     ]
   }
 
@@ -97,16 +126,7 @@ export class CanvasRenderer {
     this.effectLog = this.effectLog.filter(ev => state.tick - ev.tick < MAX_EFFECT_AGE)
     this.effectKeys = new Set(this.effectLog.map(combatEventEffectKey))
 
-    this.renderOcean()
-    this.renderGrid()
-    this.renderIslands(state.mapObstacles)
-
-    // Range ellipse for selected weapon
-    if (selectedWeapon) {
-      const player = state.entities.get('ship.player') as ShipEntity | undefined
-      if (player && !player.destroyed) this.renderRangeEllipse(player, selectedWeapon)
-    }
-
+    const weather = battlefieldWeather(state)
     const player = state.entities.get('ship.player') as ShipEntity | undefined
     const canSeePosition = (pos: Vec3 | undefined): boolean => (
       !pos || !player || player.destroyed || distanceSq(pos, player.pos) <= player.detectionRange * player.detectionRange
@@ -139,15 +159,26 @@ export class CanvasRenderer {
       .filter(e => e.kind === 'building' && canSeeEntity(e, state, canSeePosition)) as BuildingEntity[])
       .sort((a, b) => a.pos.y - b.pos.y)
 
+    this.threeRenderer.render(state, ships, weather, this.iso, this.w2s.bind(this))
+    this.renderGrid()
+    this.renderIslands(state.mapObstacles)
+
+    // Range ellipse for selected weapon
+    if (selectedWeapon) {
+      const player = state.entities.get('ship.player') as ShipEntity | undefined
+      if (player && !player.destroyed) this.renderRangeEllipse(player, selectedWeapon)
+    }
+
     this.renderWaterSplashes(visibleEffects, state.tick, state.mapObstacles)
     for (const b of buildings)   this.renderBuilding(b)
     for (const p of projectiles) this.renderProjectile(p)
     this.renderMuzzleBursts(visibleEffects, state.tick)
     this.shipWakeRenderer.render(this.ctx, this.iso, this.w2s.bind(this), ships, state.tick)
-    for (const s of ships)       this.renderShip(s, state.tick)
+    this.renderShipFires(ships, state.tick)
+    this.renderShipStatusOverlays(ships)
     this.renderLandDust(visibleEffects, state.tick, state.entities, state.mapObstacles)
     renderShipExplosions(this.ctx, this.iso, this.w2s.bind(this), visibleEffects, state.tick, state.entities)
-    this.renderTacticalAtmosphere()
+    this.renderTacticalAtmosphere(weather)
 
     // Fog of war + detection boundary
     this.renderDetectionFog(state)
@@ -531,11 +562,12 @@ export class CanvasRenderer {
 
   // ── ocean ──────────────────────────────────────────────────────────────────
 
-  private renderOcean(): void {
+  private renderOcean(tick: number, weather: WeatherMode): void {
     const { ctx } = this
-    // Full canvas background, styled like a dim tactical sea chart.
-    ctx.fillStyle = '#04111f'
+    ctx.fillStyle = weather === 'storm' ? '#05090d' : '#a8daf2'
     ctx.fillRect(0, 0, this.canvas.width, this.canvas.height)
+    if (weather === 'storm') this.renderCloudDeck(tick)
+    else this.renderClearSky(tick)
 
     // World diamond fill
     const corners = [
@@ -553,17 +585,140 @@ export class CanvasRenderer {
     const [cx0, cy0] = corners[0]!
     const [cx2, cy2] = corners[2]!
     const grad = ctx.createLinearGradient(cx0, cy0, cx2, cy2)
-    grad.addColorStop(0, '#0d4f8f')
-    grad.addColorStop(0.42, '#0a3669')
-    grad.addColorStop(1, '#061d3c')
+    if (weather === 'storm') {
+      grad.addColorStop(0, '#0a2b44')
+      grad.addColorStop(0.42, '#071d33')
+      grad.addColorStop(1, '#03111f')
+    } else {
+      grad.addColorStop(0, '#2388b6')
+      grad.addColorStop(0.45, '#176c9a')
+      grad.addColorStop(1, '#0f4e7d')
+    }
     ctx.fillStyle = grad
     ctx.fill()
 
-    ctx.strokeStyle = 'rgba(102,194,255,0.24)'
+    ctx.strokeStyle = weather === 'storm' ? 'rgba(130,185,205,0.18)' : 'rgba(218,246,255,0.35)'
     ctx.lineWidth = 1.4
     ctx.stroke()
 
-    this.renderSurfaceGrain()
+    this.renderWaveField(tick, weather)
+    this.renderSurfaceGrain(weather)
+  }
+
+  private renderClearSky(tick: number): void {
+    const { ctx, canvas } = this
+    const battleTop = HUD_TOP
+    const battleH = canvas.height - HUD_TOP - HUD_BOTTOM
+    const skyGrad = ctx.createLinearGradient(0, battleTop, 0, battleTop + battleH * 0.45)
+    skyGrad.addColorStop(0, 'rgba(157,215,242,0.88)')
+    skyGrad.addColorStop(0.52, 'rgba(106,183,224,0.42)')
+    skyGrad.addColorStop(1, 'rgba(78,157,204,0)')
+    ctx.fillStyle = skyGrad
+    ctx.fillRect(0, battleTop, canvas.width, battleH * 0.50)
+
+    ctx.save()
+    ctx.globalCompositeOperation = 'screen'
+    const sunX = canvas.width * 0.18 + Math.sin(tick * 0.003) * 12
+    const sunY = battleTop + battleH * 0.11
+    const sunR = Math.max(canvas.width, canvas.height) * 0.34
+    const sun = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, sunR)
+    sun.addColorStop(0, 'rgba(255,244,184,0.34)')
+    sun.addColorStop(0.25, 'rgba(255,235,153,0.16)')
+    sun.addColorStop(1, 'rgba(255,245,190,0)')
+    ctx.fillStyle = sun
+    ctx.fillRect(0, battleTop, canvas.width, battleH * 0.62)
+
+    for (let i = 0; i < 9; i++) {
+      const x = ((signedNoise(i * 9.7, this.camX * 0.0004 + tick * 0.001, 3200) * 0.5 + 0.5) * canvas.width * 1.12) - canvas.width * 0.06
+      const y = battleTop + battleH * (0.08 + Math.abs(signedNoise(i, this.camY * 0.0006, 3210)) * 0.18)
+      const w = canvas.width * (0.10 + Math.abs(signedNoise(i, tick * 0.001, 3220)) * 0.10)
+      const h = battleH * (0.025 + Math.abs(signedNoise(i, this.camX * 0.001, 3230)) * 0.025)
+      const cloud = ctx.createRadialGradient(x, y, 0, x, y, Math.max(w, h))
+      cloud.addColorStop(0, 'rgba(255,255,255,0.16)')
+      cloud.addColorStop(0.62, 'rgba(242,250,255,0.08)')
+      cloud.addColorStop(1, 'rgba(255,255,255,0)')
+      ctx.save()
+      ctx.translate(x, y)
+      ctx.scale(1, h / w)
+      ctx.beginPath()
+      ctx.arc(0, 0, w, 0, Math.PI * 2)
+      ctx.fillStyle = cloud
+      ctx.fill()
+      ctx.restore()
+    }
+    ctx.restore()
+  }
+
+  private renderCloudDeck(tick: number): void {
+    const { ctx, canvas } = this
+    const battleTop = HUD_TOP
+    const battleH = canvas.height - HUD_TOP - HUD_BOTTOM
+    const skyGrad = ctx.createLinearGradient(0, battleTop, 0, battleTop + battleH * 0.45)
+    skyGrad.addColorStop(0, 'rgba(17,24,32,0.92)')
+    skyGrad.addColorStop(0.48, 'rgba(31,39,47,0.54)')
+    skyGrad.addColorStop(1, 'rgba(10,16,24,0)')
+    ctx.fillStyle = skyGrad
+    ctx.fillRect(0, battleTop, canvas.width, battleH * 0.52)
+
+    ctx.save()
+    ctx.globalCompositeOperation = 'screen'
+    for (let i = 0; i < 18; i++) {
+      const x = ((signedNoise(i * 13.1, this.camX * 0.0007 + tick * 0.002, 2200) * 0.5 + 0.5) * canvas.width * 1.25) - canvas.width * 0.12
+      const y = battleTop + (signedNoise(i * 7.3, this.camY * 0.0009, 2210) * 0.5 + 0.5) * battleH * 0.24
+      const w = canvas.width * (0.16 + Math.abs(signedNoise(i, tick * 0.001, 2220)) * 0.18)
+      const h = battleH * (0.045 + Math.abs(signedNoise(i, this.camX * 0.001, 2230)) * 0.06)
+      const cloud = ctx.createRadialGradient(x, y, 0, x, y, Math.max(w, h))
+      cloud.addColorStop(0, 'rgba(118,132,142,0.11)')
+      cloud.addColorStop(0.55, 'rgba(76,88,99,0.07)')
+      cloud.addColorStop(1, 'rgba(32,38,46,0)')
+      ctx.save()
+      ctx.translate(x, y)
+      ctx.scale(1, h / w)
+      ctx.beginPath()
+      ctx.arc(0, 0, w, 0, Math.PI * 2)
+      ctx.fillStyle = cloud
+      ctx.fill()
+      ctx.restore()
+    }
+    ctx.restore()
+  }
+
+  private renderWaveField(tick: number, weather: WeatherMode): void {
+    const { ctx, canvas } = this
+    const battleTop = HUD_TOP
+    const battleBottom = canvas.height - HUD_BOTTOM
+    const waveCount = Math.round((canvas.width * (battleBottom - battleTop)) / 14500)
+
+    ctx.save()
+    ctx.lineCap = 'round'
+    for (let i = 0; i < waveCount; i++) {
+      const nx = signedNoise(this.camX * 0.002 + tick * 0.018, i * 3.17, 1800)
+      const ny = signedNoise(this.camY * 0.002 - tick * 0.014, i * 4.11, 1810)
+      const x = (nx * 0.5 + 0.5) * canvas.width
+      const y = battleTop + (ny * 0.5 + 0.5) * (battleBottom - battleTop)
+      const len = 16 + Math.abs(signedNoise(i, this.camX * 0.003, 1820)) * 44
+      const tilt = -0.28 + signedNoise(i, this.camY * 0.003, 1830) * 0.20
+      const alphaBase = weather === 'storm' ? 0.05 : 0.08
+      const alphaRange = weather === 'storm' ? 0.12 : 0.16
+      const alpha = alphaBase + Math.abs(signedNoise(i, tick * 0.01, 1840)) * alphaRange
+
+      ctx.beginPath()
+      ctx.moveTo(x - len * 0.5, y - tilt * len * 0.5)
+      ctx.quadraticCurveTo(x, y - 2.5, x + len * 0.5, y + tilt * len * 0.5)
+      ctx.strokeStyle = i % 5 === 0
+        ? `rgba(244,253,255,${alpha * 1.45})`
+        : weather === 'storm' ? `rgba(132,183,204,${alpha})` : `rgba(178,232,246,${alpha})`
+      ctx.lineWidth = i % 5 === 0 ? 1.2 : 0.7
+      ctx.stroke()
+    }
+
+    ctx.globalCompositeOperation = 'multiply'
+    for (let y = battleTop; y < battleBottom; y += 18) {
+      const a = (weather === 'storm' ? 0.035 : 0.018) + Math.sin(y * 0.05 + tick * 0.025) * 0.010
+      ctx.fillStyle = `rgba(1,8,14,${a})`
+      ctx.fillRect(0, y, canvas.width, 8)
+    }
+    ctx.restore()
   }
 
   private renderGrid(): void {
@@ -581,7 +736,7 @@ export class CanvasRenderer {
     }
   }
 
-  private renderSurfaceGrain(): void {
+  private renderSurfaceGrain(weather: WeatherMode): void {
     const { ctx } = this
     const count = Math.round((this.canvas.width * this.canvas.height) / 5200)
 
@@ -592,8 +747,8 @@ export class CanvasRenderer {
       const ny = signedNoise(this.camY * 0.011, this.camX * 0.019, i + 900)
       const x = (nx * 0.5 + 0.5) * this.canvas.width
       const y = HUD_TOP + (ny * 0.5 + 0.5) * (this.canvas.height - HUD_TOP - HUD_BOTTOM)
-      const a = 0.025 + Math.abs(signedNoise(this.camX, this.camY, i + 1300)) * 0.055
-      ctx.fillStyle = i % 4 === 0 ? `rgba(164,225,255,${a})` : `rgba(80,170,220,${a})`
+      const a = (weather === 'storm' ? 0.025 : 0.018) + Math.abs(signedNoise(this.camX, this.camY, i + 1300)) * (weather === 'storm' ? 0.055 : 0.040)
+      ctx.fillStyle = i % 4 === 0 ? `rgba(234,252,255,${a})` : `rgba(128,213,240,${a})`
       ctx.fillRect(x, y, i % 5 === 0 ? 2 : 1, 1)
     }
     ctx.restore()
@@ -875,7 +1030,9 @@ export class CanvasRenderer {
     const shape = SHIP_SHAPES[ship.templateId] ?? 'destroyer'
     const L = dim.l / 2
     const W = dim.w / 2
-    const hPx = dim.h * iso.scale * 0.9   // hull height in screen pixels
+    // Apply tilt angle to height for more 3D perspective
+    const tiltFactor = Math.sin(this.tiltAngle)
+    const hPx = dim.h * iso.scale * 0.9 * tiltFactor   // hull height in screen pixels
 
     const cosA = Math.cos(ship.angle)
     const sinA = Math.sin(ship.angle)
@@ -1676,6 +1833,82 @@ export class CanvasRenderer {
     renderProjectileEntity(this.ctx, this.iso, this.w2s.bind(this), proj)
   }
 
+  private renderShipFires(ships: readonly ShipEntity[], tick: number): void {
+    const { ctx } = this
+
+    for (const ship of ships) {
+      const hpRatio = ship.maxHp > 0 ? ship.hp / ship.maxHp : 1
+      if (hpRatio > 0.64) continue
+
+      const dim = SHIP_DIMS[ship.templateId] ?? { l: 100, w: 22, h: 12 }
+      const cosA = Math.cos(ship.angle)
+      const sinA = Math.sin(ship.angle)
+      const damage = 1 - hpRatio
+      const sourceCount = hpRatio < 0.25 ? 4 : hpRatio < 0.45 ? 3 : 2
+
+      for (let i = 0; i < sourceCount; i++) {
+        const lon = dim.l * signedNoise(ship.pos.x, ship.pos.y, i + 1140) * 0.30
+        const lat = dim.w * signedNoise(ship.pos.y, ship.pos.x, i + 1150) * 0.26
+        const wx = ship.pos.x + cosA * lon + sinA * lat
+        const wy = ship.pos.y + sinA * lon - cosA * lat
+        const [sx, sy] = this.w2s(wx, wy)
+        const phase = tick * 0.18 + i * 1.91 + ship.id.length
+        const pulse = 0.76 + Math.sin(phase) * 0.24
+        const baseR = Math.max(2.5, dim.w * this.iso.scale * (0.18 + damage * 0.22))
+        const lift = dim.h * this.iso.scale * (0.62 + damage * 0.85)
+
+        ctx.save()
+        ctx.globalCompositeOperation = 'screen'
+        ctx.translate(sx, sy - lift)
+        ctx.scale(1.18, 0.86)
+        const fire = ctx.createRadialGradient(0, 0, 0, 0, 0, baseR * (2.0 + pulse))
+        fire.addColorStop(0, `rgba(255,244,182,${0.45 * damage})`)
+        fire.addColorStop(0.34, `rgba(255,111,24,${0.42 * damage})`)
+        fire.addColorStop(1, 'rgba(120,24,8,0)')
+        ctx.beginPath()
+        ctx.arc(0, 0, baseR * (2.0 + pulse), 0, Math.PI * 2)
+        ctx.fillStyle = fire
+        ctx.fill()
+        ctx.restore()
+
+        for (let j = 0; j < 4; j++) {
+          const n = Math.abs(signedNoise(ship.pos.x + i * 17, ship.pos.y - j * 9, tick * 0.02 + j))
+          const drift = (tick * 0.8 + j * 23) % 80
+          const px = sx + signedNoise(i, j, 1160) * dim.w * this.iso.scale * 1.5 + drift * 0.10
+          const py = sy - lift - drift * (0.22 + n * 0.18)
+          const r = baseR * (1.4 + n * 2.1)
+          const alpha = Math.max(0, (1 - drift / 80) * damage * (0.16 + n * 0.16))
+          ctx.beginPath()
+          ctx.arc(px, py, r, 0, Math.PI * 2)
+          ctx.fillStyle = j % 3 === 0 ? `rgba(26,24,23,${alpha})` : `rgba(68,60,51,${alpha})`
+          ctx.fill()
+        }
+      }
+    }
+  }
+
+  private renderShipStatusOverlays(ships: readonly ShipEntity[]): void {
+    const { ctx } = this
+    for (const ship of ships) {
+      const dim = SHIP_DIMS[ship.templateId] ?? { l: 100, w: 22, h: 12 }
+      const [cx, cy] = this.w2s(ship.pos.x, ship.pos.y)
+      const hPx = dim.h * this.iso.scale * 0.9
+      const barW = Math.max(12, dim.l * this.iso.scale * 0.65)
+      const barY = cy - hPx - 12
+      const hpRatio = Math.max(0, Math.min(1, ship.hp / ship.maxHp))
+
+      ctx.save()
+      ctx.fillStyle = 'rgba(0,0,0,0.62)'
+      ctx.fillRect(cx - barW / 2 - 1, barY - 1, barW + 2, 6)
+      ctx.fillStyle = hpRatio > 0.55 ? '#22c55e' : hpRatio > 0.25 ? '#f59e0b' : '#ef4444'
+      ctx.fillRect(cx - barW / 2, barY, barW * hpRatio, 4)
+      ctx.strokeStyle = ship.team === 'player' ? 'rgba(94,234,212,0.70)' : 'rgba(250,204,21,0.62)'
+      ctx.lineWidth = 0.8
+      ctx.strokeRect(cx - barW / 2 - 1, barY - 1, barW + 2, 6)
+      ctx.restore()
+    }
+  }
+
   // ── range ellipse (isometric circle = ellipse) ─────────────────────────────
 
   private renderRangeEllipse(player: ShipEntity, weapon: WeaponState): void {
@@ -1885,7 +2118,7 @@ export class CanvasRenderer {
     }
   }
 
-  private renderTacticalAtmosphere(): void {
+  private renderTacticalAtmosphere(weather: WeatherMode): void {
     const { ctx, canvas } = this
     const cx = canvas.width / 2
     const cy = HUD_TOP + (canvas.height - HUD_TOP - HUD_BOTTOM) / 2
@@ -1893,19 +2126,55 @@ export class CanvasRenderer {
 
     ctx.save()
     ctx.globalCompositeOperation = 'multiply'
+    const storm = ctx.createLinearGradient(0, HUD_TOP, 0, canvas.height - HUD_BOTTOM)
+    if (weather === 'storm') {
+      storm.addColorStop(0, 'rgba(30,36,42,0.44)')
+      storm.addColorStop(0.42, 'rgba(20,28,35,0.28)')
+      storm.addColorStop(1, 'rgba(2,8,14,0.36)')
+    } else {
+      storm.addColorStop(0, 'rgba(255,255,255,0.03)')
+      storm.addColorStop(0.46, 'rgba(31,62,82,0.08)')
+      storm.addColorStop(1, 'rgba(5,34,56,0.13)')
+    }
+    ctx.fillStyle = storm
+    ctx.fillRect(0, HUD_TOP, canvas.width, canvas.height - HUD_TOP - HUD_BOTTOM)
+    ctx.restore()
+
+    ctx.save()
+    ctx.globalCompositeOperation = 'multiply'
     const vignette = ctx.createRadialGradient(cx, cy, radius * 0.18, cx, cy, radius)
     vignette.addColorStop(0, 'rgba(255,255,255,0)')
-    vignette.addColorStop(0.62, 'rgba(116,86,19,0.10)')
-    vignette.addColorStop(1, 'rgba(0,0,0,0.55)')
+    vignette.addColorStop(0.62, weather === 'storm' ? 'rgba(48,55,61,0.16)' : 'rgba(29,70,90,0.07)')
+    vignette.addColorStop(1, weather === 'storm' ? 'rgba(0,0,0,0.68)' : 'rgba(0,15,26,0.36)')
     ctx.fillStyle = vignette
     ctx.fillRect(0, HUD_TOP, canvas.width, canvas.height - HUD_TOP - HUD_BOTTOM)
     ctx.restore()
 
     ctx.save()
     ctx.globalCompositeOperation = 'screen'
-    ctx.fillStyle = 'rgba(246,203,65,0.045)'
+    ctx.globalAlpha = weather === 'storm' ? 0.10 : 0.045
+    ctx.drawImage(canvas, -1, HUD_TOP, canvas.width, canvas.height - HUD_TOP - HUD_BOTTOM, 0, HUD_TOP, canvas.width, canvas.height - HUD_TOP - HUD_BOTTOM)
+    ctx.globalAlpha = weather === 'storm' ? 0.08 : 0.035
+    ctx.drawImage(canvas, 1, HUD_TOP, canvas.width, canvas.height - HUD_TOP - HUD_BOTTOM, 0, HUD_TOP, canvas.width, canvas.height - HUD_TOP - HUD_BOTTOM)
+    ctx.restore()
+
+    ctx.save()
+    ctx.globalCompositeOperation = 'screen'
+    ctx.fillStyle = weather === 'storm' ? 'rgba(190,225,235,0.035)' : 'rgba(255,255,255,0.020)'
     for (let y = HUD_TOP; y < canvas.height - HUD_BOTTOM; y += 3) {
       ctx.fillRect(0, y, canvas.width, 1)
+    }
+    ctx.restore()
+
+    ctx.save()
+    ctx.globalCompositeOperation = 'overlay'
+    const count = Math.round((canvas.width * (canvas.height - HUD_TOP - HUD_BOTTOM)) / (weather === 'storm' ? 7000 : 11500))
+    for (let i = 0; i < count; i++) {
+      const x = (signedNoise(this.camX * 0.021, this.camY * 0.019, i + 2500) * 0.5 + 0.5) * canvas.width
+      const y = HUD_TOP + (signedNoise(this.camY * 0.023, this.camX * 0.017, i + 2600) * 0.5 + 0.5) * (canvas.height - HUD_TOP - HUD_BOTTOM)
+      const alpha = (weather === 'storm' ? 0.04 : 0.025) + Math.abs(signedNoise(x, y, i + 2700)) * (weather === 'storm' ? 0.10 : 0.055)
+      ctx.fillStyle = i % 2 === 0 ? `rgba(255,255,255,${alpha})` : `rgba(0,0,0,${alpha})`
+      ctx.fillRect(x, y, 1, 1)
     }
     ctx.restore()
   }
@@ -2143,6 +2412,19 @@ function canSeeEntity(
   }
   if (entity.kind === 'projectile') return canSeePosition((entity as ProjectileEntity).pos)
   return false
+}
+
+function battlefieldWeather(state: CombatState): WeatherMode {
+  for (const entity of state.entities.values()) {
+    if (
+      entity.kind === 'ship' &&
+      !(entity as ShipEntity).destroyed &&
+      (entity as ShipEntity).templateId === 'hull.enemy.boss.dreadnought'
+    ) {
+      return 'storm'
+    }
+  }
+  return 'clear'
 }
 
 function impactWorldRadius(type: WeaponType): number {
