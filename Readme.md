@@ -86,9 +86,19 @@ src/
     audio/        # WebAudio sound system
     data/         # static data and initial state
     input/        # keyboard / mouse input adapter
-    rendering/    # canvas renderer
-    simulation/   # deterministic combat logic
-    ui/           # HUD and UI drawing
+    rendering/
+      canvas-utils.ts   # shared canvas drawing utilities (roundRect etc.)
+      canvas.ts         # main canvas renderer
+      ...               # other renderers
+    simulation/
+      types.ts          # entity types + isShip/isBuilding/... type guards
+      player-commands.ts # player state mutations (toggleAutoFire, isBossStage, …)
+      ai.ts             # enemy AI with behavior dispatch table
+      ...               # combat, movement, weapons, etc.
+    ui/
+      pause-overlay.ts  # pause screen rendering (extracted from main.ts)
+      hud.ts            # in-combat HUD
+      ...               # other screens
   harness/
     fixtures/     # simulation fixtures
     simulation/   # headless simulation runner
@@ -118,6 +128,16 @@ docs/             # design and harness engineering docs
 - Important gameplay events are recorded as event logs.
 - Browser tests validate that the app can start and render.
 - Balance changes should eventually be reviewed through reproducible fixtures.
+
+### SOLID 設計方針
+
+| 原則 | 適用箇所 |
+| --- | --- |
+| **SRP** — 単一責任 | `pause-overlay.ts` にポーズ UI を集約。`player-commands.ts` にプレイヤー状態操作を集約。`canvas-utils.ts` に描画ユーティリティを集約し、7 ファイルの重複定義を解消。 |
+| **OCP** — 開放閉鎖 | `ai.ts` の敵 AI を `AI_BEHAVIORS` ディスパッチテーブルで管理。新しい敵艦クラスは既存コードを変更せずエントリを追加するだけで対応可能。 |
+| **LSP** — リスコフ置換 | `WeaponStrategy` の継承階層は `TorpedoWeaponStrategy` が `canTargetBuilding()` を正しくオーバーライドし、契約を守った設計を維持。 |
+| **ISP** — インターフェース分離 | `types.ts` に `isShip` / `isBuilding` / `isProjectile` / `isObjective` 型ガードを追加。`as ShipEntity` の unsafe キャストをガード関数で置き換え。 |
+| **DIP** — 依存性逆転 | `main.ts` は具体実装を直接 new しているが、状態操作・UI 描画・AI の各責務は独立したモジュールとして分離済み。 |
 
 ## Status
 

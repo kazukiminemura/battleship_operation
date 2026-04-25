@@ -87,6 +87,11 @@ export interface ObjectiveEntity {
 
 export type Entity = ShipEntity | ProjectileEntity | ObjectiveEntity | BuildingEntity
 
+export function isShip(e: Entity): e is ShipEntity        { return e.kind === 'ship' }
+export function isProjectile(e: Entity): e is ProjectileEntity { return e.kind === 'projectile' }
+export function isBuilding(e: Entity): e is BuildingEntity { return e.kind === 'building' }
+export function isObjective(e: Entity): e is ObjectiveEntity  { return e.kind === 'objective' }
+
 export interface EnemyContact {
   pos: Vec3
   tick: number  // tick when last detected

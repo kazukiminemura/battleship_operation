@@ -1,9 +1,9 @@
 import type { CombatState, ShipEntity, BuildingEntity, Command, Vec3, MapObstacle, WeaponState, WeaponType } from './types'
+import { isShip, isBuilding } from './types'
 import type { SeededRandom } from './random'
 import { getWeaponConfig, WEAPON_CONFIGS } from './weapon-strategies'
 import { enemyCanDetectPlayer } from './detection'
 
-// AI keeps this margin inside weapon maxRange before firing
 const RANGE_MARGIN = 0.85
 const ENEMY_AIM_ERROR_BY_WEAPON: Record<WeaponType, number> = {
   gun: 90,
@@ -13,17 +13,80 @@ const ENEMY_AIM_ERROR_BY_WEAPON: Record<WeaponType, number> = {
   missile: 130,
 }
 
+type AiBehaviorFn = (
+  enemy: ShipEntity,
+  player: ShipEntity,
+  dist: number,
+  tick: number,
+  rng: SeededRandom,
+) => Command[]
+
+function destroyerBehavior(enemy: ShipEntity, player: ShipEntity, dist: number, tick: number, rng: SeededRandom): Command[] {
+  const cmds: Command[] = []
+  const gun = enemy.weapons.find(w => w.type === 'gun')
+  const gunRange = gun ? getWeaponConfig(gun.id, gun.type).maxRange * RANGE_MARGIN : 0
+
+  if (dist > gunRange) {
+    cmds.push({ tick, actorId: enemy.id, type: 'move', value: enemy.maxSpeed })
+  } else {
+    cmds.push({ tick, actorId: enemy.id, type: 'stop' })
+    if (gun && gun.cooldownTick === 0 && gun.ammo > 0) {
+      cmds.push({
+        tick, actorId: enemy.id, type: 'fire.primary',
+        target: enemyAimTarget(enemy, player, gun, gunRange, dist, rng),
+      })
+    }
+  }
+  return cmds
+}
+
+function makeRangeKiteAI(preferredDist: number): AiBehaviorFn {
+  return (enemy, player, dist, tick, rng) => {
+    const cmds: Command[] = []
+
+    if (dist > preferredDist + 100) {
+      cmds.push({ tick, actorId: enemy.id, type: 'move', value: enemy.maxSpeed })
+    } else if (dist < preferredDist - 100) {
+      cmds.push({ tick, actorId: enemy.id, type: 'move', value: -enemy.maxSpeed * 0.5 })
+    } else {
+      cmds.push({ tick, actorId: enemy.id, type: 'stop' })
+    }
+
+    for (let slot = 0; slot < enemy.weapons.length; slot++) {
+      const weapon = enemy.weapons[slot]!
+      if (weapon.cooldownTick > 0 || weapon.ammo <= 0) continue
+      const range = getWeaponConfig(weapon.id, weapon.type).maxRange * RANGE_MARGIN
+      if (dist > range) continue
+      cmds.push({
+        tick, actorId: enemy.id, type: 'fire.slot', value: slot,
+        target: enemyAimTarget(enemy, player, weapon, range, dist, rng),
+      })
+    }
+    return cmds
+  }
+}
+
+const AI_BEHAVIORS: Record<string, AiBehaviorFn> = {
+  'hull.enemy.destroyer.basic': destroyerBehavior,
+  'hull.cruiser.basic': makeRangeKiteAI(WEAPON_CONFIGS.torpedo.maxRange * RANGE_MARGIN * 0.7),
+  'hull.enemy.boss.dreadnought': makeRangeKiteAI(1900),
+}
+
+function defaultAiBehavior(enemy: ShipEntity, _player: ShipEntity, _dist: number, tick: number, _rng: SeededRandom): Command[] {
+  return [{ tick, actorId: enemy.id, type: 'stop' }]
+}
+
 export function generateAiCommands(state: CombatState, rng: SeededRandom): Command[] {
   const commands: Command[] = []
 
   const player = [...state.entities.values()].find(
-    e => e.kind === 'ship' && (e as ShipEntity).team === 'player' && !(e as ShipEntity).destroyed
+    e => isShip(e) && e.team === 'player' && !e.destroyed,
   ) as ShipEntity | undefined
 
   if (!player) return commands
 
   const enemies = [...state.entities.values()].filter(
-    e => e.kind === 'ship' && (e as ShipEntity).team === 'enemy' && !(e as ShipEntity).destroyed
+    e => isShip(e) && e.team === 'enemy' && !e.destroyed,
   ) as ShipEntity[]
 
   for (const enemy of enemies) {
@@ -31,16 +94,12 @@ export function generateAiCommands(state: CombatState, rng: SeededRandom): Comma
     const dy = player.pos.y - enemy.pos.y
     const dist = Math.sqrt(dx * dx + dy * dy)
 
-    // If player is outside this enemy's visual range, just hold position
     if (!enemyCanDetectPlayer(enemy, player)) {
       commands.push({ tick: state.tick, actorId: enemy.id, type: 'stop' })
       continue
     }
 
-    const angleToPlayer = Math.atan2(dy, dx)
-    const angleDiff = normalizeAngle(angleToPlayer - enemy.angle)
-
-    // always rotate toward player
+    const angleDiff = normalizeAngle(Math.atan2(dy, dx) - enemy.angle)
     if (Math.abs(angleDiff) > 0.05) {
       commands.push({
         tick: state.tick, actorId: enemy.id, type: 'rotate',
@@ -48,52 +107,8 @@ export function generateAiCommands(state: CombatState, rng: SeededRandom): Comma
       })
     }
 
-    if (enemy.templateId === 'hull.enemy.destroyer.basic') {
-      const gun = enemy.weapons.find(w => w.type === 'gun')
-      const gunRange = gun ? getWeaponConfig(gun.id, gun.type).maxRange * RANGE_MARGIN : 0
-
-      if (dist > gunRange) {
-        commands.push({ tick: state.tick, actorId: enemy.id, type: 'move', value: enemy.maxSpeed })
-      } else {
-        commands.push({ tick: state.tick, actorId: enemy.id, type: 'stop' })
-        if (gun && gun.cooldownTick === 0 && gun.ammo > 0) {
-          commands.push({
-            tick: state.tick, actorId: enemy.id, type: 'fire.primary',
-            target: enemyAimTarget(enemy, player, gun, gunRange, dist, rng),
-          })
-        }
-      }
-    } else if (enemy.templateId === 'hull.cruiser.basic' || enemy.templateId === 'hull.enemy.boss.dreadnought') {
-      const torpRange    = WEAPON_CONFIGS.torpedo.maxRange * RANGE_MARGIN
-      const preferredDist = enemy.templateId === 'hull.enemy.boss.dreadnought' ? 1900 : torpRange * 0.7
-
-      if (dist > preferredDist + 100) {
-        commands.push({ tick: state.tick, actorId: enemy.id, type: 'move', value: enemy.maxSpeed })
-      } else if (dist < preferredDist - 100) {
-        commands.push({ tick: state.tick, actorId: enemy.id, type: 'move', value: -enemy.maxSpeed * 0.5 })
-      } else {
-        commands.push({ tick: state.tick, actorId: enemy.id, type: 'stop' })
-      }
-
-      for (let slot = 0; slot < enemy.weapons.length; slot++) {
-        const weapon = enemy.weapons[slot]!
-        if (weapon.cooldownTick > 0 || weapon.ammo <= 0) continue
-        const range = getWeaponConfig(weapon.id, weapon.type).maxRange * RANGE_MARGIN
-        if (dist > range) continue
-
-        if (weapon.type === 'torpedo') {
-          commands.push({
-            tick: state.tick, actorId: enemy.id, type: 'fire.slot', value: slot,
-            target: enemyAimTarget(enemy, player, weapon, range, dist, rng),
-          })
-        } else {
-          commands.push({
-            tick: state.tick, actorId: enemy.id, type: 'fire.slot', value: slot,
-            target: enemyAimTarget(enemy, player, weapon, range, dist, rng),
-          })
-        }
-      }
-    }
+    const behavior = AI_BEHAVIORS[enemy.templateId] ?? defaultAiBehavior
+    commands.push(...behavior(enemy, player, dist, state.tick, rng))
   }
 
   return commands
@@ -130,8 +145,8 @@ const SEARCH_WAYPOINT: Vec3 = { x: 5000, y: 3500, z: 0 }
 
 export function generateAutoPilotCommands(state: CombatState): Command[] {
   const player = state.entities.get('ship.player')
-  if (!player || player.kind !== 'ship') return []
-  const ship = player as ShipEntity
+  if (!player || !isShip(player)) return []
+  const ship = player
   if (!ship.autoPilot) return []
 
   const actorId = 'ship.player'
@@ -165,15 +180,14 @@ export function generateAutoPilotCommands(state: CombatState): Command[] {
 }
 
 function findTarget(state: CombatState, ship: ShipEntity): Vec3 | undefined {
-  // Auto-pilot treats all enemies as known (full map awareness)
   const enemies = [...state.entities.values()].filter(
-    e => e.kind === 'ship' && (e as ShipEntity).team === 'enemy' && !(e as ShipEntity).destroyed
+    e => isShip(e) && e.team === 'enemy' && !e.destroyed,
   ) as ShipEntity[]
 
   if (enemies.length > 0) return nearest(ship.pos, enemies.map(e => e.pos))
 
   const buildings = [...state.entities.values()].filter(
-    e => e.kind === 'building' && !(e as BuildingEntity).destroyed
+    e => isBuilding(e) && !e.destroyed,
   ) as BuildingEntity[]
 
   if (buildings.length > 0) return nearest(ship.pos, buildings.map(b => b.pos))

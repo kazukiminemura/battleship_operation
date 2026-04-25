@@ -5,7 +5,7 @@ import { FixedTicker } from './game/simulation/ticker'
 import { combatStep } from './game/simulation/combat'
 import { createRngStreams } from './game/simulation/random'
 import { createDebugState, createInitialState, STATIC_DATA, type PlayerShipType } from './game/data/masterdata'
-import type { CombatState, ShipEntity, WeaponState } from './game/simulation/types'
+import { isShip, type CombatState } from './game/simulation/types'
 import { WORLD_SIZE } from './game/simulation/movement'
 import { SoundSystem } from './game/audio/sounds'
 import { NavigatorVoice } from './game/audio/navigator-voice'
@@ -16,13 +16,24 @@ import { StageIntroScreen } from './game/ui/stageintroscreen'
 import { ResultsScreen } from './game/ui/resultsscreen'
 import type { WeaponTemplate } from './game/data/masterdata'
 import { getDefaultLoadout } from './game/data/weapon-catalog'
-import { drawAccessKeyHint, isAccessKey } from './game/ui/accesskeys'
+import { isAccessKey } from './game/ui/accesskeys'
+import {
+  renderPauseOverlay,
+  hitPauseRegion,
+  pauseAccessKey,
+  type PauseAction,
+  type PauseRegion,
+} from './game/ui/pause-overlay'
+import {
+  selectedWeapon,
+  isBossStage,
+  toggleWeaponAutoFire,
+  toggleAutoPilot,
+  toggleAllAutoFire,
+} from './game/simulation/player-commands'
 
 const BASE_SEED = 12345
 type GameMode = 'start' | 'prep' | 'stage-intro' | 'combat' | 'results'
-type PauseAction = 'resume' | 'title'
-function pauseAccessKey(action: PauseAction): string { return action === 'resume' ? 'P' : 'T' }
-interface PauseRegion { id: PauseAction; x: number; y: number; w: number; h: number }
 
 function main(): void {
   const canvas = document.getElementById('game-canvas') as HTMLCanvasElement
@@ -461,12 +472,13 @@ function main(): void {
       }
 
       const player = state.entities.get('ship.player')
-      if (player && player.kind === 'ship' && !player.destroyed) {
-        renderer.setCamera((player as ShipEntity).pos.x, (player as ShipEntity).pos.y)
+      if (player && isShip(player) && !player.destroyed) {
+        renderer.setCamera(player.pos.x, player.pos.y)
       }
 
       renderer.render(state, selectedWeapon(state, input.getWeaponMode()), input.getAimPoint())
-      const autoPilotOn = ((state.entities.get('ship.player') as ShipEntity | undefined)?.autoPilot) ?? false
+      const playerShip = state.entities.get('ship.player')
+      const autoPilotOn = (playerShip && isShip(playerShip) ? playerShip.autoPilot : false) ?? false
       if (paused) {
         hud.render(state, input.getWeaponMode(), WORLD_SIZE, bgmEnabled, '', accessKeysVisible, autoPilotOn)
         pauseRegions = renderPauseOverlay(canvas, accessKeysVisible)
@@ -480,149 +492,6 @@ function main(): void {
   })
 
   ticker.start()
-}
-
-function hitPauseRegion(canvas: HTMLCanvasElement, regions: PauseRegion[], e: MouseEvent): PauseAction | null {
-  const rect = canvas.getBoundingClientRect()
-  const mx = e.clientX - rect.left
-  const my = e.clientY - rect.top
-  for (const r of regions) {
-    if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) return r.id
-  }
-  return null
-}
-
-function renderPauseOverlay(canvas: HTMLCanvasElement, showAccessKeys: boolean): PauseRegion[] {
-  const ctx = canvas.getContext('2d')
-  if (!ctx) return []
-
-  const W = canvas.width
-  const H = canvas.height
-  const cx = W / 2
-  const cy = H / 2
-  const panelW = Math.min(520, W * 0.48)
-  const panelH = Math.min(300, H * 0.42)
-  const panelX = cx - panelW / 2
-  const panelY = cy - panelH / 2
-
-  ctx.save()
-  ctx.fillStyle = 'rgba(2,8,14,0.58)'
-  ctx.fillRect(0, 0, W, H)
-
-  ctx.fillStyle = 'rgba(10,24,46,0.94)'
-  roundRect(ctx, panelX, panelY, panelW, panelH, 12)
-  ctx.fill()
-  ctx.strokeStyle = '#38bdf8'
-  ctx.lineWidth = 2
-  roundRect(ctx, panelX, panelY, panelW, panelH, 12)
-  ctx.stroke()
-
-  ctx.textAlign = 'center'
-  ctx.fillStyle = '#7dd3fc'
-  ctx.font = `bold ${Math.round(panelH * 0.18)}px sans-serif`
-  ctx.fillText('PAUSED', cx, panelY + panelH * 0.26)
-
-  ctx.fillStyle = '#94a3b8'
-  ctx.font = `${Math.round(panelH * 0.072)}px sans-serif`
-  ctx.fillText('戦闘を一時停止中', cx, panelY + panelH * 0.39)
-
-  const btnW = panelW * 0.36
-  const btnH = panelH * 0.18
-  const gap = panelW * 0.06
-  const btnY = panelY + panelH * 0.64
-  const resumeX = cx - btnW - gap / 2
-  const titleX = cx + gap / 2
-
-  drawPauseButton(ctx, resumeX, btnY, btnW, btnH, '再開', '#22c55e')
-  drawPauseButton(ctx, titleX, btnY, btnW, btnH, 'タイトルへ', '#475569')
-  if (showAccessKeys) {
-    drawAccessKeyHint(ctx, pauseAccessKey('resume'), resumeX + 8, btnY + 8)
-    drawAccessKeyHint(ctx, pauseAccessKey('title'),  titleX + 8, btnY + 8)
-  }
-
-  ctx.fillStyle = '#64748b'
-  ctx.font = `${Math.round(panelH * 0.052)}px sans-serif`
-  ctx.fillText('P / Esc で再開', cx, panelY + panelH * 0.90)
-  ctx.restore()
-
-  return [
-    { id: 'resume', x: resumeX, y: btnY, w: btnW, h: btnH },
-    { id: 'title', x: titleX, y: btnY, w: btnW, h: btnH },
-  ]
-}
-
-function drawPauseButton(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, label: string, color: string): void {
-  ctx.fillStyle = `${color}30`
-  roundRect(ctx, x, y, w, h, 8)
-  ctx.fill()
-  ctx.strokeStyle = color
-  ctx.lineWidth = 1.5
-  roundRect(ctx, x, y, w, h, 8)
-  ctx.stroke()
-  ctx.fillStyle = '#f8fafc'
-  ctx.textAlign = 'center'
-  ctx.font = `bold ${Math.round(h * 0.45)}px sans-serif`
-  ctx.fillText(label, x + w / 2, y + h * 0.65)
-}
-
-function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
-  ctx.beginPath()
-  ctx.moveTo(x + r, y)
-  ctx.lineTo(x + w - r, y)
-  ctx.quadraticCurveTo(x + w, y, x + w, y + r)
-  ctx.lineTo(x + w, y + h - r)
-  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h)
-  ctx.lineTo(x + r, y + h)
-  ctx.quadraticCurveTo(x, y + h, x, y + h - r)
-  ctx.lineTo(x, y + r)
-  ctx.quadraticCurveTo(x, y, x + r, y)
-  ctx.closePath()
-}
-
-function selectedWeapon(state: CombatState, weaponSlot: number): WeaponState | undefined {
-  const player = state.entities.get('ship.player')
-  if (!player || player.kind !== 'ship') return undefined
-  return (player as ShipEntity).weapons[weaponSlot]
-}
-
-function isBossStage(state: CombatState): boolean {
-  return [...state.entities.values()].some(entity =>
-    entity.kind === 'ship' &&
-    !entity.destroyed &&
-    (entity as ShipEntity).templateId === 'hull.enemy.boss.dreadnought'
-  )
-}
-
-function toggleWeaponAutoFire(state: CombatState, weaponSlot: number): CombatState {
-  const player = state.entities.get('ship.player')
-  if (!player || player.kind !== 'ship') return state
-  const ship = player as ShipEntity
-  const weapons = ship.weapons.map((w, i) =>
-    i === weaponSlot ? { ...w, autoFire: !w.autoFire } : w
-  )
-  const entities = new Map(state.entities)
-  entities.set('ship.player', { ...ship, weapons })
-  return { ...state, entities }
-}
-
-function toggleAutoPilot(state: CombatState): CombatState {
-  const player = state.entities.get('ship.player')
-  if (!player || player.kind !== 'ship') return state
-  const ship = player as ShipEntity
-  const entities = new Map(state.entities)
-  entities.set('ship.player', { ...ship, autoPilot: !ship.autoPilot })
-  return { ...state, entities }
-}
-
-function toggleAllAutoFire(state: CombatState): CombatState {
-  const player = state.entities.get('ship.player')
-  if (!player || player.kind !== 'ship') return state
-  const ship = player as ShipEntity
-  const allAuto = ship.weapons.every(w => w.autoFire)
-  const weapons = ship.weapons.map(w => ({ ...w, autoFire: !allAuto }))
-  const entities = new Map(state.entities)
-  entities.set('ship.player', { ...ship, weapons })
-  return { ...state, entities }
 }
 
 main()

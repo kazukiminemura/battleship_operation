@@ -1,6 +1,7 @@
 import type { CombatState, Metrics } from '../simulation/types'
 import { displayWeaponName } from '../data/weapon-names'
 import { drawAccessKeyHint, isAccessKey } from './accesskeys'
+import { roundRect } from '../rendering/canvas-utils'
 
 export type ResultAction = 'next' | 'retry' | 'title'
 
@@ -352,18 +353,4 @@ function fitText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number):
   let t = text
   while (t.length > 0 && ctx.measureText(`${t}...`).width > maxWidth) t = t.slice(0, -1)
   return t.length > 0 ? `${t}...` : '...'
-}
-
-function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
-  ctx.beginPath()
-  ctx.moveTo(x + r, y)
-  ctx.lineTo(x + w - r, y)
-  ctx.quadraticCurveTo(x + w, y, x + w, y + r)
-  ctx.lineTo(x + w, y + h - r)
-  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h)
-  ctx.lineTo(x + r, y + h)
-  ctx.quadraticCurveTo(x, y + h, x, y + h - r)
-  ctx.lineTo(x, y + r)
-  ctx.quadraticCurveTo(x, y, x + r, y)
-  ctx.closePath()
 }
