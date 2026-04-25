@@ -1,6 +1,7 @@
 import type { BuildingEntity, CombatEvent, CombatState, ProjectileEntity, ShipEntity } from './types'
 import type { SeededRandom } from './random'
 import { applyDamage, checkDestroyed } from './damage'
+import { isInterceptableProjectile, projectileInterceptRadius } from './interception'
 import { getWeaponConfig, getWeaponStrategy } from './weapon-strategies'
 
 export function stepProjectiles(state: CombatState, _rng: SeededRandom): CombatState {
@@ -16,8 +17,17 @@ export function stepProjectiles(state: CombatState, _rng: SeededRandom): CombatS
     e => e.kind === 'building' && !e.destroyed,
   ) as BuildingEntity[]
 
-  for (const [id, entity] of entities) {
-    if (entity.kind !== 'projectile' || entity.destroyed) continue
+  const projectiles = [...entities.values()].filter(
+    e => e.kind === 'projectile' && !e.destroyed,
+  ) as ProjectileEntity[]
+
+  const projectileEntries = [...entities.entries()]
+    .filter(([, entity]) => entity.kind === 'projectile')
+    .sort(([, a], [, b]) => projectilePriority(b as ProjectileEntity) - projectilePriority(a as ProjectileEntity))
+
+  for (const [id] of projectileEntries) {
+    const entity = entities.get(id)
+    if (!entity || entity.kind !== 'projectile' || entity.destroyed) continue
 
     const prevProj = entity as ProjectileEntity
     let proj = advanceProjectile(prevProj)
@@ -27,6 +37,39 @@ export function stepProjectiles(state: CombatState, _rng: SeededRandom): CombatS
     const owner = entities.get(proj.ownerId)
     const ownerTeam = owner?.kind === 'ship' ? owner.team : undefined
     let hit = false
+
+    if (proj.weaponType === 'aa') {
+      for (const targetProjectile of projectiles) {
+        const currentProjectile = entities.get(targetProjectile.id)
+        if (!currentProjectile || currentProjectile.kind !== 'projectile' || currentProjectile.destroyed) continue
+        if (currentProjectile.id === proj.id) continue
+        if (!isInterceptableProjectile(currentProjectile)) continue
+
+        const targetOwner = entities.get(currentProjectile.ownerId)
+        const targetOwnerTeam = targetOwner?.kind === 'ship' ? targetOwner.team : undefined
+        if (ownerTeam && targetOwnerTeam && ownerTeam === targetOwnerTeam) continue
+
+        const impactRadius = config.hitRadius + projectileInterceptRadius(currentProjectile)
+        const impact = segmentCircleImpact(prevProj.pos, proj.pos, currentProjectile.pos, impactRadius)
+        if (impact) {
+          const impactProj = { ...proj, pos: impact }
+          events.push(
+            makeHitEvent(state.tick, impactProj, currentProjectile.id),
+            { tick: state.tick, type: 'entity.destroyed', targetId: currentProjectile.id, position: { ...currentProjectile.pos } },
+          )
+          metrics = recordWeaponIntercept(metrics, proj.weaponType)
+          entities.set(currentProjectile.id, { ...currentProjectile, destroyed: true })
+          proj = { ...proj, pos: impact, destroyed: true }
+          hit = true
+          break
+        }
+      }
+    }
+
+    if (hit) {
+      entities.set(id, proj)
+      continue
+    }
 
     for (const ship of ships) {
       const currentShip = entities.get(ship.id)
@@ -107,6 +150,10 @@ export function stepProjectiles(state: CombatState, _rng: SeededRandom): CombatS
   return { ...state, entities, eventLog: [...state.eventLog, ...events], metrics }
 }
 
+function projectilePriority(proj: ProjectileEntity): number {
+  return proj.weaponType === 'aa' ? 1 : 0
+}
+
 function advanceProjectile(proj: ProjectileEntity): ProjectileEntity {
   return {
     ...proj,
@@ -161,6 +208,19 @@ function recordWeaponHit(
     damageByWeapon: {
       ...metrics.damageByWeapon,
       [weaponType]: (metrics.damageByWeapon[weaponType] ?? 0) + damage,
+    },
+  }
+}
+
+function recordWeaponIntercept(
+  metrics: CombatState['metrics'],
+  weaponType: ProjectileEntity['weaponType'],
+): CombatState['metrics'] {
+  return {
+    ...metrics,
+    hitCountByWeapon: {
+      ...metrics.hitCountByWeapon,
+      [weaponType]: (metrics.hitCountByWeapon[weaponType] ?? 0) + 1,
     },
   }
 }

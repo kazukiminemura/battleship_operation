@@ -1,9 +1,10 @@
-import type { BuildingEntity, CombatState, Command, ShipEntity, Vec3, WeaponType, CombatEvent } from './types'
+import type { BuildingEntity, CombatState, Command, Entity, ShipEntity, Vec3, WeaponType, CombatEvent, ProjectileEntity } from './types'
 import type { RngStreams } from './random'
 import type { StaticData } from '../data/masterdata'
 import { stepMovement, applyMoveCommand, applySpeedUpCommand, applySpeedDownCommand, applyRotateCommand, applyStopCommand } from './movement'
 import { stepWeaponCooldowns, fireWeapon, fireWeaponAtSlot } from './weapons'
 import { stepProjectiles } from './projectiles'
+import { isInterceptableProjectile } from './interception'
 import { getWeaponConfig } from './weapon-strategies'
 import { generateAiCommands, generateAutoPilotCommands } from './ai'
 import { evaluateMission } from './mission'
@@ -74,6 +75,7 @@ function generateAutoFireCommands(state: CombatState): Command[] {
   const cmds: Command[] = []
   const player = state.entities.get('ship.player')
   if (!player || player.kind !== 'ship' || player.destroyed) return cmds
+  const playerShip = player as ShipEntity
 
   const enemies = [...state.entities.values()].filter(
     e => e.kind === 'ship' && !(e as ShipEntity).destroyed && (e as ShipEntity).team === 'enemy' &&
@@ -85,18 +87,27 @@ function generateAutoFireCommands(state: CombatState): Command[] {
          state.detectedByPlayer.has(e.id)
   ) as BuildingEntity[]
 
-  const targets: { pos: Vec3; kind: 'ship' | 'building' }[] = [
+  const surfaceTargets: { pos: Vec3; kind: 'ship' | 'building' }[] = [
     ...enemies.map(e => ({ pos: e.pos, kind: 'ship' as const })),
     ...buildings.map(b => ({ pos: b.pos, kind: 'building' as const })),
   ]
-  if (targets.length === 0) return cmds
+
+  const projectileTargets: { pos: Vec3; kind: 'projectile' }[] = [...state.entities.values()]
+    .filter(e => e.kind === 'projectile')
+    .map(e => e as ProjectileEntity)
+    .filter(p => isIncomingThreat(p, playerShip, state.entities))
+    .map(p => ({ pos: p.pos, kind: 'projectile' as const }))
+
+  if (surfaceTargets.length === 0 && projectileTargets.length === 0) return cmds
 
   for (const [weaponSlot, weapon] of player.weapons.entries()) {
     if (!weapon.autoFire || weapon.cooldownTick > 0 || weapon.ammo <= 0) continue
 
     const candidates = weapon.type === 'torpedo'
-      ? targets.filter(t => t.kind === 'ship')
-      : targets
+      ? surfaceTargets.filter(t => t.kind === 'ship')
+      : weapon.type === 'aa' && projectileTargets.length > 0
+        ? projectileTargets
+        : surfaceTargets
     if (candidates.length === 0) continue
 
     let nearest = candidates[0]!
@@ -120,6 +131,16 @@ function generateAutoFireCommands(state: CombatState): Command[] {
   }
 
   return cmds
+}
+
+function isIncomingThreat(projectile: ProjectileEntity, player: ShipEntity, entities: Map<string, Entity>): boolean {
+  if (!isInterceptableProjectile(projectile)) return false
+  const owner = entities.get(projectile.ownerId)
+  const ownerTeam = owner?.kind === 'ship' ? owner.team : undefined
+  if (ownerTeam !== 'enemy') return false
+  const dx = projectile.pos.x - player.pos.x
+  const dy = projectile.pos.y - player.pos.y
+  return dx * dx + dy * dy <= player.detectionRange * player.detectionRange
 }
 
 function applyCommands(state: CombatState, commands: Command[], rng: RngStreams): CombatState {

@@ -111,6 +111,11 @@ export class StartScreen {
     ctx.fillStyle = '#1e293b'
     ctx.font = `${Math.round(H * 0.022)}px sans-serif`
     ctx.fillText('R キーで戦闘中にタイトルへ戻る', cx, H * 0.97)
+
+    // Music credits - 魔王魂
+    ctx.fillStyle = '#1e3a5f'
+    ctx.font = `${Math.round(H * 0.018)}px sans-serif`
+    ctx.fillText('Music: 魔王魂 (maoudamashii.com)', cx, H * 0.93)
   }
 }
 
