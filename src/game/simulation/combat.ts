@@ -1,7 +1,7 @@
 import type { BuildingEntity, CombatState, Command, Entity, ShipEntity, Vec3, WeaponType, CombatEvent, ProjectileEntity } from './types'
 import type { RngStreams } from './random'
 import type { StaticData } from '../data/masterdata'
-import { stepMovement, applyMoveCommand, applySpeedUpCommand, applySpeedDownCommand, applyRotateCommand, applyStopCommand } from './movement'
+import { stepMovement, stepCollisions, applyMoveCommand, applySpeedUpCommand, applySpeedDownCommand, applyRotateCommand, applyStopCommand } from './movement'
 import { stepWeaponCooldowns, fireWeapon, fireWeaponAtSlot } from './weapons'
 import { stepProjectiles } from './projectiles'
 import { isInterceptableProjectile } from './interception'
@@ -41,6 +41,9 @@ export function combatStep(
 
   // 5. movement step
   s = stepMovement(s)
+
+  // 5.2. ship-ship collision step
+  s = stepCollisions(s)
 
   // 5.5. detection update (uses current positions after movement)
   s = stepDetection(s)
@@ -87,16 +90,16 @@ function generateAutoFireCommands(state: CombatState): Command[] {
          state.detectedByPlayer.has(e.id)
   ) as BuildingEntity[]
 
-  const surfaceTargets: { pos: Vec3; kind: 'ship' | 'building' }[] = [
-    ...enemies.map(e => ({ pos: e.pos, kind: 'ship' as const })),
-    ...buildings.map(b => ({ pos: b.pos, kind: 'building' as const })),
+  const surfaceTargets: { pos: Vec3; vel: Vec3; kind: 'ship' | 'building' }[] = [
+    ...enemies.map(e => ({ pos: e.pos, vel: e.vel, kind: 'ship' as const })),
+    ...buildings.map(b => ({ pos: b.pos, vel: { x: 0, y: 0, z: 0 }, kind: 'building' as const })),
   ]
 
-  const projectileTargets: { pos: Vec3; kind: 'projectile' }[] = [...state.entities.values()]
+  const projectileTargets: { pos: Vec3; vel: Vec3; kind: 'projectile' }[] = [...state.entities.values()]
     .filter(e => e.kind === 'projectile')
     .map(e => e as ProjectileEntity)
     .filter(p => isIncomingThreat(p, playerShip, state.entities))
-    .map(p => ({ pos: p.pos, kind: 'projectile' as const }))
+    .map(p => ({ pos: p.pos, vel: p.vel, kind: 'projectile' as const }))
 
   if (surfaceTargets.length === 0 && projectileTargets.length === 0) return cmds
 
@@ -119,14 +122,17 @@ function generateAutoFireCommands(state: CombatState): Command[] {
       if (d < minDist) { minDist = d; nearest = target }
     }
 
-    const maxRange = getWeaponConfig(weapon.id, weapon.type).maxRange
-    if (minDist > maxRange) continue   // target out of range
+    const cfg = getWeaponConfig(weapon.id, weapon.type)
+    if (minDist > cfg.maxRange) continue   // target out of range
+    const aimPos = (weapon.type !== 'aa' && nearest.kind === 'ship')
+      ? predictLeadPosition(player.pos, nearest, cfg.speed)
+      : { ...nearest.pos }
     cmds.push({
       tick: state.tick,
       actorId: 'ship.player',
       type: 'fire.slot',
       value: weaponSlot,
-      target: { ...nearest.pos },
+      target: aimPos,
     })
   }
 
@@ -283,4 +289,24 @@ function updateMetrics(state: CombatState): CombatState {
       durationTicks: state.tick,
     },
   }
+}
+
+function predictLeadPosition(
+  shooterPos: Vec3,
+  target: { pos: Vec3; vel: Vec3 },
+  projectileSpeed: number,
+): Vec3 {
+  let predicted = { ...target.pos }
+  for (let i = 0; i < 3; i++) {
+    const dx = predicted.x - shooterPos.x
+    const dy = predicted.y - shooterPos.y
+    const dist = Math.sqrt(dx * dx + dy * dy)
+    const tof = dist / projectileSpeed
+    predicted = {
+      x: target.pos.x + target.vel.x * tof,
+      y: target.pos.y + target.vel.y * tof,
+      z: 0,
+    }
+  }
+  return predicted
 }

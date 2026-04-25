@@ -7,12 +7,18 @@ export { WEAPON_CONFIGS } from './weapon-strategies'
 let projectileCounter = 0
 
 const SHIP_MOUNT_DIMS: Record<string, { l: number; w: number }> = {
-  'hull.destroyer.basic': { l: 145, w: 30 },
-  'hull.enemy.destroyer.basic': { l: 90, w: 20 },
-  'hull.cruiser.basic': { l: 165, w: 36 },
-  'hull.cruiser.player': { l: 205, w: 48 },
-  'hull.battleship.basic': { l: 285, w: 68 },
-  'hull.bb.yukimura': { l: 278, w: 74 },
+  'hull.destroyer.basic':        { l: 145, w: 30 },
+  'hull.dd.improved':            { l: 155, w: 32 },
+  'hull.dd.elite':               { l: 165, w: 34 },
+  'hull.enemy.destroyer.basic':  { l: 90,  w: 20 },
+  'hull.cruiser.player':         { l: 205, w: 48 },
+  'hull.cl.heavy':               { l: 240, w: 58 },
+  'hull.ca.elite':               { l: 250, w: 62 },
+  'hull.cruiser.basic':          { l: 165, w: 36 },
+  'hull.battleship.basic':       { l: 285, w: 68 },
+  'hull.bb.fast':                { l: 290, w: 70 },
+  'hull.bb.super':               { l: 310, w: 82 },
+  'hull.bb.yukimura':            { l: 278, w: 74 },
   'hull.enemy.boss.dreadnought': { l: 340, w: 82 },
 }
 

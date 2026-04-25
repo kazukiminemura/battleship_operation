@@ -1,4 +1,5 @@
-import type { CombatState, ShipEntity, Command, MapObstacle, SpeedLevel } from './types'
+import type { CombatState, ShipEntity, Command, MapObstacle, SpeedLevel, CombatEvent } from './types'
+import { applyDamage, checkDestroyed } from './damage'
 
 export const WORLD_SIZE = 16000
 export const KNOTS_PER_UNIT = 10  // 1 game unit/tick = 10 knots for display
@@ -148,4 +149,99 @@ export function applyStopCommand(ship: ShipEntity): ShipEntity {
 
 export function targetSpeedForLevel(ship: ShipEntity, level: SpeedLevel): number {
   return ship.maxSpeed * SPEED_LEVEL_TARGET_RATIO[level]
+}
+
+const SHIP_COLLISION_RADII: Record<string, number> = {
+  'hull.destroyer.basic':        55,
+  'hull.dd.improved':            58,
+  'hull.dd.elite':               62,
+  'hull.enemy.destroyer.basic':  40,
+  'hull.cruiser.player':         75,
+  'hull.cl.heavy':               88,
+  'hull.ca.elite':               92,
+  'hull.cruiser.basic':          65,
+  'hull.battleship.basic':       110,
+  'hull.bb.fast':                112,
+  'hull.bb.super':               120,
+  'hull.bb.yukimura':            108,
+  'hull.enemy.boss.dreadnought': 130,
+}
+const DEFAULT_COLLISION_RADIUS = 60
+const COLLISION_DAMAGE_SCALE = 80
+
+export function stepCollisions(state: CombatState): CombatState {
+  const entities = new Map(state.entities)
+  let metrics = { ...state.metrics }
+  const events: CombatEvent[] = []
+
+  const ships = [...entities.values()].filter(
+    e => e.kind === 'ship' && !e.destroyed,
+  ) as ShipEntity[]
+
+  for (let i = 0; i < ships.length; i++) {
+    for (let j = i + 1; j < ships.length; j++) {
+      const a = entities.get(ships[i]!.id) as ShipEntity | undefined
+      const b = entities.get(ships[j]!.id) as ShipEntity | undefined
+      if (!a || !b || a.destroyed || b.destroyed) continue
+      if (a.team === b.team) continue
+
+      const radA = SHIP_COLLISION_RADII[a.templateId] ?? DEFAULT_COLLISION_RADIUS
+      const radB = SHIP_COLLISION_RADII[b.templateId] ?? DEFAULT_COLLISION_RADIUS
+      const dx = b.pos.x - a.pos.x
+      const dy = b.pos.y - a.pos.y
+      const dist = Math.sqrt(dx * dx + dy * dy)
+      const minDist = radA + radB
+
+      if (dist >= minDist || dist < 0.001) continue
+
+      const nx = dx / dist
+      const ny = dy / dist
+      const relVel = (b.vel.x - a.vel.x) * nx + (b.vel.y - a.vel.y) * ny
+
+      if (relVel > 0) continue  // already separating
+
+      const impactSpeed = Math.abs(relVel)
+      const massA = a.maxHp
+      const massB = b.maxHp
+      const totalMass = massA + massB
+
+      const damageToA = impactSpeed * massB / totalMass * COLLISION_DAMAGE_SCALE
+      const damageToB = impactSpeed * massA / totalMass * COLLISION_DAMAGE_SCALE
+      const overlap = minDist - dist
+
+      let updatedA = checkDestroyed(applyDamage(a, damageToA))
+      let updatedB = checkDestroyed(applyDamage(b, damageToB))
+      updatedA = { ...updatedA, pos: { x: a.pos.x - nx * overlap * (massB / totalMass), y: a.pos.y - ny * overlap * (massB / totalMass), z: 0 } }
+      updatedB = { ...updatedB, pos: { x: b.pos.x + nx * overlap * (massA / totalMass), y: b.pos.y + ny * overlap * (massA / totalMass), z: 0 } }
+
+      entities.set(a.id, updatedA)
+      entities.set(b.id, updatedB)
+
+      events.push(
+        { tick: state.tick, type: 'ship.collision', sourceId: a.id, targetId: b.id, damage: damageToA, position: { ...a.pos }, hitSection: collisionHitSection(a, nx, ny) },
+        { tick: state.tick, type: 'ship.collision', sourceId: b.id, targetId: a.id, damage: damageToB, position: { ...b.pos }, hitSection: collisionHitSection(b, -nx, -ny) },
+      )
+
+      if (a.team === 'player') metrics = { ...metrics, playerDamageTaken: metrics.playerDamageTaken + damageToA }
+      if (b.team === 'player') metrics = { ...metrics, playerDamageTaken: metrics.playerDamageTaken + damageToB }
+
+      if (updatedA.destroyed && !a.destroyed && a.team === 'enemy') {
+        metrics = { ...metrics, enemiesDestroyed: metrics.enemiesDestroyed + 1 }
+        events.push({ tick: state.tick, type: 'entity.destroyed', targetId: a.id, position: { ...a.pos } })
+      }
+      if (updatedB.destroyed && !b.destroyed && b.team === 'enemy') {
+        metrics = { ...metrics, enemiesDestroyed: metrics.enemiesDestroyed + 1 }
+        events.push({ tick: state.tick, type: 'entity.destroyed', targetId: b.id, position: { ...b.pos } })
+      }
+    }
+  }
+
+  return { ...state, entities, eventLog: [...state.eventLog, ...events], metrics }
+}
+
+function collisionHitSection(ship: ShipEntity, nx: number, ny: number): string {
+  const dot = nx * Math.cos(ship.angle) + ny * Math.sin(ship.angle)
+  if (dot > 0.6) return 'bow'
+  if (dot < -0.6) return 'stern'
+  return 'superstructure'
 }

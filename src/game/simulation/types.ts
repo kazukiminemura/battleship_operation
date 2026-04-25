@@ -126,6 +126,7 @@ export type EventType =
   | 'entity.spawned'
   | 'entity.destroyed'
   | 'damage.taken'
+  | 'ship.collision'
   | 'objective.completed'
   | 'mission.completed'
   | 'mission.failed'
@@ -139,6 +140,7 @@ export interface CombatEvent {
   damage?: number
   position?: Vec3
   targetPosition?: Vec3
+  hitSection?: string
 }
 
 export interface Metrics {
