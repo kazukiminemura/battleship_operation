@@ -1,6 +1,7 @@
 import { MAX_WEAPON_SLOTS, type BuildingEntity, type CombatState, type ShipEntity, type WeaponType, type SpeedLevel } from '../simulation/types'
 import { roundRect } from '../rendering/canvas-utils'
 import { SPEED_LEVEL_LABEL, SPEED_LEVEL_ORDER, KNOTS_PER_UNIT } from '../simulation/movement'
+import { effectiveDetectionRange } from '../simulation/detection'
 import { getWeaponConfig } from '../simulation/weapon-strategies'
 import {
   HULL_SECTION_LABELS,
@@ -526,7 +527,7 @@ export class HUD {
     ctx.stroke()
 
     // detection range ring
-    const detR = (player.detectionRange / RADAR_WORLD_RANGE) * radarR
+    const detR = (effectiveDetectionRange(player.detectionRange, state.weather) / RADAR_WORLD_RANGE) * radarR
     ctx.beginPath()
     ctx.arc(cX, cY, detR, 0, Math.PI * 2)
     ctx.strokeStyle = 'rgba(20,200,160,0.45)'

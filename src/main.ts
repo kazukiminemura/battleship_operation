@@ -36,7 +36,7 @@ import {
 } from './game/simulation/player-commands'
 
 const BASE_SEED = 12345
-type GameMode = 'start' | 'prep' | 'stage-intro' | 'combat' | 'results'
+type GameMode = 'start' | 'designer' | 'prep' | 'stage-intro' | 'combat' | 'results'
 
 function main(): void {
   const canvas = document.getElementById('game-canvas') as HTMLCanvasElement
@@ -108,19 +108,29 @@ function main(): void {
   const openDesigner = (): void => {
     const el = document.getElementById('designer-root')!
     el.style.display = 'block'
+    mode = 'designer'
+    start.detach()
     if (!designerRoot) designerRoot = createRoot(el)
     designerRoot.render(createElement(ShipDesigner, {
       onClose:   closeDesigner,
       onConfirm: (result) => {
-        closeDesigner()
+        closeDesigner(false)
         applyPrepResult(result)
         goToStageIntro(currentStage)
       },
     }))
   }
 
-  const closeDesigner = (): void => {
+  const closeDesigner = (restoreStart = true): void => {
     document.getElementById('designer-root')!.style.display = 'none'
+    if (designerRoot) {
+      designerRoot.unmount()
+      designerRoot = null
+    }
+    if (restoreStart && mode === 'designer') {
+      mode = 'start'
+      start.attach()
+    }
   }
 
   const goToStart = (): void => {
@@ -149,6 +159,7 @@ function main(): void {
     paused = false
     input.setSuspended(false)
     currentStage = stage
+    start.detach()
     prep.detach()
     results.detach()
     mode = 'stage-intro'
@@ -483,6 +494,7 @@ function main(): void {
     },
     onRender: (_alpha) => {
       if (mode === 'start') { start.render(accessKeysVisible); return }
+      if (mode === 'designer') return
       if (mode === 'prep') { prep.render(accessKeysVisible); return }
       if (mode === 'stage-intro') {
         const stageDef = STATIC_DATA.stages[currentStage - 1]!

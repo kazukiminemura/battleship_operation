@@ -223,7 +223,7 @@ function buildShip(config: ShipDesignerPreviewConfig): THREE.Group {
   for (const weapon of config.weapons) {
     const mount = createWeapon(weapon)
     mount.name = weapon.name
-    mount.position.set(weapon.mount.y * l * 0.40, h * 0.54, weapon.mount.x * w * 0.44)
+    mount.position.set(-weapon.mount.y * l * 0.40, h * 0.54, weapon.mount.x * w * 0.44)
     mount.rotation.y = weapon.mount.y > 0.34 ? Math.PI : 0
     if (weapon.selected) mount.add(selectionRing(weapon.type === 'gun' ? 0.58 : 0.42))
     ship.add(mount)
@@ -267,7 +267,7 @@ function addSuperstructure(
   towerMount: { x: number; y: number },
 ): void {
   const bridge = new THREE.Group()
-  bridge.position.set(towerMount.y * length * 0.36, height * 0.54, towerMount.x * beam * 0.34)
+  bridge.position.set(-towerMount.y * length * 0.36, height * 0.54, towerMount.x * beam * 0.34)
   parent.add(bridge)
 
   const baseW = shape === 'destroyer' ? 0.82 : shape === 'cruiser' ? 1.10 : 1.38

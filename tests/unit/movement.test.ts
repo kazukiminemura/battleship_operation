@@ -36,6 +36,7 @@ function makeState(ships: ShipEntity[]): CombatState {
     stage: 1,
     stageName: 'Test Stage',
     maxStage: 10,
+    weather: 'clear',
     mapObstacles: [{ id: 'island.test', x: 5000, y: 5050, rx: 620, ry: 430 }],
     entities,
     eventLog: [],

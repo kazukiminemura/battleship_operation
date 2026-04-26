@@ -1,11 +1,11 @@
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useEffect } from 'react'
 import { WeaponPalette } from './WeaponPalette'
 import { HullView } from './HullView'
 import { WeightGauge } from './WeightGauge'
 import { StatsPanel } from './StatsPanel'
 import {
   getHullsByClass, calcStats, saveDesign, loadDesign,
-  getDesignerSlots, designToLoadout,
+  getDesignerSlots, designToLoadout, WEAPONS,
 } from './data'
 import type { Design } from './types'
 import type { PlayerShipType } from '../game/data/masterdata'
@@ -45,6 +45,17 @@ export function ShipDesigner({ onClose, onConfirm }: Props) {
   const handleSave  = () => { saveDesign(design); showToast('設計を保存しました') }
   const handleLoad  = () => { setDesign(loadDesign()); showToast('設計を読み込みました') }
   const handleReset = () => setDesign({})
+  const handleAutoPlace = () => {
+    const next: Design = {}
+    for (const slot of slots) {
+      const weapon = WEAPONS
+        .filter(w => slot.compatibleTypes.includes(w.type))
+        .sort((a, b) => weaponScore(b) - weaponScore(a) || b.weight - a.weight || a.name.localeCompare(b.name))[0]
+      if (weapon) next[slot.id] = weapon.id
+    }
+    setDesign(next)
+    showToast('兵装を自動配置しました')
+  }
 
   const handleSelectShip = (type: PlayerShipType) => {
     setShipType(type)
@@ -53,7 +64,7 @@ export function ShipDesigner({ onClose, onConfirm }: Props) {
     setStep('design')
   }
 
-  const handleDeploy = () => {
+  const handleDeploy = useCallback(() => {
     if (!onConfirm) return
     saveDesign(design)
     onConfirm({
@@ -62,7 +73,18 @@ export function ShipDesigner({ onClose, onConfirm }: Props) {
       loadout:    designToLoadout(design, hull),
       armorBonus: 0,
     })
-  }
+  }, [design, hull, onConfirm])
+
+  useEffect(() => {
+    if (step !== 'design' || !onConfirm) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code !== 'Space' || e.repeat) return
+      e.preventDefault()
+      handleDeploy()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [handleDeploy, onConfirm, step])
 
   /* ── Step 1: ship type selection ─────────────────────────────────────────── */
   if (step === 'ship-select') {
@@ -101,6 +123,7 @@ export function ShipDesigner({ onClose, onConfirm }: Props) {
         <div className="sd-header-actions">
           <button className="sd-btn" onClick={handleSave}>💾 保存</button>
           <button className="sd-btn" onClick={handleLoad}>📂 読込</button>
+          <button className="sd-btn sd-btn-auto" onClick={handleAutoPlace}>自動配置</button>
           <button className="sd-btn sd-btn-danger" onClick={handleReset}>🗑 リセット</button>
           <button className="sd-btn sd-btn-back" onClick={() => { setStep('ship-select'); setDesign({}) }}>
             ← 艦種変更
@@ -165,4 +188,10 @@ function showToast(msg: string) {
   el.textContent = msg
   el.classList.add('sd-toast--visible')
   setTimeout(() => el.classList.remove('sd-toast--visible'), 2000)
+}
+
+function weaponScore(weapon: { firepower?: number; antiAir?: number; accuracy: number; reload: number }): number {
+  const firepower = weapon.firepower ?? 0
+  const antiAir = weapon.antiAir ?? 0
+  return (firepower * 2.2 + antiAir * 1.6) * weapon.accuracy / Math.max(0.3, weapon.reload)
 }

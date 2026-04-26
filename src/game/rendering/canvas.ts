@@ -1,5 +1,6 @@
 import type { BuildingEntity, CombatEvent, CombatState, Entity, MapObstacle, ShipEntity, ProjectileEntity, Vec3, WeaponState, WeaponType } from '../simulation/types'
 import { isOnLand, WORLD_SIZE } from '../simulation/movement'
+import { effectiveDetectionRange } from '../simulation/detection'
 import { getWeaponConfig } from '../simulation/weapon-strategies'
 import { renderShipExplosions } from './effects-renderer'
 import { renderProjectile as renderProjectileEntity } from './projectile-renderer'
@@ -128,8 +129,9 @@ export class CanvasRenderer {
 
     const weather = battlefieldWeather(state)
     const player = state.entities.get('ship.player') as ShipEntity | undefined
+    const playerDetectionRange = player ? effectiveDetectionRange(player.detectionRange, state.weather) : 0
     const canSeePosition = (pos: Vec3 | undefined): boolean => (
-      !pos || !player || player.destroyed || distanceSq(pos, player.pos) <= player.detectionRange * player.detectionRange
+      !pos || !player || player.destroyed || distanceSq(pos, player.pos) <= playerDetectionRange * playerDetectionRange
     )
     const canSeeEvent = (ev: CombatEvent): boolean => {
       if (ev.position) return canSeePosition(ev.position)
@@ -2032,7 +2034,7 @@ export class CanvasRenderer {
     if (!player || player.destroyed) return
 
     const [px, py] = this.w2s(player.pos.x, player.pos.y)
-    const R = player.detectionRange * this.iso.scale  // approx screen radius
+    const R = effectiveDetectionRange(player.detectionRange, state.weather) * this.iso.scale  // approx screen radius
 
     // Draw fog everywhere outside the detection ellipse using composite op
     ctx.save()

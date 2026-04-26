@@ -25,6 +25,8 @@ import {
   mountToCell,
   moveTargetState,
   occupiedCells,
+  slotCell,
+  towerFootprint,
   weaponFootprint,
   type GridCell,
   type GridSpec,
@@ -60,6 +62,7 @@ type Region =
   | { tag: 'armor-down';                                x: number; y: number; w: number; h: number; accessKey?: string }
   | { tag: 'armor-bar';                                 x: number; y: number; w: number; h: number; accessKey?: string }
   | { tag: 'armament-view'; view: ArmamentView;          x: number; y: number; w: number; h: number; accessKey?: string }
+  | { tag: 'auto-place';                                x: number; y: number; w: number; h: number; accessKey?: string }
   | { tag: 'deploy';                                    x: number; y: number; w: number; h: number; accessKey?: string }
   | { tag: 'back';                                      x: number; y: number; w: number; h: number; accessKey?: string }
 
@@ -101,6 +104,7 @@ type ShipPreviewMode = 'card' | 'grid'
 
 const ARMOR_BONUS_STEP = 5
 const ARMOR_BONUS_MAX  = 100
+const AUTO_PLACE_MAX_DISTANCE_CELLS = Math.ceil(18 / GRID_CELL_METERS)
 
 export class PrepScreen {
   private canvas: HTMLCanvasElement
@@ -239,6 +243,10 @@ export class PrepScreen {
       case 'armament-view':
         this.armamentView = r.view
         this.lastAudioCue = 'select'
+        break
+
+      case 'auto-place':
+        this.lastAudioCue = this.autoPlaceArmament() ? 'equip' : 'denied'
         break
 
       case 'grid-slot':
@@ -479,6 +487,92 @@ export class PrepScreen {
     return WEAPON_SHOP.filter(w =>
       slot.compatibleTypes.includes(w.type) && w.minStage <= this.stage
     )
+  }
+
+  private autoPlaceArmament(): boolean {
+    const hull = this.selectedHull()
+    if (!hull) return false
+
+    const spec = gridSpec(hull)
+    const nextWeapons = new Map<string, ShopWeapon>()
+    const nextCells = new Map<string, GridCell>()
+    const towerCell = defaultTowerCell(hull, spec)
+    const placements: Placement[] = [{
+      id: 'tower',
+      kind: 'tower',
+      label: '管制塔',
+      cell: towerCell,
+      footprint: towerFootprint(hull),
+      color: '#d6b86a',
+    }]
+
+    for (const slot of hull.slots) {
+      const weapon = this.recommendedWeapon(hull, slot)
+      if (!weapon) continue
+
+      const footprint = weaponFootprint(weapon, slot)
+      const home = slotCell(slot, spec)
+      const cell = this.findAutoPlaceCell(home, footprint, placements, spec)
+      if (!cell) continue
+
+      nextWeapons.set(slot.id, weapon)
+      nextCells.set(slot.id, cell)
+      placements.push({
+        id: slot.id,
+        kind: 'weapon',
+        label: TYPE_JP[weapon.type] ?? slot.label,
+        cell,
+        footprint,
+        color: TYPE_COLOR[weapon.type] ?? '#3a6a42',
+        slot,
+        weapon,
+      })
+    }
+
+    if (nextWeapons.size === 0) return false
+    this.slotWeapons = nextWeapons
+    this.slotCells = nextCells
+    this.towerCell = towerCell
+    this.selectedSlotId = null
+    this.selectedTower = false
+    return true
+  }
+
+  private recommendedWeapon(hull: HullCatalogEntry, slot: HullSlot): ShopWeapon | null {
+    if (hull.templateId === 'hull.bb.yukimura') return this.defaultWeapon(hull, slot)
+
+    const compatible = this.getCompatible(slot)
+    const primaryType = slot.compatibleTypes[0]
+    const preferred = compatible.filter(w => w.type === primaryType)
+    const candidates = preferred.length > 0 ? preferred : compatible
+    return [...candidates].sort((a, b) =>
+      b.cost - a.cost || b.minStage - a.minStage || b.ammo - a.ammo || a.name.localeCompare(b.name)
+    )[0] ?? null
+  }
+
+  private findAutoPlaceCell(
+    home: GridCell,
+    footprint: { w: number; h: number },
+    placements: readonly Placement[],
+    spec: GridSpec,
+  ): GridCell | null {
+    const candidates: GridCell[] = []
+    for (let radius = 0; radius <= AUTO_PLACE_MAX_DISTANCE_CELLS; radius++) {
+      for (let dr = -radius; dr <= radius; dr++) {
+        for (let dc = -radius; dc <= radius; dc++) {
+          if (Math.max(Math.abs(dc), Math.abs(dr)) !== radius) continue
+          candidates.push({ c: home.c + dc, r: home.r + dr })
+        }
+      }
+    }
+
+    candidates.sort((a, b) => {
+      const da = squaredCellDistance(a, home)
+      const db = squaredCellDistance(b, home)
+      return da - db || Math.abs(a.c - spec.centerC) - Math.abs(b.c - spec.centerC) || a.r - b.r || a.c - b.c
+    })
+
+    return candidates.find(cell => canPlaceFootprint(cell, footprint, placements, '', spec)) ?? null
   }
 
   private currentPlacements(hull: HullCatalogEntry, spec = gridSpec(hull)): Placement[] {
@@ -1172,6 +1266,12 @@ export class PrepScreen {
       const region: Region = { tag: 'back', x: x + 12, y: y + 8, w: 154, h: ch - 16 }
       if (showAccessKeys) this.drawRegionAccessHint(ctx, region, x + 20, y + 16)
       this.addRegion(region)
+
+      const autoRegion: Region = { tag: 'auto-place', x: x + 178, y: y + 8, w: 150, h: ch - 16, accessKey: 'R' }
+      const autoHover = this.hovered?.tag === 'auto-place'
+      this.drawBtn(autoRegion.x, autoRegion.y, autoRegion.w, autoRegion.h, '自動配置', autoHover ? '#1f7a33' : ACCENT, '#cceccc', 18)
+      if (showAccessKeys) this.drawRegionAccessHint(ctx, autoRegion, autoRegion.x + 8, autoRegion.y + 8)
+      this.addRegion(autoRegion)
     }
     if (this.tab === 'hull' && this.selectedHull()) {
       this.drawBtn(x + 12, y + 8, 164, ch - 16, '兵装配置 →', ACCENT, '#cceccc', 18)
@@ -1650,6 +1750,7 @@ export class PrepScreen {
       const index = visibleWeaponCards.findIndex(x => x === r)
       return index >= 0 && index < 9 ? String(index + 1) : null
     }
+    if (r.tag === 'auto-place') return 'R'
     if (r.tag === 'armor-down') return '-'
     if (r.tag === 'armor-up') return '+'
     if (r.tag === 'deploy') return 'P'
@@ -1683,6 +1784,12 @@ function filterAccessKey(filter: WeaponFilter): string {
   if (filter === 'torpedo') return 'T'
   if (filter === 'aa') return 'F'
   return 'M'
+}
+
+function squaredCellDistance(a: GridCell, b: GridCell): number {
+  const dc = a.c - b.c
+  const dr = a.r - b.r
+  return dc * dc + dr * dr
 }
 
 function polygonPath(ctx: CanvasRenderingContext2D, points: [number, number][]): void {

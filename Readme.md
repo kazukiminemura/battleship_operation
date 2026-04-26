@@ -142,3 +142,5 @@ docs/             # design and harness engineering docs
 ## Status
 
 This is an early playable prototype. The next major milestones are ship selection, ship design, richer mission objectives, golden replay comparison, and broader browser E2E coverage.
+
+ゲーム開発「プロトタイプ」「アルファ」「ベータ」「マスター」

@@ -8,7 +8,7 @@ import { isInterceptableProjectile } from './interception'
 import { getWeaponConfig } from './weapon-strategies'
 import { generateAiCommands, generateAutoPilotCommands } from './ai'
 import { evaluateMission } from './mission'
-import { stepDetection } from './detection'
+import { effectiveDetectionRange, stepDetection } from './detection'
 
 export function combatStep(
   state: CombatState,
@@ -98,7 +98,7 @@ function generateAutoFireCommands(state: CombatState): Command[] {
   const projectileTargets: { pos: Vec3; vel: Vec3; kind: 'projectile' }[] = [...state.entities.values()]
     .filter(e => e.kind === 'projectile')
     .map(e => e as ProjectileEntity)
-    .filter(p => isIncomingThreat(p, playerShip, state.entities))
+    .filter(p => isIncomingThreat(p, playerShip, state.entities, state.weather))
     .map(p => ({ pos: p.pos, vel: p.vel, kind: 'projectile' as const }))
 
   if (surfaceTargets.length === 0 && projectileTargets.length === 0) return cmds
@@ -139,14 +139,15 @@ function generateAutoFireCommands(state: CombatState): Command[] {
   return cmds
 }
 
-function isIncomingThreat(projectile: ProjectileEntity, player: ShipEntity, entities: Map<string, Entity>): boolean {
+function isIncomingThreat(projectile: ProjectileEntity, player: ShipEntity, entities: Map<string, Entity>, weather: CombatState['weather']): boolean {
   if (!isInterceptableProjectile(projectile)) return false
   const owner = entities.get(projectile.ownerId)
   const ownerTeam = owner?.kind === 'ship' ? owner.team : undefined
   if (ownerTeam !== 'enemy') return false
   const dx = projectile.pos.x - player.pos.x
   const dy = projectile.pos.y - player.pos.y
-  return dx * dx + dy * dy <= player.detectionRange * player.detectionRange
+  const detectionRange = effectiveDetectionRange(player.detectionRange, weather)
+  return dx * dx + dy * dy <= detectionRange * detectionRange
 }
 
 function applyCommands(state: CombatState, commands: Command[], rng: RngStreams): CombatState {
