@@ -6,11 +6,12 @@ interface Props {
   slots: SlotDef[]
   design: Design
   draggingWeaponId: string | null
+  scale?: number
   onDrop: (slotId: string, weaponId: string) => void
   onRemove: (slotId: string) => void
 }
 
-export function HullView({ slots, design, draggingWeaponId, onDrop, onRemove }: Props) {
+export function HullView({ slots, design, draggingWeaponId, scale = 1, onDrop, onRemove }: Props) {
   const draggingWeapon = draggingWeaponId ? WEAPON_BY_ID[draggingWeaponId] ?? null : null
 
   const handleDrop = (slotId: string, weaponId: string) => {
@@ -22,7 +23,7 @@ export function HullView({ slots, design, draggingWeaponId, onDrop, onRemove }: 
   }
 
   return (
-    <div className="sd-hull-wrapper">
+    <div className="sd-hull-wrapper" style={{ width: `${160 * scale}px`, height: `${700 * scale}px` }}>
       {/* SVG battleship silhouette — viewBox 200×875, rendered 160×700px → ~6.7:1 ratio */}
       <svg
         className="sd-hull-svg"

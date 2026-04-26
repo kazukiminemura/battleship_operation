@@ -168,6 +168,7 @@ export function ShipDesigner({ onClose, onConfirm }: Props) {
             slots={slots}
             design={design}
             draggingWeaponId={draggingWeaponId}
+            scale={1 + hullIdx * 0.1}
             onDrop={handleDrop}
             onRemove={handleRemove}
           />
