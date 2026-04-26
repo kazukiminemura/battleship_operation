@@ -3,6 +3,7 @@ import { ARMOR_WEIGHT_K } from '../data/masterdata'
 import { getHullsByClass, type HullCatalogEntry, type HullSlot } from '../data/hull-catalog'
 import { WEAPON_SHOP, TYPE_COLOR, TYPE_JP, type ShopWeapon } from '../data/weapon-shop'
 import type { WeaponType } from '../simulation/types'
+import { ThreeShipDesignerRenderer, type ShipDesignerPreviewConfig } from '../rendering/three-ship-designer-renderer'
 import { drawAccessKeyHint, isAccessKey } from './accesskeys'
 import {
   GRID_CELL_METERS,
@@ -13,6 +14,7 @@ import {
   cellKey,
   cellToMount,
   currentSlotCell,
+  defaultTowerCell,
   footprintRect,
   gridSpec,
   hullDimensions,
@@ -36,6 +38,7 @@ export interface PrepResult {
 }
 
 type ScreenTab = 'hull' | 'armament'
+type ArmamentView = 'grid' | 'preview3d'
 type WeaponFilter = WeaponType | 'all'
 export type PrepAudioCue = 'select' | 'place' | 'equip' | 'back' | 'confirm' | 'denied'
 
@@ -51,6 +54,7 @@ type Region =
   | { tag: 'armor-up';                                  x: number; y: number; w: number; h: number; accessKey?: string }
   | { tag: 'armor-down';                                x: number; y: number; w: number; h: number; accessKey?: string }
   | { tag: 'armor-bar';                                 x: number; y: number; w: number; h: number; accessKey?: string }
+  | { tag: 'armament-view'; view: ArmamentView;          x: number; y: number; w: number; h: number; accessKey?: string }
   | { tag: 'deploy';                                    x: number; y: number; w: number; h: number; accessKey?: string }
   | { tag: 'back';                                      x: number; y: number; w: number; h: number; accessKey?: string }
 
@@ -106,17 +110,20 @@ export class PrepScreen {
   private selectedHullIdx = 0
   private selectedSlotId: string | null = null
   private selectedTower = false
+  private armamentView: ArmamentView = 'grid'
   private weaponFilter: WeaponFilter = 'all'
   private slotWeapons = new Map<string, ShopWeapon>()  // slotId → weapon
   private slotCells = new Map<string, { c: number; r: number }>()
   private towerCell: GridCell | null = null
   private armorBonus = 0
   private lastAudioCue: PrepAudioCue | null = null
+  private readonly shipPreview: ThreeShipDesignerRenderer
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas
     this.ctx = canvas.getContext('2d')!
     this.onMoveRef = (e) => this.onMouseMove(e)
+    this.shipPreview = new ThreeShipDesignerRenderer()
   }
 
   attach(stage: number, inheritedDesign: PrepResult | null = null): void {
@@ -126,6 +133,7 @@ export class PrepScreen {
     this.selectedHullIdx = 0
     this.selectedSlotId = null
     this.selectedTower = false
+    this.armamentView = 'grid'
     this.weaponFilter = 'all'
     this.slotWeapons = new Map()
     this.slotCells = new Map()
@@ -138,6 +146,7 @@ export class PrepScreen {
   detach(): void {
     this.canvas.removeEventListener('mousemove', this.onMoveRef)
     this.hovered = null
+    this.shipPreview.hide()
   }
 
   checkClick(e: MouseEvent): PrepResult | null {
@@ -219,6 +228,11 @@ export class PrepScreen {
 
       case 'type-tab':
         this.weaponFilter = r.filter
+        this.lastAudioCue = 'select'
+        break
+
+      case 'armament-view':
+        this.armamentView = r.view
         this.lastAudioCue = 'select'
         break
 
@@ -333,10 +347,15 @@ export class PrepScreen {
     const mainY = TAB_H
     const mainH = ch - TAB_H - STAT_H - BTN_H
     this.drawTopTabs(cw, TAB_H, showAccessKeys)
-    if (this.tab === 'hull') this.renderHullTab(0, mainY, cw, mainH, showAccessKeys)
-    else                     this.renderArmamentTab(0, mainY, cw, mainH, showAccessKeys)
+    if (this.tab === 'hull') {
+      this.shipPreview.hide()
+      this.renderHullTab(0, mainY, cw, mainH, showAccessKeys)
+    } else {
+      this.renderArmamentTab(0, mainY, cw, mainH, showAccessKeys)
+    }
     this.renderStatsBar(0, ch - STAT_H - BTN_H, cw, STAT_H)
     this.renderButtons(0, ch - BTN_H, cw, BTN_H, showAccessKeys)
+    this.shipPreview.update()
   }
 
   // ── Data helpers ─────────────────────────────────────────────────────────
@@ -422,6 +441,32 @@ export class PrepScreen {
 
   private currentPlacements(hull: HullCatalogEntry, spec = gridSpec(hull)): Placement[] {
     return buildPlacements(hull, spec, this.slotWeapons, this.slotCells, this.towerCell)
+  }
+
+  private previewConfig(hull: HullCatalogEntry): ShipDesignerPreviewConfig {
+    const spec = gridSpec(hull)
+    const towerCell = this.towerCell ?? defaultTowerCell(hull, spec)
+    const weapons = hull.slots
+      .map((slot) => {
+        const weapon = this.slotWeapons.get(slot.id) ?? this.defaultWeapon(hull, slot)
+        if (!weapon) return null
+        const cell = currentSlotCell(slot, spec, this.slotCells)
+        return {
+          id: weapon.id,
+          name: weapon.name,
+          type: weapon.type,
+          mount: cellToMount(cell.c, cell.r, spec),
+          selected: this.selectedSlotId === slot.id,
+        }
+      })
+      .filter((weapon): weapon is ShipDesignerPreviewConfig['weapons'][number] => weapon !== null)
+
+    return {
+      hull,
+      weapons,
+      towerMount: cellToMount(towerCell.c, towerCell.r, spec),
+      armorBonus: this.armorBonus,
+    }
   }
 
   // ── Background ────────────────────────────────────────────────────────────
@@ -548,7 +593,12 @@ export class PrepScreen {
     const PALETTE_W = Math.floor(cw * 0.36)
     const gridAreaW = cw - PALETTE_W
 
-    this.drawGridArea(x, y, gridAreaW, ch, hull)
+    if (this.armamentView === 'preview3d') {
+      this.drawPreview3dArea(x, y, gridAreaW, ch, hull, showAccessKeys)
+    } else {
+      this.shipPreview.hide()
+      this.drawGridArea(x, y, gridAreaW, ch, hull, showAccessKeys)
+    }
 
     // Right panel
     const ctx = this.ctx
@@ -560,7 +610,7 @@ export class PrepScreen {
 
   // ── Grid area (left/center) ───────────────────────────────────────────────
 
-  private drawGridArea(px: number, py: number, pw: number, ph: number, hull: HullCatalogEntry): void {
+  private drawGridArea(px: number, py: number, pw: number, ph: number, hull: HullCatalogEntry, showAccessKeys: boolean): void {
     const ctx = this.ctx
     const spec = gridSpec(hull)
     const placements = this.currentPlacements(hull, spec)
@@ -579,6 +629,7 @@ export class PrepScreen {
     const gy = gridPy + (gridPh - gridH) / 2  // grid top edge
 
     this.drawSideProfile(px + 18, py + 8, pw - 36, sideH - 6, hull, spec, cellPx)
+    this.drawArmamentViewSwitch(px + pw - 188, py + 10, 170, 30, showAccessKeys)
 
     const hw = spec.beamCells / 2
     const hh = spec.lengthCells / 2
@@ -666,6 +717,70 @@ export class PrepScreen {
     ctx.textAlign = 'right'
     for (let r = 0; r < spec.rows; r += 4) {
       ctx.fillText(`${Math.round((r - spec.topR) * GRID_CELL_METERS)}`, gx - 2, gy + r * CH + CH / 2 + 3)
+    }
+  }
+
+  private drawPreview3dArea(px: number, py: number, pw: number, ph: number, hull: HullCatalogEntry, showAccessKeys: boolean): void {
+    const ctx = this.ctx
+    const previewX = px + 18
+    const previewY = py + 52
+    const previewW = pw - 36
+    const previewH = ph - 82
+
+    ctx.fillStyle = '#071117'
+    ctx.fillRect(px, py, pw, ph)
+    ctx.strokeStyle = 'rgba(45,90,104,0.36)'
+    ctx.lineWidth = 1
+    for (let y = py + 60; y < py + ph; y += 36) {
+      ctx.beginPath()
+      for (let x = px; x <= px + pw; x += 8) {
+        const wy = y + Math.sin(x * 0.018) * 3
+        x === px ? ctx.moveTo(x, wy) : ctx.lineTo(x, wy)
+      }
+      ctx.stroke()
+    }
+
+    ctx.fillStyle = 'rgba(6,17,23,0.72)'
+    ctx.fillRect(previewX - 1, previewY - 1, previewW + 2, previewH + 2)
+    ctx.strokeStyle = '#2e393d'
+    ctx.strokeRect(previewX - 1, previewY - 1, previewW + 2, previewH + 2)
+
+    ctx.font = 'bold 18px sans-serif'
+    ctx.fillStyle = '#d7b56d'
+    ctx.textAlign = 'left'
+    ctx.fillText('3D確認', px + 18, py + 30)
+    ctx.font = '13px sans-serif'
+    ctx.fillStyle = '#91a3a8'
+    ctx.fillText(`${hull.name} / 兵装 ${this.previewConfig(hull).weapons.length}基 / 装甲 +${this.armorBonus}`, px + 90, py + 30)
+    this.drawArmamentViewSwitch(px + pw - 188, py + 10, 170, 30, showAccessKeys)
+
+    this.shipPreview.setViewportFromCanvas(this.canvas, previewX, previewY, previewW, previewH)
+    this.shipPreview.show(this.previewConfig(hull))
+  }
+
+  private drawArmamentViewSwitch(x: number, y: number, w: number, h: number, showAccessKeys: boolean): void {
+    const ctx = this.ctx
+    const views: { view: ArmamentView; label: string }[] = [
+      { view: 'grid', label: '配置図' },
+      { view: 'preview3d', label: '3D確認' },
+    ]
+    const cellW = w / views.length
+    for (let i = 0; i < views.length; i++) {
+      const item = views[i]!
+      const bx = x + i * cellW
+      const active = this.armamentView === item.view
+      const hovered = this.hovered?.tag === 'armament-view' && this.hovered.view === item.view
+      ctx.fillStyle = active ? '#263239' : hovered ? '#16251f' : '#0c1810'
+      ctx.fillRect(bx, y, cellW, h)
+      ctx.strokeStyle = active ? '#d7b56d' : '#2e393d'
+      ctx.strokeRect(bx, y, cellW, h)
+      ctx.font = `${active ? 'bold ' : ''}13px sans-serif`
+      ctx.fillStyle = active ? '#eef4f3' : '#91a3a8'
+      ctx.textAlign = 'center'
+      ctx.fillText(item.label, bx + cellW / 2, y + h * 0.67)
+      const region: Region = { tag: 'armament-view', view: item.view, x: bx, y, w: cellW, h }
+      if (showAccessKeys) this.drawRegionAccessHint(ctx, region, bx + 5, y + 5)
+      this.addRegion(region)
     }
   }
 
@@ -1428,6 +1543,7 @@ export class PrepScreen {
     if (r.tag === 'main-tab') return r.tab === 'hull' ? 'H' : 'A'
     if (r.tag === 'class-tab') return classAccessKey(r.shipType)
     if (r.tag === 'type-tab') return filterAccessKey(r.filter)
+    if (r.tag === 'armament-view') return r.view === 'grid' ? 'G' : 'V'
     if (r.tag === 'hull-card') return r.index < 9 ? String(r.index + 1) : null
     if (r.tag === 'weapon-card') {
       const visibleWeaponCards = this.regions.filter(x => x.tag === 'weapon-card')

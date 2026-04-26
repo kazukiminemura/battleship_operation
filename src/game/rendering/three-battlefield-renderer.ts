@@ -77,6 +77,26 @@ export class ThreeBattlefieldRenderer {
     })
     this.renderer.setClearColor(0x000000, 0)
     this.renderer.outputColorSpace = THREE.SRGBColorSpace
+    this.renderer.shadowMap.enabled = true
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping
+    this.renderer.toneMappingExposure = 0.9
+
+    // Add lighting for 3D ship rendering
+    const ambientLight = new THREE.AmbientLight(0xb8d7f5, 0.30)
+    this.scene.add(ambientLight)
+
+    const directionalLight = new THREE.DirectionalLight(0xfff0d2, 1.35)
+    directionalLight.position.set(200, 300, 400)
+    directionalLight.castShadow = false
+    this.scene.add(directionalLight)
+
+    const hemisphereLight = new THREE.HemisphereLight(0xa7cff0, 0x102032, 0.52)
+    this.scene.add(hemisphereLight)
+
+    const rimLight = new THREE.DirectionalLight(0x6db7ff, 0.55)
+    rimLight.position.set(-260, 90, -220)
+    this.scene.add(rimLight)
 
     this.oceanMaterial = new THREE.ShaderMaterial({
       transparent: false,
@@ -344,17 +364,25 @@ export class ThreeBattlefieldRenderer {
     // Update existing particles
     for (let i = 0; i < activeCount; i++) {
       const lifetime = this.splashLifetimes[i]
-      if (lifetime >= 1) continue
+      if (lifetime === undefined || lifetime >= 1) continue
       
       // Apply gravity
-      this.splashVelocities[i * 3 + 1] -= gravity
+      const velIdx = i * 3 + 1
+      if (this.splashVelocities[velIdx] !== undefined) {
+        this.splashVelocities[velIdx] -= gravity
+      }
       
       // Update position
-      this.splashPositions[i * 3] += this.splashVelocities[i * 3]
-      this.splashPositions[i * 3 + 1] += this.splashVelocities[i * 3 + 1]
+      const posIdx = i * 3
+      if (this.splashPositions[posIdx] !== undefined && this.splashVelocities[posIdx] !== undefined) {
+        this.splashPositions[posIdx] += this.splashVelocities[posIdx]
+      }
+      if (this.splashPositions[velIdx] !== undefined && this.splashVelocities[velIdx] !== undefined) {
+        this.splashPositions[velIdx] += this.splashVelocities[velIdx]
+      }
       
       // Update lifetime
-      this.splashLifetimes[i] += 0.033
+      this.splashLifetimes[i] = (this.splashLifetimes[i] ?? 0) + 0.033
     }
     
     // Update geometry
@@ -370,8 +398,96 @@ export class ThreeBattlefieldRenderer {
     const l = dim.l * modelScale
     const w = dim.w * modelScale
     const h = Math.max(4, dim.h * modelScale * 0.55)
+    const hullThickness = h * 0.35 // Thickness for extruded hull
     const palette = shipPalette(ship, shape)
 
+    // Create standard materials for 3D rendering
+    const hullMaterial = new THREE.MeshStandardMaterial({
+      color: palette.hullTop,
+      roughness: 0.6,
+      metalness: 0.3,
+      transparent: true,
+      opacity: 0.98,
+    })
+    const deckMaterial = new THREE.MeshStandardMaterial({
+      color: palette.deck,
+      roughness: 0.7,
+      metalness: 0.2,
+      transparent: true,
+      opacity: 0.96,
+    })
+    const sideMaterial = new THREE.MeshStandardMaterial({
+      color: palette.side,
+      roughness: 0.55,
+      metalness: 0.35,
+      transparent: true,
+      opacity: 0.92,
+    })
+    const superstructureMaterial = new THREE.MeshStandardMaterial({
+      color: palette.superstructure,
+      roughness: 0.65,
+      metalness: 0.25,
+      transparent: true,
+      opacity: 0.96,
+    })
+    const bridgeMaterial = new THREE.MeshStandardMaterial({
+      color: palette.bridge,
+      roughness: 0.6,
+      metalness: 0.25,
+      transparent: true,
+      opacity: 0.96,
+    })
+    const turretMaterial = new THREE.MeshStandardMaterial({
+      color: palette.turret,
+      roughness: 0.5,
+      metalness: 0.4,
+      transparent: true,
+      opacity: 0.98,
+    })
+    const funnelMaterial = new THREE.MeshStandardMaterial({
+      color: palette.funnel,
+      roughness: 0.55,
+      metalness: 0.35,
+      transparent: true,
+      opacity: 0.94,
+    })
+    const barrelMaterial = new THREE.MeshStandardMaterial({
+      color: palette.barrel,
+      roughness: 0.45,
+      metalness: 0.5,
+      transparent: true,
+      opacity: 0.95,
+    })
+    const secondaryMaterial = new THREE.MeshStandardMaterial({
+      color: palette.secondary,
+      roughness: 0.55,
+      metalness: 0.35,
+      transparent: true,
+      opacity: 0.88,
+    })
+    const mastMaterial = new THREE.MeshStandardMaterial({
+      color: palette.barrel,
+      roughness: 0.5,
+      metalness: 0.4,
+      transparent: true,
+      opacity: 0.80,
+    })
+    const highlightMaterial = new THREE.MeshStandardMaterial({
+      color: palette.highlight,
+      roughness: 0.5,
+      metalness: 0.3,
+      transparent: true,
+      opacity: 0.86,
+    })
+    const beltMaterial = new THREE.MeshStandardMaterial({
+      color: palette.belt,
+      roughness: 0.45,
+      metalness: 0.45,
+      transparent: true,
+      opacity: 0.80,
+    })
+
+    // Shadow (keep 2D for compatibility)
     const shadow = new THREE.Mesh(
       ellipseShapeGeometry(l * 0.58, w * 0.72, 36),
       new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.30, depthWrite: false }),
@@ -380,133 +496,176 @@ export class ThreeBattlefieldRenderer {
     shadow.scale.y = 0.58
     group.add(shadow)
 
-    const hullTop = new THREE.Mesh(
-      hullShapeGeometry(shape, l, w),
-      new THREE.MeshBasicMaterial({ color: palette.hullTop, transparent: true, opacity: 0.98 }),
-    )
-    hullTop.position.set(0, -h, 5)
-    group.add(hullTop)
+    // === 3D HULL (ExtrudeGeometry with bevel) ===
+    const hullShape = createHullShape(shape, l, w)
+    const hullExtrudeSettings = {
+      depth: hullThickness,
+      bevelEnabled: true,
+      bevelThickness: Math.max(1, hullThickness * 0.15),
+      bevelSize: Math.max(0.8, hullThickness * 0.12),
+      bevelSegments: 3,
+    }
+    const hullGeometry = new THREE.ExtrudeGeometry(hullShape, hullExtrudeSettings)
+    // Rotate to lay flat on the deck
+    hullGeometry.rotateX(Math.PI / 2)
+    const hullMesh = new THREE.Mesh(hullGeometry, hullMaterial)
+    hullMesh.position.set(0, -h + hullThickness * 0.3, 5)
+    group.add(hullMesh)
 
-    const deck = new THREE.Mesh(
-      deckShapeGeometry(shape, l * 0.84, w * 0.58),
-      new THREE.MeshBasicMaterial({ color: palette.deck, transparent: true, opacity: 0.96 }),
-    )
-    deck.position.set(-l * 0.03, -h - 0.5, 9)
-    group.add(deck)
+    // === 3D DECK ===
+    const deckShape = createDeckShape(shape, l * 0.84, w * 0.58)
+    const deckExtrudeSettings = {
+      depth: hullThickness * 0.4,
+      bevelEnabled: true,
+      bevelThickness: Math.max(0.5, hullThickness * 0.08),
+      bevelSize: Math.max(0.4, hullThickness * 0.06),
+      bevelSegments: 2,
+    }
+    const deckGeometry = new THREE.ExtrudeGeometry(deckShape, deckExtrudeSettings)
+    deckGeometry.rotateX(Math.PI / 2)
+    const deckMesh = new THREE.Mesh(deckGeometry, deckMaterial)
+    deckMesh.position.set(-l * 0.03, -h - 0.2, 9)
+    group.add(deckMesh)
 
-    const bowDeck = new THREE.Mesh(
-      deckShapeGeometry(shape, l * 0.30, w * 0.38),
-      new THREE.MeshBasicMaterial({ color: palette.hullTop, transparent: true, opacity: 0.98 }),
-    )
-    bowDeck.position.set(l * 0.28, -h - 0.8, 10)
-    group.add(bowDeck)
+    // === BOW DECK (front section) ===
+    const bowDeckShape = createDeckShape(shape, l * 0.30, w * 0.38)
+    const bowDeckGeometry = new THREE.ExtrudeGeometry(bowDeckShape, deckExtrudeSettings)
+    bowDeckGeometry.rotateX(Math.PI / 2)
+    const bowDeckMesh = new THREE.Mesh(bowDeckGeometry, hullMaterial)
+    bowDeckMesh.position.set(l * 0.28, -h - 0.4, 10)
+    group.add(bowDeckMesh)
 
-    const side = new THREE.Mesh(
-      hullShapeGeometry(shape, l, w),
-      new THREE.MeshBasicMaterial({ color: palette.side, transparent: true, opacity: 0.92 }),
-    )
-    side.position.set(0, 0, 2)
-    side.scale.set(1.02, 1.04, 1)
-    group.add(side)
+    // === SIDE/RAIL (3D) ===
+    const sideShape = createHullShape(shape, l, w)
+    const sideExtrudeSettings = {
+      depth: hullThickness * 0.25,
+      bevelEnabled: false,
+    }
+    const sideGeometry = new THREE.ExtrudeGeometry(sideShape, sideExtrudeSettings)
+    sideGeometry.rotateX(Math.PI / 2)
+    const sideMesh = new THREE.Mesh(sideGeometry, sideMaterial)
+    sideMesh.position.set(0, 0, 2)
+    sideMesh.scale.set(1.02, 1.04, 1)
+    group.add(sideMesh)
 
-    const armorBelt = new THREE.Mesh(
-      new THREE.PlaneGeometry(l * 0.86, Math.max(2, w * 0.13)),
-      new THREE.MeshBasicMaterial({ color: palette.belt, transparent: true, opacity: 0.80 }),
-    )
-    armorBelt.position.set(-l * 0.04, -h + w * 0.14, 8)
-    group.add(armorBelt)
+    // === ARMOR BELT (3D) ===
+    const armorBeltGeometry = new THREE.BoxGeometry(l * 0.86, Math.max(2, w * 0.13), hullThickness * 0.5)
+    const armorBeltMesh = new THREE.Mesh(armorBeltGeometry, beltMaterial)
+    armorBeltMesh.position.set(-l * 0.04, -h + w * 0.14, 8)
+    group.add(armorBeltMesh)
 
+    // === DECK PLANKS (3D) ===
     for (let i = 0; i < 4; i++) {
       const x = -l * 0.32 + i * l * 0.17
-      const plank = new THREE.Mesh(
-        new THREE.PlaneGeometry(l * 0.09, Math.max(1, w * 0.035)),
-        new THREE.MeshBasicMaterial({ color: palette.deckLine, transparent: true, opacity: 0.42 }),
-      )
+      const plankGeometry = new THREE.BoxGeometry(l * 0.09, Math.max(1, w * 0.035), 0.3)
+      const plankMaterial = new THREE.MeshStandardMaterial({
+        color: palette.deckLine,
+        roughness: 0.75,
+        metalness: 0.15,
+        transparent: true,
+        opacity: 0.42,
+      })
+      const plank = new THREE.Mesh(plankGeometry, plankMaterial)
       plank.position.set(x, -h, 13)
       group.add(plank)
     }
 
-    const superstructure = new THREE.Mesh(
-      roundedBoxGeometry(l * superstructureLength(shape), Math.max(4, w * 0.36), 6),
-      new THREE.MeshBasicMaterial({ color: palette.superstructure, transparent: true, opacity: 0.96 }),
+    // === SUPERSTRUCTURE (3D Box) ===
+    const superstructureGeometry = new THREE.BoxGeometry(
+      l * superstructureLength(shape),
+      Math.max(4, w * 0.36),
+      hullThickness * 0.6,
     )
-    superstructure.position.set(-l * 0.06, -h - w * 0.02, 17)
-    group.add(superstructure)
+    const superstructureMesh = new THREE.Mesh(superstructureGeometry, superstructureMaterial)
+    superstructureMesh.position.set(-l * 0.06, -h - w * 0.02, 17)
+    group.add(superstructureMesh)
 
-    const bridge = new THREE.Mesh(
-      roundedBoxGeometry(l * 0.15, Math.max(4, w * 0.30), 6),
-      new THREE.MeshBasicMaterial({ color: palette.bridge, transparent: true, opacity: 0.96 }),
+    // === BRIDGE (3D Box) ===
+    const bridgeGeometry = new THREE.BoxGeometry(l * 0.15, Math.max(4, w * 0.30), hullThickness * 0.5)
+    const bridgeMesh = new THREE.Mesh(bridgeGeometry, bridgeMaterial)
+    bridgeMesh.position.set(l * 0.03, -h - w * 0.05, 23)
+    group.add(bridgeMesh)
+
+    // === BRIDGE TOP (3D) ===
+    const bridgeTopGeometry = new THREE.CylinderGeometry(
+      Math.max(2.5, w * 0.15),
+      Math.max(2.5, w * 0.15),
+      hullThickness * 0.25,
+      18,
     )
-    bridge.position.set(l * 0.03, -h - w * 0.05, 23)
-    group.add(bridge)
+    const bridgeTopMesh = new THREE.Mesh(bridgeTopGeometry, highlightMaterial)
+    bridgeTopMesh.position.set(l * 0.04, -h - w * 0.05, 27)
+    group.add(bridgeTopMesh)
 
-    const bridgeTop = new THREE.Mesh(
-      ellipseShapeGeometry(Math.max(4, l * 0.045), Math.max(2.5, w * 0.15), 18),
-      new THREE.MeshBasicMaterial({ color: palette.highlight, transparent: true, opacity: 0.86 }),
-    )
-    bridgeTop.position.set(l * 0.04, -h - w * 0.05, 27)
-    group.add(bridgeTop)
-
+    // === FUNNELS (3D Cylinder) ===
     for (const stack of funnelLayout(shape, l, w)) {
-      const funnel = new THREE.Mesh(
-        ellipseShapeGeometry(stack.rX, stack.rY, 16),
-        new THREE.MeshBasicMaterial({ color: palette.funnel, transparent: true, opacity: 0.94 }),
-      )
-      funnel.position.set(stack.x, -h + stack.y, 25)
-      group.add(funnel)
-      const cap = new THREE.Mesh(
-        ellipseShapeGeometry(stack.rX * 0.72, stack.rY * 0.60, 16),
-        new THREE.MeshBasicMaterial({ color: palette.belt, transparent: true, opacity: 0.88 }),
-      )
-      cap.position.set(stack.x + stack.rX * 0.10, -h + stack.y, 28)
-      group.add(cap)
+      const funnelHeight = stack.rY * 2.5
+      const funnelGeometry = new THREE.CylinderGeometry(stack.rX * 0.85, stack.rX, funnelHeight, 16)
+      const funnelMesh = new THREE.Mesh(funnelGeometry, funnelMaterial)
+      funnelMesh.position.set(stack.x, -h + stack.y + funnelHeight / 2, 25)
+      group.add(funnelMesh)
+
+      // Funnel cap
+      const capGeometry = new THREE.CylinderGeometry(stack.rX * 0.5, stack.rX * 0.6, hullThickness * 0.2, 16)
+      const capMesh = new THREE.Mesh(capGeometry, beltMaterial)
+      capMesh.position.set(stack.x + stack.rX * 0.10, -h + stack.y + funnelHeight * 0.55, 28)
+      group.add(capMesh)
     }
 
+    // === TURRETS (3D Cylinder) ===
     for (const mount of turretLayout(shape, l, w)) {
-      const turret = new THREE.Mesh(
-        ellipseShapeGeometry(mount.r, mount.r * 0.82, 22),
-        new THREE.MeshBasicMaterial({ color: palette.turret, transparent: true, opacity: 0.98 }),
-      )
-      turret.position.set(mount.x, -h + mount.y, 30)
-      group.add(turret)
+      const turretHeight = mount.r * 0.7
+      const turretGeometry = new THREE.CylinderGeometry(mount.r * 0.9, mount.r, turretHeight, 22)
+      const turretMesh = new THREE.Mesh(turretGeometry, turretMaterial)
+      turretMesh.position.set(mount.x, -h + mount.y + turretHeight / 2, 30)
+      group.add(turretMesh)
 
-      const turretCap = new THREE.Mesh(
-        ellipseShapeGeometry(mount.r * 0.58, mount.r * 0.44, 18),
-        new THREE.MeshBasicMaterial({ color: palette.highlight, transparent: true, opacity: 0.75 }),
-      )
-      turretCap.position.set(mount.x + mount.r * 0.05, -h + mount.y - mount.r * 0.05, 31)
-      group.add(turretCap)
+      // Turret cap (dome)
+      const turretCapGeometry = new THREE.SphereGeometry(mount.r * 0.55, 18, 12, 0, Math.PI * 2, 0, Math.PI / 2)
+      const turretCapMesh = new THREE.Mesh(turretCapGeometry, highlightMaterial)
+      turretCapMesh.position.set(mount.x + mount.r * 0.05, -h + mount.y + turretHeight, 31)
+      turretCapMesh.rotation.x = -Math.PI / 2
+      group.add(turretCapMesh)
 
+      // === BARRELS (3D Cylinder) ===
       for (let i = 0; i < mount.barrels; i++) {
-        const barrel = new THREE.Mesh(
-          new THREE.PlaneGeometry(Math.max(8, mount.r * 3.8), Math.max(1.2, mount.r * 0.18)),
-          new THREE.MeshBasicMaterial({ color: palette.barrel, transparent: true, opacity: 0.95 }),
+        const barrelLength = Math.max(8, mount.r * 3.8)
+        const barrelRadius = Math.max(0.6, mount.r * 0.09)
+        const barrelGeometry = new THREE.CylinderGeometry(barrelRadius, barrelRadius * 1.1, barrelLength, 8)
+        const barrelMesh = new THREE.Mesh(barrelGeometry, barrelMaterial)
+        // Position barrels pointing forward
+        barrelMesh.rotation.z = Math.PI / 2
+        barrelMesh.position.set(
+          mount.x + mount.r * 1.9 + barrelLength / 2,
+          -h + mount.y + (i - (mount.barrels - 1) / 2) * mount.r * 0.30,
+          32,
         )
-        barrel.position.set(mount.x + mount.r * 1.9, -h + mount.y + (i - (mount.barrels - 1) / 2) * mount.r * 0.30, 32)
-        group.add(barrel)
+        group.add(barrelMesh)
       }
     }
 
+    // === SECONDARY GUNS (3D) ===
     for (const aa of secondaryLayout(shape, l, w)) {
-      const mount = new THREE.Mesh(
-        ellipseShapeGeometry(aa.r, aa.r * 0.75, 12),
-        new THREE.MeshBasicMaterial({ color: palette.secondary, transparent: true, opacity: 0.88 }),
-      )
-      mount.position.set(aa.x, -h + aa.y, 29)
-      group.add(mount)
+      const aaHeight = aa.r * 0.6
+      const aaGeometry = new THREE.CylinderGeometry(aa.r * 0.8, aa.r, aaHeight, 12)
+      const aaMesh = new THREE.Mesh(aaGeometry, secondaryMaterial)
+      aaMesh.position.set(aa.x, -h + aa.y + aaHeight / 2, 29)
+      group.add(aaMesh)
     }
 
+    // === MASTS (3D Cylinder) ===
     for (const mast of mastLayout(shape, l, w)) {
-      const pole = new THREE.Mesh(
-        new THREE.PlaneGeometry(Math.max(1, w * 0.035), Math.max(8, w * 0.58)),
-        new THREE.MeshBasicMaterial({ color: palette.barrel, transparent: true, opacity: 0.80 }),
-      )
-      pole.position.set(mast.x, -h + mast.y - w * 0.11, 34)
-      pole.rotation.z = mast.tilt
-      group.add(pole)
+      const mastHeight = Math.max(8, w * 0.58)
+      const mastRadius = Math.max(0.5, w * 0.018)
+      const mastGeometry = new THREE.CylinderGeometry(mastRadius, mastRadius, mastHeight, 6)
+      const mastMesh = new THREE.Mesh(mastGeometry, mastMaterial)
+      mastMesh.position.set(mast.x, -h + mast.y - w * 0.11 + mastHeight / 2, 34)
+      mastMesh.rotation.z = mast.tilt
+      group.add(mastMesh)
     }
 
     addFineShipDetails(group, shape, l, w, h, palette)
+    addRealisticShipDetails(group, shape, l, w, h, hullThickness, palette)
 
     const wake = new THREE.Mesh(
       wakeGeometry(Math.max(90, l * 2.6), Math.max(28, w * 2.6)),
@@ -610,6 +769,12 @@ function shipPalette(ship: ShipEntity, shape: ShipShapeClass): ShipPalette {
 }
 
 function hullShapeGeometry(shape: ShipShapeClass, l: number, w: number): THREE.ShapeGeometry {
+  const shapePath = createHullShape(shape, l, w)
+  return new THREE.ShapeGeometry(shapePath)
+}
+
+// New function: Create hull shape for ExtrudeGeometry
+function createHullShape(shape: ShipShapeClass, l: number, w: number): THREE.Shape {
   const halfL = l / 2
   const halfW = w / 2
   const pts = shipHullPoints(shape, halfL, halfW)
@@ -617,10 +782,16 @@ function hullShapeGeometry(shape: ShipShapeClass, l: number, w: number): THREE.S
   shapePath.moveTo(pts[0]![0], pts[0]![1])
   for (const [x, y] of pts.slice(1)) shapePath.lineTo(x, y)
   shapePath.closePath()
-  return new THREE.ShapeGeometry(shapePath)
+  return shapePath
 }
 
 function deckShapeGeometry(shape: ShipShapeClass, l: number, w: number): THREE.ShapeGeometry {
+  const shapePath = createDeckShape(shape, l, w)
+  return new THREE.ShapeGeometry(shapePath)
+}
+
+// New function: Create deck shape for ExtrudeGeometry
+function createDeckShape(shape: ShipShapeClass, l: number, w: number): THREE.Shape {
   const halfL = l / 2
   const halfW = w / 2
   const taper = shape === 'destroyer' ? 0.30 : 0.22
@@ -640,7 +811,7 @@ function deckShapeGeometry(shape: ShipShapeClass, l: number, w: number): THREE.S
   path.moveTo(pts[0]![0], pts[0]![1])
   for (const [x, y] of pts.slice(1)) path.lineTo(x, y)
   path.closePath()
-  return new THREE.ShapeGeometry(path)
+  return path
 }
 
 function roundedBoxGeometry(w: number, h: number, segments: number): THREE.ShapeGeometry {
@@ -658,6 +829,238 @@ function roundedBoxGeometry(w: number, h: number, segments: number): THREE.Shape
   path.lineTo(x, y + r)
   path.quadraticCurveTo(x, y, x + r, y)
   return new THREE.ShapeGeometry(path, segments)
+}
+
+function addRealisticShipDetails(
+  group: THREE.Group,
+  shape: ShipShapeClass,
+  l: number,
+  w: number,
+  h: number,
+  hullThickness: number,
+  palette: ShipPalette,
+): void {
+  const deckY = -h
+  const metal = shipPartMaterial(palette.turret, 0.54, 0.42)
+  const dark = shipPartMaterial(palette.darkDetail, 0.58, 0.56)
+  const light = shipPartMaterial(palette.highlight, 0.48, 0.34)
+  const deckLine = shipPartMaterial(palette.deckLine, 0.82, 0.08, 0.70)
+  const brass = shipPartMaterial(shape === 'yukimura' ? 0xd6ba77 : 0xc59b54, 0.38, 0.62)
+  const glass = new THREE.MeshBasicMaterial({ color: shape === 'yukimura' ? 0xbdeaff : 0x9bd7f7, transparent: true, opacity: 0.58 })
+
+  addDeckScoring(group, shape, l, w, deckY, deckLine)
+  addArmorRibs(group, shape, l, w, h, dark)
+  addPagodaBridge(group, shape, l, w, h, hullThickness, metal, light, glass)
+  addDetailedTurrets(group, shape, l, w, h, metal, dark, light)
+  addFunnelCollars(group, shape, l, w, h, dark, light)
+  addRealisticMasts(group, shape, l, w, h, dark)
+  addDeckFittings(group, shape, l, w, h, dark, light, brass)
+}
+
+function shipPartMaterial(color: number, roughness: number, metalness: number, opacity = 1): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({
+    color,
+    roughness,
+    metalness,
+    transparent: opacity < 1,
+    opacity,
+  })
+}
+
+function addBoxPart(
+  group: THREE.Group,
+  size: [number, number, number],
+  material: THREE.Material,
+  position: [number, number, number],
+  rotationZ = 0,
+): THREE.Mesh {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(...size), material)
+  mesh.position.set(...position)
+  mesh.rotation.z = rotationZ
+  mesh.castShadow = true
+  mesh.receiveShadow = true
+  group.add(mesh)
+  return mesh
+}
+
+function addDiskPart(
+  group: THREE.Group,
+  radiusTop: number,
+  radiusBottom: number,
+  depth: number,
+  material: THREE.Material,
+  position: [number, number, number],
+  segments = 28,
+): THREE.Mesh {
+  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radiusTop, radiusBottom, depth, segments), material)
+  mesh.rotation.x = Math.PI / 2
+  mesh.position.set(...position)
+  mesh.castShadow = true
+  mesh.receiveShadow = true
+  group.add(mesh)
+  return mesh
+}
+
+function addBarrelPart(
+  group: THREE.Group,
+  x: number,
+  y: number,
+  z: number,
+  length: number,
+  radius: number,
+  direction: 1 | -1,
+  material: THREE.Material,
+): void {
+  const breech = new THREE.Mesh(new THREE.CylinderGeometry(radius * 1.20, radius * 1.34, length * 0.34, 14), material)
+  breech.rotation.z = Math.PI / 2
+  breech.position.set(x + direction * length * 0.18, y, z)
+  group.add(breech)
+
+  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(radius * 0.70, radius * 1.00, length * 0.72, 16), material)
+  barrel.rotation.z = Math.PI / 2
+  barrel.position.set(x + direction * length * 0.58, y, z + 0.35)
+  group.add(barrel)
+
+  for (const t of [0.08, 0.36, 0.70]) {
+    addDiskPart(group, radius * 1.45, radius * 1.45, Math.max(0.55, radius * 0.82), material, [x + direction * length * t, y, z + 0.55], 18)
+  }
+}
+
+function addDeckScoring(
+  group: THREE.Group,
+  shape: ShipShapeClass,
+  l: number,
+  w: number,
+  deckY: number,
+  material: THREE.Material,
+): void {
+  const length = l * (shape === 'destroyer' ? 0.54 : 0.68)
+  const lineCount = shape === 'destroyer' ? 6 : 10
+  for (let i = 0; i < lineCount; i++) {
+    const y = deckY + ((i + 1) / (lineCount + 1) - 0.5) * w * 0.48
+    addBoxPart(group, [length, Math.max(0.28, w * 0.006), 0.42], material, [-l * 0.06, y, 41])
+  }
+  const crossCount = shape === 'destroyer' ? 5 : 9
+  for (let i = 0; i < crossCount; i++) {
+    const x = l * 0.30 - i * l * 0.075
+    addBoxPart(group, [Math.max(0.28, w * 0.006), w * 0.36, 0.40], material, [x, deckY, 41.2])
+  }
+}
+
+function addArmorRibs(group: THREE.Group, shape: ShipShapeClass, l: number, w: number, h: number, material: THREE.Material): void {
+  const count = shape === 'destroyer' ? 9 : shape === 'cruiser' ? 13 : 18
+  for (let i = 0; i < count; i++) {
+    const u = i / Math.max(1, count - 1)
+    const x = THREE.MathUtils.lerp(l * 0.38, -l * 0.42, u)
+    const taper = Math.pow(Math.sin(Math.PI * THREE.MathUtils.clamp(0.18 + u * 0.64, 0, 1)), 0.45)
+    const sideY = w * (0.42 + taper * 0.05)
+    addBoxPart(group, [Math.max(0.38, w * 0.010), Math.max(1.0, w * 0.09), 1.0], material, [x, -h + sideY, 18])
+    addBoxPart(group, [Math.max(0.38, w * 0.010), Math.max(1.0, w * 0.09), 1.0], material, [x, -h - sideY, 18])
+  }
+}
+
+function addPagodaBridge(
+  group: THREE.Group,
+  shape: ShipShapeClass,
+  l: number,
+  w: number,
+  h: number,
+  hullThickness: number,
+  metal: THREE.Material,
+  light: THREE.Material,
+  glass: THREE.Material,
+): void {
+  const layers: Array<[number, number, number]> = shape === 'destroyer'
+    ? [[0.12, 0.25, 0.34], [0.09, 0.19, 0.40]]
+    : [[0.18, 0.36, 0.36], [0.145, 0.29, 0.45], [0.115, 0.23, 0.54], [0.090, 0.18, 0.63], [0.066, 0.14, 0.72]]
+  const baseX = shape === 'destroyer' ? l * 0.08 : l * 0.04
+  const baseY = -h - w * 0.04
+  for (const [sx, sy, zMul] of layers) {
+    const z = 18 + hullThickness * zMul
+    addBoxPart(group, [l * sx, Math.max(2.5, w * sy), Math.max(1.1, hullThickness * 0.08)], metal, [baseX, baseY, z])
+    addBoxPart(group, [l * sx * 0.70, Math.max(0.65, w * sy * 0.10), 0.55], glass, [baseX + l * sx * 0.12, baseY - w * sy * 0.40, z + 0.9])
+  }
+  addDiskPart(group, Math.max(1.8, w * 0.055), Math.max(2.2, w * 0.070), Math.max(1.2, hullThickness * 0.10), light, [baseX, baseY, 18 + hullThickness * 0.86], 24)
+}
+
+function addDetailedTurrets(
+  group: THREE.Group,
+  shape: ShipShapeClass,
+  l: number,
+  w: number,
+  h: number,
+  metal: THREE.Material,
+  dark: THREE.Material,
+  light: THREE.Material,
+): void {
+  for (const mount of turretLayout(shape, l, w)) {
+    const direction: 1 | -1 = mount.x < -l * 0.12 ? -1 : 1
+    const z = 46
+    addDiskPart(group, mount.r * 1.08, mount.r * 1.22, Math.max(1.1, mount.r * 0.30), dark, [mount.x, -h + mount.y, z - 1], 34)
+    addBoxPart(group, [mount.r * 2.05, mount.r * 1.50, Math.max(1.3, mount.r * 0.38)], metal, [mount.x + direction * mount.r * 0.16, -h + mount.y, z], 0)
+    addBoxPart(group, [mount.r * 1.35, mount.r * 0.22, Math.max(0.65, mount.r * 0.16)], light, [mount.x - direction * mount.r * 0.18, -h + mount.y, z + 1.2])
+
+    const spacing = mount.barrels === 1 ? 0 : mount.r * 0.34
+    for (let i = 0; i < mount.barrels; i++) {
+      const offset = (i - (mount.barrels - 1) / 2) * spacing
+      addBarrelPart(group, mount.x + direction * mount.r * 0.92, -h + mount.y + offset, z + 0.3, mount.r * 3.2, Math.max(0.38, mount.r * 0.090), direction, dark)
+    }
+  }
+}
+
+function addFunnelCollars(
+  group: THREE.Group,
+  shape: ShipShapeClass,
+  l: number,
+  w: number,
+  h: number,
+  dark: THREE.Material,
+  light: THREE.Material,
+): void {
+  for (const stack of funnelLayout(shape, l, w)) {
+    const y = -h + stack.y
+    const z = 45
+    addDiskPart(group, stack.rX * 1.08, stack.rX * 1.20, Math.max(2, stack.rY * 0.72), dark, [stack.x, y, z], 28)
+    addDiskPart(group, stack.rX * 0.70, stack.rX * 0.88, Math.max(1, stack.rY * 0.35), light, [stack.x + stack.rX * 0.12, y, z + 2.4], 28)
+    addBoxPart(group, [stack.rX * 2.0, Math.max(0.45, w * 0.012), 0.7], dark, [stack.x, y, z + 3.2], 0)
+  }
+}
+
+function addRealisticMasts(group: THREE.Group, shape: ShipShapeClass, l: number, w: number, h: number, material: THREE.Material): void {
+  for (const mast of mastLayout(shape, l, w)) {
+    const baseY = -h + mast.y
+    const height = shape === 'destroyer' ? w * 0.34 : w * 0.46
+    addBoxPart(group, [Math.max(0.45, w * 0.014), Math.max(0.45, w * 0.014), height], material, [mast.x, baseY, 50], mast.tilt)
+    for (const t of [0.28, 0.52, 0.74]) {
+      addBoxPart(group, [w * (0.25 - t * 0.06), Math.max(0.35, w * 0.010), 0.55], material, [mast.x, baseY, 50 + height * (t - 0.38)], 0)
+      addBoxPart(group, [Math.max(0.35, w * 0.010), w * (0.20 - t * 0.04), 0.55], material, [mast.x, baseY, 50 + height * (t - 0.38)], 0)
+    }
+  }
+}
+
+function addDeckFittings(
+  group: THREE.Group,
+  shape: ShipShapeClass,
+  l: number,
+  w: number,
+  h: number,
+  dark: THREE.Material,
+  light: THREE.Material,
+  brass: THREE.Material,
+): void {
+  const deckY = -h
+  for (const side of [-1, 1] as const) {
+    addDiskPart(group, Math.max(0.8, w * 0.022), Math.max(0.8, w * 0.022), 0.75, dark, [l * 0.43, deckY + side * w * 0.18, 48], 18)
+    addBoxPart(group, [l * 0.030, Math.max(0.35, w * 0.010), 0.55], dark, [l * 0.405, deckY + side * w * 0.18, 48.5], side * 0.55)
+    addDiskPart(group, Math.max(1.0, w * 0.032), Math.max(0.8, w * 0.026), 0.65, brass, [-l * 0.47, deckY + side * w * 0.20, 34], 18)
+  }
+
+  const ventCount = shape === 'destroyer' ? 3 : shape === 'cruiser' ? 5 : 7
+  for (let i = 0; i < ventCount; i++) {
+    const x = l * 0.24 - i * l * 0.085
+    const y = deckY + (i % 2 === 0 ? -1 : 1) * w * 0.22
+    addDiskPart(group, Math.max(0.7, w * 0.025), Math.max(0.9, w * 0.032), 1.0, light, [x, y, 44], 14)
+  }
 }
 
 function addFineShipDetails(
