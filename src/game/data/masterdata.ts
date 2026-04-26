@@ -338,6 +338,7 @@ function applyArmorBonus(ship: ShipEntity, bonus: number): ShipEntity {
   return {
     ...ship,
     armor: totalArmor,
+    armorBonus: bonus,
     maxSpeed: template.maxSpeed / (1 + totalArmor * ARMOR_WEIGHT_K),
   }
 }

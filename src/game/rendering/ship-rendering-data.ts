@@ -14,6 +14,13 @@ export const SHIP_DIMS: Record<string, { l: number; w: number; h: number }> = {
   'hull.enemy.boss.dreadnought': { l: 340, w: 82, h: 54 },
 }
 
+/** Returns ship dimensions scaled by armor grade (armorBonus 0→100 yields +0%→+20% size). */
+export function scaledShipDims(templateId: string, armorBonus = 0): { l: number; w: number; h: number } {
+  const base = SHIP_DIMS[templateId] ?? { l: 100, w: 22, h: 12 }
+  const s = 1 + armorBonus * 0.002
+  return { l: base.l * s, w: base.w * s, h: base.h * s }
+}
+
 export type ShipShapeClass = 'destroyer' | 'cruiser' | 'battleship' | 'yukimura' | 'boss'
 
 export const SHIP_SHAPES: Record<string, ShipShapeClass> = {

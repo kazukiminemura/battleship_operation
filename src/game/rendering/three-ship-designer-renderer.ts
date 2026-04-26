@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import type { HullCatalogEntry } from '../data/hull-catalog'
 import type { WeaponType } from '../simulation/types'
-import { SHIP_DIMS, SHIP_SHAPES, type ShipShapeClass } from './ship-rendering-data'
+import { SHIP_DIMS, SHIP_SHAPES, scaledShipDims, type ShipShapeClass } from './ship-rendering-data'
 
 export interface ShipDesignerPreviewWeapon {
   id: string
@@ -209,7 +209,7 @@ export class ThreeShipDesignerRenderer {
 }
 
 function buildShip(config: ShipDesignerPreviewConfig): THREE.Group {
-  const dims = SHIP_DIMS[config.hull.templateId] ?? SHIP_DIMS[config.hull.shipType] ?? { l: 145, w: 30, h: 16 }
+  const dims = scaledShipDims(config.hull.templateId ?? config.hull.shipType, config.armorBonus)
   const shape = SHIP_SHAPES[config.hull.templateId] ?? config.hull.shipType
   const l = dims.l * 0.045
   const w = dims.w * 0.045

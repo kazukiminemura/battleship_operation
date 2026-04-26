@@ -4,7 +4,7 @@ import { effectiveDetectionRange } from '../simulation/detection'
 import { getWeaponConfig } from '../simulation/weapon-strategies'
 import { renderShipExplosions } from './effects-renderer'
 import { renderProjectile as renderProjectileEntity } from './projectile-renderer'
-import { SHIP_DIMS, SHIP_SHAPES, type ShipShapeClass } from './ship-rendering-data'
+import { SHIP_DIMS, SHIP_SHAPES, scaledShipDims, type ShipShapeClass } from './ship-rendering-data'
 import { ThreeBattlefieldRenderer } from './three-battlefield-renderer'
 import { ShipWakeRenderer } from './wake-renderer'
 import { FogOfWarRenderer } from './fog-of-war-renderer'
@@ -1032,7 +1032,7 @@ export class CanvasRenderer {
 
   private renderShip(ship: ShipEntity, tick: number): void {
     const { ctx, iso } = this
-    const dim = SHIP_DIMS[ship.templateId] ?? { l: 100, w: 22, h: 12 }
+    const dim = scaledShipDims(ship.templateId, ship.armorBonus)
     const shape = SHIP_SHAPES[ship.templateId] ?? 'destroyer'
     const L = dim.l / 2
     const W = dim.w / 2
@@ -1846,7 +1846,7 @@ export class CanvasRenderer {
       const hpRatio = ship.maxHp > 0 ? ship.hp / ship.maxHp : 1
       if (hpRatio > 0.64) continue
 
-      const dim = SHIP_DIMS[ship.templateId] ?? { l: 100, w: 22, h: 12 }
+      const dim = scaledShipDims(ship.templateId, ship.armorBonus)
       const cosA = Math.cos(ship.angle)
       const sinA = Math.sin(ship.angle)
       const damage = 1 - hpRatio
@@ -1896,7 +1896,7 @@ export class CanvasRenderer {
   private renderShipStatusOverlays(ships: readonly ShipEntity[]): void {
     const { ctx } = this
     for (const ship of ships) {
-      const dim = SHIP_DIMS[ship.templateId] ?? { l: 100, w: 22, h: 12 }
+      const dim = scaledShipDims(ship.templateId, ship.armorBonus)
       const [cx, cy] = this.w2s(ship.pos.x, ship.pos.y)
       const hPx = dim.h * this.iso.scale * 0.9
       const barW = Math.max(12, dim.l * this.iso.scale * 0.65)
