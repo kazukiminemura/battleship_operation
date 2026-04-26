@@ -1,3 +1,6 @@
+import { createElement } from 'react'
+import { createRoot, type Root } from 'react-dom/client'
+import { ShipDesigner } from './designer/ShipDesigner'
 import { CanvasRenderer } from './game/rendering/canvas'
 import { HUD } from './game/ui/hud'
 import { InputAdapter } from './game/input/adapter'
@@ -98,6 +101,19 @@ function main(): void {
     currentStage = state.stage
     rng = createRngStreams(BASE_SEED + 99099)
     sound.setBgmEnabled(bgmEnabled, isBossStage(state) ? 'boss' : 'normal')
+  }
+
+  let designerRoot: Root | null = null
+
+  const openDesigner = (): void => {
+    const el = document.getElementById('designer-root')!
+    el.style.display = 'block'
+    if (!designerRoot) designerRoot = createRoot(el)
+    designerRoot.render(createElement(ShipDesigner, { onClose: closeDesigner }))
+  }
+
+  const closeDesigner = (): void => {
+    document.getElementById('designer-root')!.style.display = 'none'
   }
 
   const goToStart = (): void => {
@@ -395,7 +411,7 @@ function main(): void {
 
   canvas.addEventListener('click', (e) => {
     if (mode === 'start') {
-      if (start.checkDesignerClick(e)) { window.location.href = '/designer.html'; return }
+      if (start.checkDesignerClick(e)) { openDesigner(); return }
       if (start.checkClick(e)) goToPrep(currentStage)
       e.stopImmediatePropagation()
       return

@@ -7,7 +7,11 @@ import { HULL_SLOTS, calcStats, saveDesign, loadDesign, MAX_WEIGHT } from './dat
 import type { Design } from './types'
 import './ShipDesigner.css'
 
-export function ShipDesigner() {
+interface Props {
+  onClose?: () => void
+}
+
+export function ShipDesigner({ onClose }: Props) {
   const [design, setDesign] = useState<Design>(() => loadDesign())
   const [draggingWeaponId, setDraggingWeaponId] = useState<string | null>(null)
 
@@ -51,7 +55,7 @@ export function ShipDesigner() {
           <button className="sd-btn" onClick={handleSave}>💾 設計を保存</button>
           <button className="sd-btn" onClick={handleLoad}>📂 設計を読み込み</button>
           <button className="sd-btn sd-btn-danger" onClick={handleReset}>🗑 リセット</button>
-          <a className="sd-btn sd-btn-back" href="/">← ゲームに戻る</a>
+          <button className="sd-btn sd-btn-back" onClick={onClose ?? (() => { window.location.href = '/' })}>← ゲームに戻る</button>
         </div>
       </header>
 
