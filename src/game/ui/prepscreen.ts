@@ -10,9 +10,11 @@ import {
   buildPlacements,
   canMoveSlotTo,
   canMoveTowerTo,
+  canPlaceFootprint,
   cellCenter,
   cellKey,
   cellToMount,
+  collidingIds,
   currentSlotCell,
   defaultTowerCell,
   footprintRect,
@@ -23,6 +25,7 @@ import {
   mountToCell,
   moveTargetState,
   occupiedCells,
+  weaponFootprint,
   type GridCell,
   type GridSpec,
   type Placement,
@@ -290,7 +293,7 @@ export class PrepScreen {
         }
         const hull = this.selectedHull()
         const slot = hull?.slots.find(s => s.id === this.selectedSlotId)
-        if (!slot) {
+        if (!hull || !slot) {
           this.lastAudioCue = 'denied'
           break
         }
@@ -302,6 +305,13 @@ export class PrepScreen {
         if (this.slotWeapons.get(slot.id)?.id === w.id) {
           this.slotWeapons.delete(slot.id)   // clicking current weapon removes it
         } else {
+          const spec = gridSpec(hull)
+          const cell = currentSlotCell(slot, spec, this.slotCells)
+          const fp = weaponFootprint(w, slot)
+          if (!canPlaceFootprint(cell, fp, this.currentPlacements(hull, spec), slot.id, spec)) {
+            this.lastAudioCue = 'denied'
+            break
+          }
           this.slotWeapons.set(slot.id, w)
           this.selectedSlotId = null
         }
@@ -314,9 +324,13 @@ export class PrepScreen {
         if (!hull) { this.lastAudioCue = 'denied'; break }
         const w = WEAPON_SHOP.find(x => x.id === r.weaponId)
         if (!w) { this.lastAudioCue = 'denied'; break }
-        const emptySlot = hull.slots.find(s =>
-          s.compatibleTypes.includes(w.type) && !this.slotWeapons.has(s.id)
-        )
+        const spec = gridSpec(hull)
+        const emptySlot = hull.slots.find(s => {
+          if (!s.compatibleTypes.includes(w.type) || this.slotWeapons.has(s.id)) return false
+          const cell = currentSlotCell(s, spec, this.slotCells)
+          const fp = weaponFootprint(w, s)
+          return canPlaceFootprint(cell, fp, this.currentPlacements(hull, spec), s.id, spec)
+        })
         if (!emptySlot) { this.lastAudioCue = 'denied'; break }
         this.slotWeapons.set(emptySlot.id, w)
         this.lastAudioCue = 'equip'
@@ -717,8 +731,9 @@ export class PrepScreen {
       }
     }
 
+    const colliding = collidingIds(placements)
     for (const placement of placements) {
-      this.drawPlacement(gx, gy, CW, CH, placement)
+      this.drawPlacement(gx, gy, CW, CH, placement, colliding)
     }
 
     // Centerline
@@ -812,7 +827,7 @@ export class PrepScreen {
     }
   }
 
-  private drawPlacement(gx: number, gy: number, cw: number, ch: number, placement: Placement): void {
+  private drawPlacement(gx: number, gy: number, cw: number, ch: number, placement: Placement, colliding: Set<string> = new Set()): void {
     const ctx = this.ctx
     const rect = footprintRect(placement.cell, placement.footprint)
     const x = gx + rect.left * cw
@@ -823,16 +838,36 @@ export class PrepScreen {
     const isHov = placement.kind === 'tower'
       ? this.hovered?.tag === 'grid-tower'
       : this.hovered?.tag === 'grid-slot' && this.hovered.slotId === placement.id
-    const col = isSel ? YELLOW : placement.color
+    const isColliding = colliding.has(placement.id)
+
+    const col = isColliding ? '#e05050' : isSel ? YELLOW : placement.color
 
     ctx.fillStyle = isHov ? col + '32' : col + '22'
     ctx.fillRect(x, y, w, h)
-    ctx.lineWidth = isSel ? 2 : 1
+
+    if (isColliding) {
+      // Hatching for collision area
+      ctx.save()
+      ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip()
+      ctx.strokeStyle = 'rgba(220,60,60,0.25)'; ctx.lineWidth = 1
+      for (let d = -h; d < w + h; d += 6) {
+        ctx.beginPath(); ctx.moveTo(x + d, y); ctx.lineTo(x + d + h, y + h); ctx.stroke()
+      }
+      ctx.restore()
+    }
+
+    ctx.lineWidth = isSel ? 2 : isColliding ? 2 : 1
     ctx.strokeStyle = col
     if (!placement.weapon && placement.kind === 'weapon') {
       ctx.save(); ctx.setLineDash([4, 3]); ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1); ctx.restore()
     } else {
       ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1)
+    }
+
+    if (isColliding) {
+      ctx.font = `bold ${Math.min(11, Math.max(8, cw * 0.55))}px sans-serif`
+      ctx.fillStyle = '#ff8080'; ctx.textAlign = 'center'
+      ctx.fillText('⚠', x + w / 2, y + h / 2 + 4)
     }
 
     if (placement.kind === 'tower') {
@@ -843,7 +878,7 @@ export class PrepScreen {
 
     this.drawWeaponShape(x, y, w, h, placement.weapon, placement.slot!, col)
     ctx.font = `bold ${Math.min(15, Math.max(10, cw * 0.68))}px sans-serif`
-    ctx.fillStyle = placement.weapon ? '#e8f2e8' : DIM
+    ctx.fillStyle = isColliding ? '#ff8080' : placement.weapon ? '#e8f2e8' : DIM
     ctx.textAlign = 'center'
     const lbl = placement.weapon ? TYPE_JP[placement.weapon.type] : placement.slot!.label.slice(0, 3)
     ctx.fillText(lbl, x + w / 2, y + h + Math.min(10, ch * 0.72))

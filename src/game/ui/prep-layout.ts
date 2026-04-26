@@ -249,6 +249,21 @@ export function canPlaceFootprint(
   return true
 }
 
+export function collidingIds(placements: readonly Placement[]): Set<string> {
+  const ids = new Set<string>()
+  for (let i = 0; i < placements.length; i++) {
+    for (let j = i + 1; j < placements.length; j++) {
+      const a = placements[i]!
+      const b = placements[j]!
+      if (rectsOverlap(footprintRect(a.cell, a.footprint), footprintRect(b.cell, b.footprint))) {
+        ids.add(a.id)
+        ids.add(b.id)
+      }
+    }
+  }
+  return ids
+}
+
 export function occupiedCells(placements: readonly Placement[]): Set<string> {
   const cells = new Set<string>()
   for (const placement of placements) {
