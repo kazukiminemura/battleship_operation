@@ -51,6 +51,8 @@ type Region =
   | { tag: 'grid-tower';                                x: number; y: number; w: number; h: number; accessKey?: string }
   | { tag: 'grid-empty';  c: number; r: number;        x: number; y: number; w: number; h: number; accessKey?: string }
   | { tag: 'weapon-card'; weaponId: string;            x: number; y: number; w: number; h: number; accessKey?: string }
+  | { tag: 'weapon-inc';  weaponId: string;            x: number; y: number; w: number; h: number; accessKey?: string }
+  | { tag: 'weapon-dec';  weaponId: string;            x: number; y: number; w: number; h: number; accessKey?: string }
   | { tag: 'armor-up';                                  x: number; y: number; w: number; h: number; accessKey?: string }
   | { tag: 'armor-down';                                x: number; y: number; w: number; h: number; accessKey?: string }
   | { tag: 'armor-bar';                                 x: number; y: number; w: number; h: number; accessKey?: string }
@@ -303,6 +305,32 @@ export class PrepScreen {
           this.slotWeapons.set(slot.id, w)
           this.selectedSlotId = null
         }
+        this.lastAudioCue = 'equip'
+        break
+      }
+
+      case 'weapon-inc': {
+        const hull = this.selectedHull()
+        if (!hull) { this.lastAudioCue = 'denied'; break }
+        const w = WEAPON_SHOP.find(x => x.id === r.weaponId)
+        if (!w) { this.lastAudioCue = 'denied'; break }
+        const emptySlot = hull.slots.find(s =>
+          s.compatibleTypes.includes(w.type) && !this.slotWeapons.has(s.id)
+        )
+        if (!emptySlot) { this.lastAudioCue = 'denied'; break }
+        this.slotWeapons.set(emptySlot.id, w)
+        this.lastAudioCue = 'equip'
+        break
+      }
+
+      case 'weapon-dec': {
+        const hull = this.selectedHull()
+        if (!hull) { this.lastAudioCue = 'denied'; break }
+        const w = WEAPON_SHOP.find(x => x.id === r.weaponId)
+        if (!w) { this.lastAudioCue = 'denied'; break }
+        const equippedSlots = hull.slots.filter(s => this.slotWeapons.get(s.id)?.id === w.id)
+        if (equippedSlots.length === 0) { this.lastAudioCue = 'denied'; break }
+        this.slotWeapons.delete(equippedSlots[equippedSlots.length - 1]!.id)
         this.lastAudioCue = 'equip'
         break
       }
@@ -886,10 +914,16 @@ export class PrepScreen {
       const compatible = !selSlot || selSlot.compatibleTypes.includes(w.type)
       const wCol = TYPE_COLOR[w.type] ?? DIM
 
-      ctx.fillStyle = isCur ? '#0a2a14' : isHov && compatible ? '#0f1e12' : '#080e08'
+      // Count how many slots currently have this weapon
+      const equippedCount = hull.slots.filter(s => this.slotWeapons.get(s.id)?.id === w.id).length
+      const hasCompatibleEmpty = hull.slots.some(s =>
+        s.compatibleTypes.includes(w.type) && !this.slotWeapons.has(s.id)
+      )
+
+      ctx.fillStyle = equippedCount > 0 ? '#0a2a14' : isHov && compatible ? '#0f1e12' : '#080e08'
       ctx.fillRect(px + 6, cy, cardW, cardH)
-      ctx.strokeStyle = isCur ? '#3a9a4a' : compatible ? '#1e3824' : '#0f1810'
-      ctx.lineWidth = isCur ? 1.5 : 1
+      ctx.strokeStyle = equippedCount > 0 ? '#3a9a4a' : compatible ? '#1e3824' : '#0f1810'
+      ctx.lineWidth = equippedCount > 0 ? 1.5 : 1
       ctx.strokeRect(px + 6, cy, cardW, cardH)
 
       // Type badge
@@ -905,21 +939,52 @@ export class PrepScreen {
       ctx.fillText(w.desc, px + 60, cy + 44)
       ctx.fillStyle = DIM; ctx.fillText(`弾数: ${w.ammo}`, px + 60, cy + 64)
 
-      if (isCur) {
-        ctx.font = 'bold 14px sans-serif'; ctx.fillStyle = '#3a9a4a'; ctx.textAlign = 'right'
-        ctx.fillText('✓ 装備中', px + pw - 10, cy + 29)
-      } else if (compatible && selSlot) {
-        const bx = px + pw - 60
-        ctx.fillStyle = isHov ? ACCENT : '#0f2414'; ctx.fillRect(bx, cy + 12, 54, 30)
-        ctx.strokeStyle = '#2a6a30'; ctx.lineWidth = 1; ctx.strokeRect(bx, cy + 12, 54, 30)
-        ctx.font = 'bold 14px sans-serif'; ctx.fillStyle = '#a0d0a0'; ctx.textAlign = 'center'
-        ctx.fillText('装備', bx + 27, cy + 33)
+      // +/- count buttons (always visible for compatible weapons)
+      if (compatible) {
+        const btnW = 24, btnH = 24, btnY2 = cy + (cardH - btnH) / 2
+        const cntX = px + pw - 12   // right edge
+        const plusX = cntX - btnW
+        const countLabelX = plusX - 4
+        const minusX = countLabelX - 28 - btnW
+
+        // + button
+        const canInc = hasCompatibleEmpty
+        const isHovInc = this.hovered?.tag === 'weapon-inc' && this.hovered.weaponId === w.id
+        ctx.fillStyle = canInc ? (isHovInc ? ACCENT : '#0f2414') : '#080f0a'
+        ctx.fillRect(plusX, btnY2, btnW, btnH)
+        ctx.strokeStyle = canInc ? '#2a6a30' : '#1a2a1a'; ctx.lineWidth = 1
+        ctx.strokeRect(plusX, btnY2, btnW, btnH)
+        ctx.font = 'bold 16px sans-serif'; ctx.fillStyle = canInc ? '#a0d0a0' : DIM; ctx.textAlign = 'center'
+        ctx.fillText('+', plusX + btnW / 2, btnY2 + 17)
+
+        // Count
+        ctx.font = 'bold 18px sans-serif'
+        ctx.fillStyle = equippedCount > 0 ? '#3a9a4a' : DIM; ctx.textAlign = 'right'
+        ctx.fillText(`${equippedCount}`, countLabelX, btnY2 + 17)
+
+        // - button
+        const canDec = equippedCount > 0
+        const isHovDec = this.hovered?.tag === 'weapon-dec' && this.hovered.weaponId === w.id
+        ctx.fillStyle = canDec ? (isHovDec ? '#2a1414' : '#0f1414') : '#080f0a'
+        ctx.fillRect(minusX, btnY2, btnW, btnH)
+        ctx.strokeStyle = canDec ? '#6a2a2a' : '#1a2a1a'
+        ctx.strokeRect(minusX, btnY2, btnW, btnH)
+        ctx.font = 'bold 16px sans-serif'; ctx.fillStyle = canDec ? '#d09090' : DIM; ctx.textAlign = 'center'
+        ctx.fillText('−', minusX + btnW / 2, btnY2 + 17)
+
+        if (canInc) this.addRegion({ tag: 'weapon-inc', weaponId: w.id, x: plusX, y: btnY2, w: btnW, h: btnH })
+        if (canDec) this.addRegion({ tag: 'weapon-dec', weaponId: w.id, x: minusX, y: btnY2, w: btnW, h: btnH })
+      }
+
+      if (isCur && selSlot) {
+        ctx.font = 'bold 13px sans-serif'; ctx.fillStyle = '#3a9a4a'; ctx.textAlign = 'right'
+        ctx.fillText('✓', px + pw - 80, cy + 29)
       }
 
       if (compatible && selSlot) {
-        const region: Region = { tag: 'weapon-card', weaponId: w.id, x: px + 6, y: cy, w: cardW, h: cardH }
+        const region: Region = { tag: 'weapon-card', weaponId: w.id, x: px + 6, y: cy, w: cardW - 90, h: cardH }
         this.addRegion(region)
-        if (showAccessKeys) this.drawRegionAccessHint(ctx, region, px + pw - 56, cy + 17)
+        if (showAccessKeys) this.drawRegionAccessHint(ctx, region, px + pw - 116, cy + 17)
       }
       cy += cardH + 4
     }
@@ -1050,12 +1115,12 @@ export class PrepScreen {
 
   private visibleWeapons(hull: HullCatalogEntry): ShopWeapon[] {
     const selSlot = hull.slots.find(s => s.id === this.selectedSlotId)
-    const showAll = !selSlot
+    const hullTypes = new Set(hull.slots.flatMap(s => s.compatibleTypes))
     return WEAPON_SHOP.filter(w => {
       if (w.minStage > this.stage) return false
       if (this.weaponFilter !== 'all' && w.type !== this.weaponFilter) return false
-      if (!showAll && !selSlot!.compatibleTypes.includes(w.type)) return false
-      return true
+      if (selSlot) return selSlot.compatibleTypes.includes(w.type)
+      return hullTypes.has(w.type)
     })
   }
 
