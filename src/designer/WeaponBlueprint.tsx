@@ -6,116 +6,125 @@ interface Props {
   size: number
 }
 
+/** Top-down blueprint silhouette of each weapon type. */
 export function WeaponBlueprint({ type, color, size }: Props) {
+  const sw = 1.2  // base stroke width (scaled by SVG)
   return (
     <svg
       viewBox="0 0 40 40"
-      width={size * 0.72}
-      height={size * 0.72}
-      style={{ overflow: 'visible', display: 'block' }}
+      width={size}
+      height={size}
+      style={{ display: 'block', overflow: 'visible', pointerEvents: 'none' }}
       aria-hidden="true"
     >
-      {BLUEPRINTS[type]({ color })}
+      {BLUEPRINTS[type]({ color, sw })}
     </svg>
   )
 }
 
-type DrawProps = { color: string }
+type DrawProps = { color: string; sw: number }
 
 const BLUEPRINTS: Record<WeaponSlotType, (p: DrawProps) => React.ReactNode> = {
-  gun: ({ color }) => (
+
+  /* ── 主砲 ── 単砲塔、太い単一バレル ──────────────────────────────────── */
+  gun: ({ color, sw }) => (
     <g stroke={color} fill="none" strokeLinecap="round" strokeLinejoin="round">
+      {/* turret ring */}
+      <circle cx="20" cy="22" r="11" strokeWidth={sw * 1.3} fill={color + '20'} />
       {/* barrel */}
-      <rect x="17" y="3" width="6" height="20" rx="2" strokeWidth="1.4" fill={color + '18'} />
-      {/* turret base */}
-      <rect x="9" y="21" width="22" height="13" rx="3" strokeWidth="1.4" fill={color + '18'} />
-      {/* rangefinder bumps */}
-      <rect x="8" y="24" width="4" height="4" rx="1" strokeWidth="1" />
-      <rect x="28" y="24" width="4" height="4" rx="1" strokeWidth="1" />
-      {/* detail cross-line */}
-      <line x1="9" y1="28" x2="31" y2="28" strokeWidth="0.7" strokeDasharray="3 2" opacity="0.6" />
-      {/* muzzle */}
-      <line x1="17" y1="3" x2="23" y2="3" strokeWidth="2" strokeLinecap="butt" />
+      <rect x="17.5" y="4" width="5" height="20" rx="1.5" strokeWidth={sw * 1.4} fill={color + '28'} />
+      {/* muzzle brake */}
+      <rect x="15.5" y="4" width="9" height="3" rx="0.8" strokeWidth={sw} fill={color + '30'} />
+      {/* rangefinder arms */}
+      <rect x="8" y="18" width="6" height="3.5" rx="1" strokeWidth={sw * 0.9} fill={color + '18'} />
+      <rect x="26" y="18" width="6" height="3.5" rx="1" strokeWidth={sw * 0.9} fill={color + '18'} />
+      {/* pivot point */}
+      <circle cx="20" cy="22" r="2.5" strokeWidth={sw * 0.8} fill={color + '40'} />
+      {/* detail circle */}
+      <circle cx="20" cy="22" r="7" strokeWidth={sw * 0.6} strokeDasharray="3 2" opacity="0.45" />
     </g>
   ),
 
-  secondary: ({ color }) => (
+  /* ── 副砲 ── 双連砲塔 ────────────────────────────────────────────────── */
+  secondary: ({ color, sw }) => (
     <g stroke={color} fill="none" strokeLinecap="round" strokeLinejoin="round">
+      {/* turret ring */}
+      <circle cx="20" cy="23" r="9" strokeWidth={sw * 1.2} fill={color + '20'} />
       {/* twin barrels */}
-      <rect x="13" y="4" width="5" height="17" rx="1.5" strokeWidth="1.3" fill={color + '18'} />
-      <rect x="22" y="4" width="5" height="17" rx="1.5" strokeWidth="1.3" fill={color + '18'} />
-      {/* turret base */}
-      <rect x="10" y="19" width="20" height="12" rx="3" strokeWidth="1.3" fill={color + '18'} />
-      {/* detail */}
-      <line x1="10" y1="25" x2="30" y2="25" strokeWidth="0.7" strokeDasharray="2 2" opacity="0.6" />
+      <rect x="15" y="5" width="4" height="20" rx="1.2" strokeWidth={sw * 1.2} fill={color + '28'} />
+      <rect x="21" y="5" width="4" height="20" rx="1.2" strokeWidth={sw * 1.2} fill={color + '28'} />
       {/* muzzle caps */}
-      <line x1="13" y1="4" x2="18" y2="4" strokeWidth="1.8" strokeLinecap="butt" />
-      <line x1="22" y1="4" x2="27" y2="4" strokeWidth="1.8" strokeLinecap="butt" />
+      <rect x="14" y="5" width="6" height="2.5" rx="0.6" strokeWidth={sw * 0.9} fill={color + '30'} />
+      <rect x="20" y="5" width="6" height="2.5" rx="0.6" strokeWidth={sw * 0.9} fill={color + '30'} />
+      {/* pivot */}
+      <circle cx="20" cy="23" r="2" strokeWidth={sw * 0.8} fill={color + '40'} />
+      <circle cx="20" cy="23" r="6" strokeWidth={sw * 0.5} strokeDasharray="2.5 2" opacity="0.4" />
     </g>
   ),
 
-  torpedo: ({ color }) => (
+  /* ── 魚雷 ── 双発発射管（上面視） ───────────────────────────────────── */
+  torpedo: ({ color, sw }) => (
     <g stroke={color} fill="none" strokeLinecap="round" strokeLinejoin="round">
       {/* left tube */}
-      <rect x="7" y="8" width="10" height="26" rx="4" strokeWidth="1.3" fill={color + '18'} />
+      <rect x="7" y="5" width="10" height="30" rx="4" strokeWidth={sw * 1.2} fill={color + '20'} />
       {/* right tube */}
-      <rect x="23" y="8" width="10" height="26" rx="4" strokeWidth="1.3" fill={color + '18'} />
-      {/* nose caps */}
-      <ellipse cx="12" cy="9" rx="4.5" ry="2.5" strokeWidth="1.1" fill={color + '30'} />
-      <ellipse cx="28" cy="9" rx="4.5" ry="2.5" strokeWidth="1.1" fill={color + '30'} />
-      {/* fins */}
-      <polyline points="7,30 4,34 7,33" strokeWidth="1" />
-      <polyline points="17,30 20,34 17,33" strokeWidth="1" />
-      <polyline points="23,30 20,34 23,33" strokeWidth="1" />
-      <polyline points="33,30 36,34 33,33" strokeWidth="1" />
-      {/* warhead detail */}
-      <line x1="7" y1="14" x2="17" y2="14" strokeWidth="0.7" strokeDasharray="2 2" opacity="0.55" />
-      <line x1="23" y1="14" x2="33" y2="14" strokeWidth="0.7" strokeDasharray="2 2" opacity="0.55" />
+      <rect x="23" y="5" width="10" height="30" rx="4" strokeWidth={sw * 1.2} fill={color + '20'} />
+      {/* warhead caps */}
+      <ellipse cx="12" cy="7" rx="4" ry="2.5" strokeWidth={sw} fill={color + '35'} />
+      <ellipse cx="28" cy="7" rx="4" ry="2.5" strokeWidth={sw} fill={color + '35'} />
+      {/* connecting yoke */}
+      <rect x="10" y="17" width="20" height="4" rx="1.5" strokeWidth={sw * 0.9} fill={color + '18'} />
+      {/* detail lines on tubes */}
+      <line x1="7" y1="14" x2="17" y2="14" strokeWidth={sw * 0.6} strokeDasharray="2 2" opacity="0.5" />
+      <line x1="23" y1="14" x2="33" y2="14" strokeWidth={sw * 0.6} strokeDasharray="2 2" opacity="0.5" />
+      {/* tail fins */}
+      <polyline points="7,33 4,37 10,35" strokeWidth={sw * 0.8} />
+      <polyline points="17,33 20,37 14,35" strokeWidth={sw * 0.8} />
+      <polyline points="23,33 20,37 26,35" strokeWidth={sw * 0.8} />
+      <polyline points="33,33 36,37 30,35" strokeWidth={sw * 0.8} />
     </g>
   ),
 
-  aa: ({ color }) => (
+  /* ── 対空砲 ── 旋回台座 + 放射バレル ────────────────────────────────── */
+  aa: ({ color, sw }) => (
     <g stroke={color} fill="none" strokeLinecap="round" strokeLinejoin="round">
-      {/* left barrel */}
-      <line x1="13" y1="5" x2="10" y2="22" strokeWidth="2.2" strokeLinecap="round" />
-      {/* right barrel */}
-      <line x1="27" y1="5" x2="30" y2="22" strokeWidth="2.2" strokeLinecap="round" />
-      {/* muzzle brakes */}
-      <line x1="11" y1="6" x2="15" y2="6" strokeWidth="1.2" />
-      <line x1="25" y1="6" x2="29" y2="6" strokeWidth="1.2" />
-      {/* pivot yoke */}
-      <path d="M10,22 Q20,18 30,22" strokeWidth="1.3" fill={color + '18'} />
       {/* base ring */}
-      <ellipse cx="20" cy="30" rx="10" ry="5" strokeWidth="1.3" fill={color + '18'} />
-      {/* base post */}
-      <line x1="20" y1="22" x2="20" y2="26" strokeWidth="1.5" />
-      {/* detail tick on base */}
-      <line x1="12" y1="30" x2="28" y2="30" strokeWidth="0.7" strokeDasharray="2 2" opacity="0.55" />
+      <circle cx="20" cy="20" r="11" strokeWidth={sw * 1.1} fill={color + '18'} />
+      <circle cx="20" cy="20" r="7" strokeWidth={sw * 0.8} fill={color + '10'} strokeDasharray="3 2" opacity="0.5" />
+      {/* four barrels at 45° angles */}
+      {[45, 135, 225, 315].map(deg => {
+        const r = deg * Math.PI / 180
+        const x1 = 20 + Math.cos(r) * 7
+        const y1 = 20 + Math.sin(r) * 7
+        const x2 = 20 + Math.cos(r) * 16
+        const y2 = 20 + Math.sin(r) * 16
+        return <line key={deg} x1={x1} y1={y1} x2={x2} y2={y2} strokeWidth={sw * 1.6} strokeLinecap="round" />
+      })}
+      {/* center pivot */}
+      <circle cx="20" cy="20" r="3" strokeWidth={sw * 0.9} fill={color + '50'} />
     </g>
   ),
 
-  missile: ({ color }) => (
+  /* ── ミサイル ── 3×1 セル ランチャー（上面視） ──────────────────────── */
+  missile: ({ color, sw }) => (
     <g stroke={color} fill="none" strokeLinecap="round" strokeLinejoin="round">
-      {/* launcher box */}
-      <rect x="6" y="22" width="28" height="14" rx="3" strokeWidth="1.3" fill={color + '18'} />
-      {/* three missiles */}
+      {/* outer launcher box */}
+      <rect x="5" y="6" width="30" height="28" rx="3" strokeWidth={sw * 1.2} fill={color + '15'} />
+      {/* three missile cells */}
       {[10, 20, 30].map(cx => (
         <g key={cx}>
-          <rect x={cx - 3} y="8" width="6" height="16" rx="2" strokeWidth="1.2" fill={color + '22'} />
-          {/* nose cone */}
-          <polygon
-            points={`${cx - 3},8 ${cx},3 ${cx + 3},8`}
-            strokeWidth="1"
-            fill={color + '35'}
-          />
-          {/* fin */}
-          <line x1={cx - 3} y1="22" x2={cx - 5} y2="26" strokeWidth="1" />
-          <line x1={cx + 3} y1="22" x2={cx + 5} y2="26" strokeWidth="1" />
+          {/* missile body (top-down = thin oval) */}
+          <ellipse cx={cx} cy="20" rx="3.5" ry="10" strokeWidth={sw * 1.1} fill={color + '28'} />
+          {/* nose tip */}
+          <ellipse cx={cx} cy="10.5" rx="2" ry="1.5" strokeWidth={sw * 0.9} fill={color + '45'} />
+          {/* fin cross */}
+          <line x1={cx - 3.5} y1="28" x2={cx - 5.5} y2="32" strokeWidth={sw * 0.8} />
+          <line x1={cx + 3.5} y1="28" x2={cx + 5.5} y2="32" strokeWidth={sw * 0.8} />
         </g>
       ))}
       {/* cell dividers */}
-      <line x1="17" y1="22" x2="17" y2="36" strokeWidth="0.8" opacity="0.5" />
-      <line x1="23" y1="22" x2="23" y2="36" strokeWidth="0.8" opacity="0.5" />
+      <line x1="15" y1="7" x2="15" y2="33" strokeWidth={sw * 0.7} opacity="0.5" />
+      <line x1="25" y1="7" x2="25" y2="33" strokeWidth={sw * 0.7} opacity="0.5" />
     </g>
   ),
 }

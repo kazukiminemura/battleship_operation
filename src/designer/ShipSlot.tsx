@@ -3,19 +3,29 @@ import type { SlotDef, Weapon, WeaponSlotType } from './types'
 import { WeaponBlueprint } from './WeaponBlueprint'
 
 const TYPE_COLOR: Record<WeaponSlotType, string> = {
-  gun:       '#f97316',
-  secondary: '#38bdf8',
-  torpedo:   '#06b6d4',
-  aa:        '#4ade80',
-  missile:   '#a78bfa',
+  gun:       '#d4c84a',
+  secondary: '#a8d458',
+  torpedo:   '#4adac8',
+  aa:        '#58d8a0',
+  missile:   '#a0c8e8',
 }
 
+/** Hit-target size when empty; weapon SVG renders larger when filled. */
 const SLOT_SIZE: Record<WeaponSlotType, number> = {
-  gun:       46,
-  secondary: 36,
-  torpedo:   40,
-  aa:        28,
-  missile:   32,
+  gun:       52,
+  secondary: 44,
+  torpedo:   48,
+  aa:        36,
+  missile:   44,
+}
+
+/** Blueprint SVG render size (slightly larger than hit area). */
+const WEAPON_SIZE: Record<WeaponSlotType, number> = {
+  gun:       62,
+  secondary: 52,
+  torpedo:   56,
+  aa:        42,
+  missile:   52,
 }
 
 interface Props {
@@ -30,56 +40,72 @@ export function ShipSlot({ slot, equippedWeapon, isDragTarget, onDrop, onRemove 
   const [isOver, setIsOver] = useState(false)
   const color = TYPE_COLOR[slot.type]
   const size  = SLOT_SIZE[slot.type]
+  const wSize = WEAPON_SIZE[slot.type]
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault()
     e.dataTransfer.dropEffect = 'copy'
     setIsOver(true)
   }
-
   const handleDragLeave = () => setIsOver(false)
-
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
     setIsOver(false)
     const weaponId = e.dataTransfer.getData('weaponId')
     if (weaponId) onDrop(slot.id, weaponId)
   }
-
-  const handleClick = () => {
-    if (equippedWeapon) onRemove(slot.id)
-  }
+  const handleClick = () => { if (equippedWeapon) onRemove(slot.id) }
 
   const filled    = equippedWeapon !== null
   const highlight = isOver && isDragTarget
 
   return (
     <div
-      className={['sd-slot', `sd-slot--${slot.type}`, filled ? 'sd-slot--filled' : '', highlight ? 'sd-slot--hover' : ''].join(' ')}
       style={{
-        position:   'absolute',
-        left:       `${slot.x}%`,
-        top:        `${slot.y}%`,
-        width:      size,
-        height:     size,
+        position:  'absolute',
+        left:      `${slot.x}%`,
+        top:       `${slot.y}%`,
+        width:     size,
+        height:    size,
         marginLeft: -(size / 2),
         marginTop:  -(size / 2),
-        borderColor: filled ? color : color + '70',
-        background:  filled ? color + '28' : 'rgba(6,13,8,0.65)',
-        boxShadow:   highlight ? `0 0 12px ${color}` : filled ? `0 0 6px ${color}60` : 'none',
+        display:   'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        cursor:    filled ? 'pointer' : 'default',
+        /* filled slots: no box, just glow; empty: dashed ring */
+        border:    filled ? 'none' : `1px dashed ${color}55`,
+        borderRadius: '50%',
+        background: filled
+          ? 'transparent'
+          : highlight
+            ? color + '22'
+            : 'transparent',
+        boxShadow: highlight
+          ? `0 0 14px ${color}99`
+          : filled
+            ? `0 0 10px ${color}70, 0 0 20px ${color}30`
+            : 'none',
+        transition: 'box-shadow 0.15s',
       }}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       onClick={handleClick}
-      title={filled ? `${slot.label}: ${equippedWeapon!.name}（クリックで取り外し）` : `${slot.label}（空）`}
+      title={filled
+        ? `${slot.label}: ${equippedWeapon!.name}（クリックで取り外し）`
+        : `${slot.label}（空）`}
     >
       {filled ? (
-        <WeaponBlueprint type={equippedWeapon!.type} color={color} size={size} />
+        <WeaponBlueprint type={equippedWeapon!.type} color={color} size={wSize} />
       ) : (
-        <div className="sd-slot-empty" style={{ color: color + '90' }}>+</div>
+        <span style={{
+          fontSize: 11,
+          color: color + '70',
+          fontFamily: 'monospace',
+          userSelect: 'none',
+        }}>+</span>
       )}
-      <div className="sd-slot-label">{slot.label}</div>
     </div>
   )
 }
