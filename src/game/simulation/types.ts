@@ -17,6 +17,8 @@ export type EntityType = 'ship' | 'projectile' | 'torpedo' | 'objective' | 'buil
 
 export type SpeedLevel = 'full' | 'cruise' | 'slow' | 'stop' | 'reverse'
 
+export type WeatherCondition = 'clear' | 'rain' | 'night'
+
 export interface WeaponState {
   id: string
   name: string
@@ -102,6 +104,7 @@ export interface CombatState {
   stage: number
   stageName: string
   maxStage: number
+  weather: WeatherCondition
   mapObstacles: MapObstacle[]
   entities: Map<string, Entity>
   eventLog: CombatEvent[]

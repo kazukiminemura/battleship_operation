@@ -94,7 +94,7 @@ export function generateAiCommands(state: CombatState, rng: SeededRandom): Comma
     const dy = player.pos.y - enemy.pos.y
     const dist = Math.sqrt(dx * dx + dy * dy)
 
-    if (!enemyCanDetectPlayer(enemy, player)) {
+    if (!enemyCanDetectPlayer(enemy, player, state.weather)) {
       commands.push({ tick: state.tick, actorId: enemy.id, type: 'stop' })
       continue
     }

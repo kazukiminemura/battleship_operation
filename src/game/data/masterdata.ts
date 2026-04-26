@@ -1,4 +1,4 @@
-import { MAX_WEAPON_SLOTS, type BuildingEntity, type ShipEntity, type CombatState, type Entity, type MapObstacle, type Metrics, type WeaponState, type WeaponType } from '../simulation/types'
+import { MAX_WEAPON_SLOTS, type BuildingEntity, type ShipEntity, type CombatState, type Entity, type MapObstacle, type Metrics, type WeaponState, type WeaponType, type WeatherCondition } from '../simulation/types'
 import shipTemplates from './ships.json'
 import { KNOTS_PER_UNIT, WORLD_SIZE } from '../simulation/movement'
 
@@ -45,7 +45,7 @@ export const STATIC_DATA: StaticData = {
   ships: shipTemplates as Record<string, ShipTemplate>,
   stages: [
     {
-      stage: 1, name: 'Outer Patrol', destroyers: 3, cruisers: 0, buildings: 1,
+      stage: 1, name: 'Outer Patrol', destroyers: 3, cruisers: 0, buildings: 1, weather: 'clear',
       mapObstacles: [{
         id: 'island.outer-atoll', x: 5000, y: 5050, rx: 540, ry: 340,
         points: islandPoly(5000, 5050, 540, 340, [
@@ -57,7 +57,7 @@ export const STATIC_DATA: StaticData = {
       }],
     },
     {
-      stage: 2, name: 'Screening Line', destroyers: 5, cruisers: 0, buildings: 1,
+      stage: 2, name: 'Screening Line', destroyers: 5, cruisers: 0, buildings: 1, weather: 'clear',
       mapObstacles: [{
         id: 'island.west-reef', x: 3600, y: 4800, rx: 500, ry: 330,
         points: islandPoly(3600, 4800, 500, 330, [
@@ -69,7 +69,7 @@ export const STATIC_DATA: StaticData = {
       }],
     },
     {
-      stage: 3, name: 'Raider Pack', destroyers: 6, cruisers: 1, buildings: 1,
+      stage: 3, name: 'Raider Pack', destroyers: 6, cruisers: 1, buildings: 1, weather: 'rain',
       mapObstacles: [{
         id: 'island.east-rock', x: 6400, y: 4750, rx: 620, ry: 360,
         points: islandPoly(6400, 4750, 620, 360, [
@@ -252,6 +252,7 @@ export interface StageDefinition {
   buildings: number
   mapObstacles: MapObstacle[]
   boss?: boolean
+  weather?: WeatherCondition
 }
 
 // Speed reduction per armor point: heavier armor = more displacement = slower hull
