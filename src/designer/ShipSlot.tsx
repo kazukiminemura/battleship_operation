@@ -10,7 +10,6 @@ const TYPE_COLOR: Record<WeaponSlotType, string> = {
   missile:   '#a0c8e8',
 }
 
-/** Hit-target size when empty; weapon SVG renders larger when filled. */
 const SLOT_SIZE: Record<WeaponSlotType, number> = {
   gun:       52,
   secondary: 44,
@@ -19,7 +18,6 @@ const SLOT_SIZE: Record<WeaponSlotType, number> = {
   missile:   44,
 }
 
-/** Blueprint SVG render size (slightly larger than hit area). */
 const WEAPON_SIZE: Record<WeaponSlotType, number> = {
   gun:       62,
   secondary: 52,
@@ -32,11 +30,12 @@ interface Props {
   slot: SlotDef
   equippedWeapon: Weapon | null
   isDragTarget: boolean
+  isBlocked: boolean
   onDrop: (slotId: string, weaponId: string) => void
   onRemove: (slotId: string) => void
 }
 
-export function ShipSlot({ slot, equippedWeapon, isDragTarget, onDrop, onRemove }: Props) {
+export function ShipSlot({ slot, equippedWeapon, isDragTarget, isBlocked, onDrop, onRemove }: Props) {
   const [isOver, setIsOver] = useState(false)
   const color = TYPE_COLOR[slot.type]
   const size  = SLOT_SIZE[slot.type]
@@ -44,7 +43,7 @@ export function ShipSlot({ slot, equippedWeapon, isDragTarget, onDrop, onRemove 
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault()
-    e.dataTransfer.dropEffect = 'copy'
+    e.dataTransfer.dropEffect = isBlocked ? 'none' : 'copy'
     setIsOver(true)
   }
   const handleDragLeave = () => setIsOver(false)
@@ -52,12 +51,31 @@ export function ShipSlot({ slot, equippedWeapon, isDragTarget, onDrop, onRemove 
     e.preventDefault()
     setIsOver(false)
     const weaponId = e.dataTransfer.getData('weaponId')
-    if (weaponId) onDrop(slot.id, weaponId)
+    if (weaponId) onDrop(slot.id, weaponId)  // HullView enforces the block
   }
   const handleClick = () => { if (equippedWeapon) onRemove(slot.id) }
 
   const filled    = equippedWeapon !== null
-  const highlight = isOver && isDragTarget
+  const highlight = isOver && isDragTarget && !isBlocked
+  const blocked   = isOver && isBlocked
+
+  let border    = filled ? 'none' : `1px dashed ${color}55`
+  let bg        = 'transparent'
+  let shadow    = filled ? `0 0 10px ${color}70, 0 0 20px ${color}30` : 'none'
+  let cursor    = filled ? 'pointer' : 'default'
+
+  if (isBlocked && !filled) {
+    border = '1px dashed #ff444466'
+  }
+  if (highlight) {
+    bg     = color + '22'
+    shadow = `0 0 14px ${color}99`
+  }
+  if (blocked) {
+    bg     = '#ff000018'
+    shadow = '0 0 14px #ff444488'
+    cursor = 'not-allowed'
+  }
 
   return (
     <div
@@ -72,39 +90,31 @@ export function ShipSlot({ slot, equippedWeapon, isDragTarget, onDrop, onRemove 
         display:   'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        cursor:    filled ? 'pointer' : 'default',
-        /* filled slots: no box, just glow; empty: dashed ring */
-        border:    filled ? 'none' : `1px dashed ${color}55`,
+        cursor,
+        border,
         borderRadius: '50%',
-        background: filled
-          ? 'transparent'
-          : highlight
-            ? color + '22'
-            : 'transparent',
-        boxShadow: highlight
-          ? `0 0 14px ${color}99`
-          : filled
-            ? `0 0 10px ${color}70, 0 0 20px ${color}30`
-            : 'none',
-        transition: 'box-shadow 0.15s',
+        background: bg,
+        boxShadow:  shadow,
+        transition: 'box-shadow 0.12s, background 0.12s',
       }}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       onClick={handleClick}
-      title={filled
-        ? `${slot.label}: ${equippedWeapon!.name}（クリックで取り外し）`
-        : `${slot.label}（空）`}
+      title={
+        isBlocked
+          ? `${slot.label}: 他の兵装と干渉しています`
+          : filled
+            ? `${slot.label}: ${equippedWeapon!.name}（クリックで取り外し）`
+            : `${slot.label}（空）`
+      }
     >
       {filled ? (
         <WeaponBlueprint type={equippedWeapon!.type} color={color} size={wSize} />
+      ) : blocked ? (
+        <span style={{ fontSize: 14, color: '#ff6666', fontWeight: 'bold', userSelect: 'none' }}>✕</span>
       ) : (
-        <span style={{
-          fontSize: 11,
-          color: color + '70',
-          fontFamily: 'monospace',
-          userSelect: 'none',
-        }}>+</span>
+        <span style={{ fontSize: 11, color: color + '70', fontFamily: 'monospace', userSelect: 'none' }}>+</span>
       )}
     </div>
   )
