@@ -11,7 +11,7 @@ import { SoundSystem } from './game/audio/sounds'
 import { NavigatorVoice } from './game/audio/navigator-voice'
 import { StageBriefingVoice } from './game/audio/stage-briefing-voice'
 import { StartScreen } from './game/ui/startscreen'
-import { PrepScreen, type PrepAudioCue, type PrepResult } from './game/ui/prepscreen'
+import { PrepScreen, type PrepResult } from './game/ui/prepscreen'
 import { StageIntroScreen } from './game/ui/stageintroscreen'
 import { ResultsScreen } from './game/ui/resultsscreen'
 import { ScreenManager } from './game/ui/screen-manager'
@@ -74,7 +74,6 @@ function main(): void {
   let selectedTemplateId: string | undefined = undefined
   let selectedLoadout: WeaponTemplate[] = getDefaultLoadout('destroyer')
   let selectedArmorBonus = 0
-  let selectedDesign: PrepResult | null = null
   let currentStage     = 1
   let normalShip: PlayerShipType = selectedShip
   let normalStage      = currentStage
@@ -117,18 +116,6 @@ function main(): void {
   const goToStart = (): void => {
     paused = false
     screens.toStart(bgmEnabled)
-  }
-
-  const goToPrep = (stage: number): void => {
-    paused = false
-    currentStage = stage
-    screens.toPrep(stage, selectedDesign, bgmEnabled)
-  }
-
-  const goToStageIntro = (stage: number): void => {
-    paused = false
-    currentStage = stage
-    screens.toStageIntro(stage, bgmEnabled)
   }
 
   const beginCombat = (): void => {
@@ -180,21 +167,11 @@ function main(): void {
     }
   }
 
-  const playPrepAudioCue = (cue: PrepAudioCue | null): void => {
-    if (cue === 'select') sound.playDesignSelect()
-    else if (cue === 'place') sound.playDesignPlace()
-    else if (cue === 'equip') sound.playDesignEquip()
-    else if (cue === 'back') sound.playDesignBack()
-    else if (cue === 'confirm') sound.playDesignConfirm()
-    else if (cue === 'denied') sound.playDesignDenied()
-  }
-
   const applyPrepResult = (result: PrepResult): void => {
     selectedShip = result.shipType
     selectedTemplateId = result.templateId
     selectedLoadout = result.loadout
     selectedArmorBonus = result.armorBonus
-    selectedDesign = result
   }
 
   const applyHudAction = (id: string | null): boolean => {
@@ -235,17 +212,6 @@ function main(): void {
         e.preventDefault()
         if (!e.repeat) openDesigner()
         return
-      }
-
-      if (screens.mode === 'prep') {
-        const result = prep.checkKeyDown(e)
-        const cue = prep.consumeAudioCue()
-        playPrepAudioCue(cue)
-        if (result) {
-          applyPrepResult(result)
-          goToStageIntro(currentStage)
-        }
-        if (cue || result) { e.preventDefault(); return }
       }
 
       if (screens.mode === 'stage-intro') {
@@ -304,16 +270,6 @@ function main(): void {
       return
     }
 
-    if (screens.mode === 'prep') {
-      const result = prep.checkKeyDown(e)
-      playPrepAudioCue(prep.consumeAudioCue())
-      if (result) {
-        e.preventDefault()
-        if (!e.repeat) { applyPrepResult(result); goToStageIntro(currentStage) }
-        return
-      }
-    }
-
     if (screens.mode === 'stage-intro' && (e.code === 'Enter' || e.code === 'Space')) {
       e.preventDefault()
       if (!e.repeat) beginCombat()
@@ -350,14 +306,6 @@ function main(): void {
   canvas.addEventListener('click', (e) => {
     if (screens.mode === 'start') {
       if (start.checkClick(e)) openDesigner()
-      e.stopImmediatePropagation()
-      return
-    }
-
-    if (screens.mode === 'prep') {
-      const result = prep.checkClick(e)
-      playPrepAudioCue(prep.consumeAudioCue())
-      if (result) { applyPrepResult(result); goToStageIntro(currentStage) }
       e.stopImmediatePropagation()
       return
     }

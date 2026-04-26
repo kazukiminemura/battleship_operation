@@ -31,6 +31,10 @@ export function ShipDesigner({ onClose, onConfirm }: Props) {
   const [hullIdx, setHullIdx]   = useState(0)
   const [design, setDesign]     = useState<Design>(() => loadDesign())
   const [draggingWeaponId, setDraggingWeaponId] = useState<string | null>(null)
+  const [armorBonus, setArmorBonus] = useState(0)
+
+  const ARMOR_STEP = 5
+  const ARMOR_MAX  = 100
 
   const hulls = getHullsByClass(shipType)
   const hull  = hulls[hullIdx] ?? hulls[0]!
@@ -71,9 +75,9 @@ export function ShipDesigner({ onClose, onConfirm }: Props) {
       templateId: hull.templateId,
       shipType:   hull.shipType,
       loadout:    designToLoadout(design, hull),
-      armorBonus: 0,
+      armorBonus,
     })
-  }, [design, hull, onConfirm])
+  }, [design, hull, armorBonus, onConfirm])
 
   useEffect(() => {
     if (step !== 'design' || !onConfirm) return
@@ -170,10 +174,35 @@ export function ShipDesigner({ onClose, onConfirm }: Props) {
           <div className="sd-hull-hint">スロットに兵装をドロップ ／ クリックで取り外し</div>
         </main>
 
-        {/* Right: weight gauge + stats */}
+        {/* Right: weight gauge + stats + armor grade */}
         <aside className="sd-panel sd-panel-right">
           <WeightGauge totalWeight={stats.totalWeight} maxWeight={stats.maxWeight} />
           <StatsPanel stats={stats} />
+          <div className="sd-armor-grade">
+            <div className="sd-section-title">装甲グレード</div>
+            <div className="sd-armor-grade-row">
+              <button
+                className="sd-btn sd-armor-btn"
+                disabled={armorBonus <= 0}
+                onClick={() => setArmorBonus(v => Math.max(0, v - ARMOR_STEP))}
+              >－</button>
+              <div className="sd-armor-grade-bar-wrap">
+                <div
+                  className="sd-armor-grade-bar-fill"
+                  style={{ width: `${(armorBonus / ARMOR_MAX) * 100}%` }}
+                />
+                <span className="sd-armor-grade-label">
+                  {armorBonus > 0 ? `+${armorBonus}` : '0'}
+                </span>
+              </div>
+              <button
+                className="sd-btn sd-armor-btn"
+                disabled={armorBonus >= ARMOR_MAX}
+                onClick={() => setArmorBonus(v => Math.min(ARMOR_MAX, v + ARMOR_STEP))}
+              >＋</button>
+            </div>
+            <div className="sd-armor-grade-hint">装甲増加 / 速力・機動性低下 / 船体大型化</div>
+          </div>
         </aside>
       </div>
 
