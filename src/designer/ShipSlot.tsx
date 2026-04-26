@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { SlotDef, Weapon, WeaponSlotType } from './types'
+import { WeaponBlueprint } from './WeaponBlueprint'
 
 const TYPE_COLOR: Record<WeaponSlotType, string> = {
   gun:       '#f97316',
@@ -74,10 +75,7 @@ export function ShipSlot({ slot, equippedWeapon, isDragTarget, onDrop, onRemove 
       title={filled ? `${slot.label}: ${equippedWeapon!.name}（クリックで取り外し）` : `${slot.label}（空）`}
     >
       {filled ? (
-        <div className="sd-slot-content">
-          <div className="sd-slot-icon" style={{ color }}>●</div>
-          <div className="sd-slot-name">{equippedWeapon!.name.slice(0, 4)}</div>
-        </div>
+        <WeaponBlueprint type={equippedWeapon!.type} color={color} size={size} />
       ) : (
         <div className="sd-slot-empty" style={{ color: color + '90' }}>+</div>
       )}
