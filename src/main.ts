@@ -395,6 +395,7 @@ function main(): void {
 
   canvas.addEventListener('click', (e) => {
     if (mode === 'start') {
+      if (start.checkDesignerClick(e)) { window.location.href = '/designer.html'; return }
       if (start.checkClick(e)) goToPrep(currentStage)
       e.stopImmediatePropagation()
       return
