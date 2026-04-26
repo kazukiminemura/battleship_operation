@@ -30,63 +30,73 @@ export function HullView({ slots, design, draggingWeaponId, onDrop, onRemove }: 
 
   return (
     <div className="sd-hull-wrapper">
-      {/* SVG battleship silhouette */}
+      {/* SVG battleship silhouette — viewBox 200×875, rendered 160×700px → ~6.7:1 ratio */}
       <svg
         className="sd-hull-svg"
-        viewBox="0 0 200 400"
+        viewBox="0 0 200 875"
         preserveAspectRatio="xMidYMid meet"
         aria-hidden="true"
       >
         {/* Main hull */}
         <path
-          d="M100 8
-             L118 22 L135 55 L143 120 L146 200
-             L143 280 L135 345 L115 378 L100 388
-             L85 378  L65 345  L57 280  L54 200
-             L57 120  L65 55   L82 22   Z"
+          d="M100 15
+             C116 18,148 60,162 180
+             L163 600
+             C158 720,132 800,100 855
+             C68 800,42 720,37 600
+             L38 180
+             C52 60,84 18,100 15 Z"
           fill="#0f1e12"
           stroke="#2a5030"
           strokeWidth="2"
         />
-        {/* Deck plating */}
+        {/* Deck plating (inset dashed outline) */}
         <path
-          d="M100 20
-             L115 32 L128 60 L136 120 L138 200
-             L136 275 L128 338 L112 372 L100 380
-             L88 372  L72 338  L64 275  L62 200
-             L64 120  L72 60   L85 32   Z"
+          d="M100 28
+             C113 30,142 72,155 190
+             L156 590
+             C151 705,127 788,100 840
+             C73 788,49 705,44 590
+             L45 190
+             C58 72,87 30,100 28 Z"
           fill="none"
           stroke="#1e3a22"
           strokeWidth="1"
-          strokeDasharray="6 4"
-          opacity="0.6"
+          strokeDasharray="8 5"
+          opacity="0.5"
         />
         {/* Bow accent */}
-        <line x1="100" y1="8" x2="100" y2="55" stroke="#2a6030" strokeWidth="1.5" opacity="0.5" />
+        <line x1="100" y1="15" x2="100" y2="80" stroke="#2a6030" strokeWidth="1.5" opacity="0.5" />
         {/* Keel line */}
-        <line x1="100" y1="55" x2="100" y2="345" stroke="#2a5030" strokeWidth="1" opacity="0.4" />
-        {/* Midship structure */}
-        <rect x="82" y="150" width="36" height="50" rx="3" fill="#121f14" stroke="#2a6030" strokeWidth="1" opacity="0.8" />
-        {/* Bridge tower */}
-        <rect x="88" y="160" width="24" height="30" rx="2" fill="#0e1a10" stroke="#3a7040" strokeWidth="1" />
-        <rect x="92" y="162" width="16" height="12" rx="1" fill="#1a3020" stroke="#3a8040" strokeWidth="1" />
+        <line x1="100" y1="80" x2="100" y2="800" stroke="#2a5030" strokeWidth="1" opacity="0.35" />
+        {/* Forward superstructure */}
+        <rect x="82" y="235" width="36" height="65" rx="3" fill="#121f14" stroke="#2a6030" strokeWidth="1" opacity="0.9" />
+        {/* Bridge */}
+        <rect x="88" y="248" width="24" height="38" rx="2" fill="#0e1a10" stroke="#3a7040" strokeWidth="1" />
+        {/* Bridge windows */}
+        <rect x="91" y="252" width="18" height="10" rx="1" fill="#1a3020" stroke="#3a8040" strokeWidth="0.8" />
+        {/* Foremast */}
+        <line x1="100" y1="230" x2="100" y2="310" stroke="#3a7040" strokeWidth="1.5" opacity="0.7" />
+        {/* Aft superstructure */}
+        <rect x="84" y="375" width="32" height="55" rx="3" fill="#121f14" stroke="#2a5030" strokeWidth="1" opacity="0.8" />
         {/* Funnel */}
-        <ellipse cx="100" cy="215" rx="8" ry="5" fill="#111a12" stroke="#2a5030" strokeWidth="1" />
+        <ellipse cx="100" cy="450" rx="11" ry="7" fill="#111a12" stroke="#2a5030" strokeWidth="1" />
         {/* Stern structure */}
-        <rect x="88" y="280" width="24" height="18" rx="2" fill="#121f14" stroke="#2a5030" strokeWidth="1" opacity="0.6" />
+        <rect x="86" y="550" width="28" height="32" rx="2" fill="#121f14" stroke="#2a5030" strokeWidth="1" opacity="0.6" />
         {/* Frame lines */}
-        {[80, 120, 160, 240, 300].map(y => (
-          <line
-            key={y}
-            x1={58 + (y > 200 ? (y - 200) * 0.06 : 0)}
-            y1={y}
-            x2={142 - (y > 200 ? (y - 200) * 0.06 : 0)}
-            y2={y}
-            stroke="#1e3a22"
-            strokeWidth="0.8"
-            opacity="0.4"
-          />
-        ))}
+        {[100, 200, 300, 400, 500, 620, 720].map(y => {
+          const narrow = y > 620 ? (y - 620) * 0.12 : 0
+          return (
+            <line
+              key={y}
+              x1={40 + narrow} y1={y}
+              x2={160 - narrow} y2={y}
+              stroke="#1e3a22"
+              strokeWidth="0.8"
+              opacity="0.35"
+            />
+          )
+        })}
       </svg>
 
       {/* Weapon slots overlay */}

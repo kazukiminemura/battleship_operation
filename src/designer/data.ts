@@ -46,22 +46,23 @@ export const WEAPONS: Weapon[] = [
 
 export const WEAPON_BY_ID: Record<string, Weapon> = Object.fromEntries(WEAPONS.map(w => [w.id, w]))
 
-// Slot positions tuned to the battleship SVG hull (200×400 viewBox mapped to 100%×100%)
+// Slot positions for the 160×700px hull wrapper (200×875 SVG viewBox)
+// x/y are percent of wrapper; bow is at top (low y), stern at bottom (high y)
 export const HULL_SLOTS: SlotDef[] = [
-  // ── 主砲スロット (center-line) ──────────────────────────────────────────
-  { id: 'main_1', type: 'main',      x: 50, y: 13, label: '第一主砲' },
-  { id: 'main_2', type: 'main',      x: 50, y: 42, label: '第二主砲' },
-  { id: 'main_3', type: 'main',      x: 50, y: 68, label: '第三主砲' },
-  // ── 副砲スロット (sides) ────────────────────────────────────────────────
-  { id: 'sec_1',  type: 'secondary', x: 22, y: 33, label: '左舷副砲A' },
-  { id: 'sec_2',  type: 'secondary', x: 78, y: 33, label: '右舷副砲A' },
-  { id: 'sec_3',  type: 'secondary', x: 22, y: 55, label: '左舷副砲B' },
-  { id: 'sec_4',  type: 'secondary', x: 78, y: 55, label: '右舷副砲B' },
-  // ── 機銃スロット (corners) ──────────────────────────────────────────────
-  { id: 'aa_1',   type: 'aa',        x: 31, y: 21, label: '左舷機銃A' },
-  { id: 'aa_2',   type: 'aa',        x: 69, y: 21, label: '右舷機銃A' },
-  { id: 'aa_3',   type: 'aa',        x: 31, y: 62, label: '左舷機銃B' },
-  { id: 'aa_4',   type: 'aa',        x: 69, y: 62, label: '右舷機銃B' },
+  // ── 主砲 (centerline) ───────────────────────────────────────────────────
+  { id: 'main_1', type: 'main',      x: 50, y: 10, label: '第一主砲' },   // bow forward
+  { id: 'main_2', type: 'main',      x: 50, y: 22, label: '第二主砲' },   // superfiring
+  { id: 'main_3', type: 'main',      x: 50, y: 73, label: '第三主砲' },   // aft
+  // ── 副砲 (broadside, mid-ship) ─────────────────────────────────────────
+  { id: 'sec_1',  type: 'secondary', x: 22, y: 38, label: '左舷副砲A' },
+  { id: 'sec_2',  type: 'secondary', x: 78, y: 38, label: '右舷副砲A' },
+  { id: 'sec_3',  type: 'secondary', x: 22, y: 58, label: '左舷副砲B' },
+  { id: 'sec_4',  type: 'secondary', x: 78, y: 58, label: '右舷副砲B' },
+  // ── 機銃 (corners) ─────────────────────────────────────────────────────
+  { id: 'aa_1',   type: 'aa',        x: 32, y: 29, label: '左舷機銃A' },
+  { id: 'aa_2',   type: 'aa',        x: 68, y: 29, label: '右舷機銃A' },
+  { id: 'aa_3',   type: 'aa',        x: 32, y: 66, label: '左舷機銃B' },
+  { id: 'aa_4',   type: 'aa',        x: 68, y: 66, label: '右舷機銃B' },
 ]
 
 export function calcStats(design: Design): ShipStats {

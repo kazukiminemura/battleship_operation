@@ -201,7 +201,7 @@
   align-items: center;
   justify-content: flex-start;
   padding: 12px 0 8px;
-  overflow: hidden;
+  overflow-y: auto;
   gap: 8px;
 }
 
@@ -220,9 +220,8 @@
 /* ── Hull wrapper (SVG + slots overlay) ──────────────────────────────────── */
 .sd-hull-wrapper {
   position: relative;
-  width: 200px;
-  /* Height based on aspect ratio 200:400 = 1:2, but we limit to viewport */
-  height: min(400px, calc(100vh - var(--sd-header-h) - 80px));
+  width: 160px;
+  height: 700px;
   flex-shrink: 0;
 }
 

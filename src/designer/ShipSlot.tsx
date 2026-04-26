@@ -8,9 +8,9 @@ const TYPE_COLOR: Record<WeaponSlotType, string> = {
 }
 
 const SLOT_SIZE: Record<WeaponSlotType, number> = {
-  main: 52,
-  secondary: 42,
-  aa: 34,
+  main: 46,
+  secondary: 36,
+  aa: 28,
 }
 
 interface Props {
