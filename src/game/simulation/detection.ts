@@ -3,9 +3,9 @@ import type { CombatState, ShipEntity, EnemyContact, WeatherCondition } from './
 // Contact persistence: ticks to keep last-known position after losing detection
 export const CONTACT_PERSIST_TICKS = 180
 
-// Base visibility ranges in world units (approximately 20km clear, 10km rain, current distance at night)
-const VISIBILITY_CLEAR = 20000
-const VISIBILITY_RAIN = 10000
+// Base visibility ranges in world units (approximately 40km clear, 20km rain, current distance at night)
+const VISIBILITY_CLEAR = 40000
+const VISIBILITY_RAIN = 20000
 
 // Get effective detection range based on weather condition
 function effectiveDetectionRange(baseRange: number, weather: WeatherCondition): number {
