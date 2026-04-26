@@ -163,6 +163,29 @@ const WEAPON_CONFIG_OVERRIDES: Record<string, WeaponConfigOverride> = {
   'weapon.missile.antiship.bb': {
     speed: 12, damageMin: 65, damageMax: 95, lifetime: 190, cooldown: 90, hitRadius: 42, maxRange: 2280, maxHeight: 480,
   },
+  // Canonical IDs (position-agnostic) — used by player weapons from the prep screen
+  'weapon.gun.152mm.twin': {
+    speed: 22, damageMin: 50, damageMax: 80, lifetime: 80, cooldown: 18, hitRadius: 22, maxRange: 1600, maxHeight: 300,
+  },
+  'weapon.gun.203mm': {
+    speed: 22, damageMin: 60, damageMax: 95, lifetime: 90, cooldown: 22, hitRadius: 24, maxRange: 1980, maxHeight: 380,
+  },
+  'weapon.gun.406mm.twin': {
+    speed: 24, damageMin: 85, damageMax: 130, lifetime: 100, cooldown: 24, hitRadius: 27, maxRange: 2200, maxHeight: 430,
+  },
+  'weapon.gun.406mm.he': {
+    speed: 21, damageMin: 65, damageMax: 100, lifetime: 105, cooldown: 20, hitRadius: 30, maxRange: 2000, maxHeight: 400,
+  },
+  'weapon.gun.460mm': {
+    speed: 23, damageMin: 130, damageMax: 195, lifetime: 130, cooldown: 36, hitRadius: 36, maxRange: 2600, maxHeight: 580,
+  },
+  'weapon.secondary.152mm.twin': {
+    speed: 24, damageMin: 28, damageMax: 45, lifetime: 75, cooldown: 12, hitRadius: 21, maxRange: 1300, maxHeight: 240,
+  },
+  'weapon.secondary.127mm.bb': {
+    speed: 24, damageMin: 22, damageMax: 35, lifetime: 58, cooldown: 9, hitRadius: 18, maxRange: 1000, maxHeight: 190,
+  },
+  // Position-specific aliases (ships.json enemies use these IDs)
   'weapon.gun.406mm.twin.forward': {
     speed: 24, damageMin: 85, damageMax: 130, lifetime: 100, cooldown: 24, hitRadius: 27, maxRange: 2200, maxHeight: 430,
   },

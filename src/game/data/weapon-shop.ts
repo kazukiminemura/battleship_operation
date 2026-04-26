@@ -10,29 +10,19 @@ export interface ShopWeapon extends WeaponTemplate {
 
 export const WEAPON_SHOP: ShopWeapon[] = [
   // ── Guns ────────────────────────────────────────────────────────────────
-  { id: 'weapon.gun.127mm.twin',           name: '12.7cm HE 連装砲',    type: 'gun',       ammo: 220, desc: '高発射速度・汎用榴弾',   cost: 300,  minStage: 1 },
-  { id: 'weapon.gun.127mm.ap',             name: '12.7cm AP 連装砲',    type: 'gun',       ammo: 160, desc: '徹甲弾・高威力・長射程', cost: 380,  minStage: 1 },
-  { id: 'weapon.gun.152mm.twin.forward',   name: '15.2cm 連装砲 (前)',  type: 'gun',       ammo: 160, desc: '均衡型・連射性能良好',   cost: 500,  minStage: 3 },
-  { id: 'weapon.gun.152mm.twin.aft',       name: '15.2cm 連装砲 (後)',  type: 'gun',       ammo: 160, desc: '均衡型・連射性能良好',   cost: 500,  minStage: 3 },
-  { id: 'weapon.gun.203mm.forward',        name: '20.3cm 重砲 (前)',    type: 'gun',       ammo:  90, desc: '重砲・高威力・長射程',   cost: 700,  minStage: 4 },
-  { id: 'weapon.gun.203mm.aft',            name: '20.3cm 重砲 (後)',    type: 'gun',       ammo:  90, desc: '重砲・高威力・長射程',   cost: 700,  minStage: 4 },
-  { id: 'weapon.gun.406mm.twin.forward',   name: '40.6cm AP砲 (前)',    type: 'gun',       ammo: 180, desc: '徹甲弾・重装甲貫通',     cost: 900,  minStage: 5 },
-  { id: 'weapon.gun.406mm.twin.center',    name: '40.6cm AP砲 (中)',    type: 'gun',       ammo: 180, desc: '徹甲弾・重装甲貫通',     cost: 900,  minStage: 5 },
-  { id: 'weapon.gun.406mm.twin.aft',       name: '40.6cm AP砲 (後)',    type: 'gun',       ammo: 180, desc: '徹甲弾・重装甲貫通',     cost: 900,  minStage: 5 },
-  { id: 'weapon.gun.406mm.he.forward',     name: '40.6cm HE砲 (前)',    type: 'gun',       ammo: 220, desc: '榴弾・範囲威力・多装填', cost: 850,  minStage: 5 },
-  { id: 'weapon.gun.406mm.he.center',      name: '40.6cm HE砲 (中)',    type: 'gun',       ammo: 220, desc: '榴弾・範囲威力・多装填', cost: 850,  minStage: 5 },
-  { id: 'weapon.gun.406mm.he.aft',         name: '40.6cm HE砲 (後)',    type: 'gun',       ammo: 220, desc: '榴弾・範囲威力・多装填', cost: 850,  minStage: 5 },
-  { id: 'weapon.gun.460mm.forward',        name: '46cm 超重砲 (前)',     type: 'gun',       ammo: 120, desc: '超重砲・最大破壊力',     cost: 1200, minStage: 7 },
-  { id: 'weapon.gun.460mm.center',         name: '46cm 超重砲 (中)',     type: 'gun',       ammo: 120, desc: '超重砲・最大破壊力',     cost: 1200, minStage: 7 },
-  { id: 'weapon.gun.460mm.aft',            name: '46cm 超重砲 (後)',     type: 'gun',       ammo: 120, desc: '超重砲・最大破壊力',     cost: 1200, minStage: 7 },
+  { id: 'weapon.gun.127mm.twin',  name: '12.7cm HE 連装砲', type: 'gun', ammo: 220, desc: '高発射速度・汎用榴弾',   cost: 300,  minStage: 1 },
+  { id: 'weapon.gun.127mm.ap',    name: '12.7cm AP 連装砲', type: 'gun', ammo: 160, desc: '徹甲弾・高威力・長射程', cost: 380,  minStage: 1 },
+  { id: 'weapon.gun.152mm.twin',  name: '15.2cm 連装砲',    type: 'gun', ammo: 160, desc: '均衡型・連射性能良好',   cost: 500,  minStage: 3 },
+  { id: 'weapon.gun.203mm',       name: '20.3cm 重砲',      type: 'gun', ammo:  90, desc: '重砲・高威力・長射程',   cost: 700,  minStage: 4 },
+  { id: 'weapon.gun.406mm.twin',  name: '40.6cm AP 連装砲', type: 'gun', ammo: 180, desc: '徹甲弾・重装甲貫通',     cost: 900,  minStage: 5 },
+  { id: 'weapon.gun.406mm.he',    name: '40.6cm HE 連装砲', type: 'gun', ammo: 220, desc: '榴弾・範囲威力・多装填', cost: 850,  minStage: 5 },
+  { id: 'weapon.gun.460mm',       name: '46cm 超重砲',       type: 'gun', ammo: 120, desc: '超重砲・最大破壊力',     cost: 1200, minStage: 7 },
 
   // ── Secondaries ─────────────────────────────────────────────────────────
-  { id: 'weapon.secondary.127mm.twin',              name: '12.7cm 速射副砲',    type: 'secondary', ammo: 400, desc: '高発射速度・汎用',         cost: 280,  minStage: 1 },
-  { id: 'weapon.secondary.100mm.cl',                name: '10cm 高角砲',        type: 'secondary', ammo: 560, desc: '高角射撃対応・豊富な弾数', cost: 320,  minStage: 3 },
-  { id: 'weapon.secondary.152mm.twin.port',         name: '15.2cm 重副砲 (左)', type: 'secondary', ammo: 260, desc: '重副砲・高威力',           cost: 500,  minStage: 5 },
-  { id: 'weapon.secondary.152mm.twin.starboard',    name: '15.2cm 重副砲 (右)', type: 'secondary', ammo: 260, desc: '重副砲・高威力',           cost: 500,  minStage: 5 },
-  { id: 'weapon.secondary.127mm.bb.port',           name: '12.7cm 速射砲 (左)', type: 'secondary', ammo: 400, desc: '速射副砲・多装填',         cost: 350,  minStage: 5 },
-  { id: 'weapon.secondary.127mm.bb.starboard',      name: '12.7cm 速射砲 (右)', type: 'secondary', ammo: 400, desc: '速射副砲・多装填',         cost: 350,  minStage: 5 },
+  { id: 'weapon.secondary.127mm.twin',   name: '12.7cm 速射副砲',  type: 'secondary', ammo: 400, desc: '高発射速度・汎用',         cost: 280, minStage: 1 },
+  { id: 'weapon.secondary.100mm.cl',     name: '10cm 高角砲',      type: 'secondary', ammo: 560, desc: '高角射撃対応・豊富な弾数', cost: 320, minStage: 3 },
+  { id: 'weapon.secondary.152mm.twin',   name: '15.2cm 重副砲',    type: 'secondary', ammo: 260, desc: '重副砲・高威力',           cost: 500, minStage: 5 },
+  { id: 'weapon.secondary.127mm.bb',     name: '12.7cm 速射砲',    type: 'secondary', ammo: 400, desc: '速射副砲・多装填',         cost: 350, minStage: 5 },
 
   // ── Torpedoes ────────────────────────────────────────────────────────────
   { id: 'weapon.torpedo.533mm.basic', name: '53.3cm 魚雷',   type: 'torpedo', ammo: 24, desc: '標準魚雷・取り回し良好',     cost: 400,  minStage: 1 },

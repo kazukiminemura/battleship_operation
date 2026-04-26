@@ -46,15 +46,15 @@ export const WEAPON_CATALOG: Record<PlayerShipType, SlotCatalog[]> = {
     {
       label: '前部主砲',
       options: [
-        { id: 'weapon.gun.152mm.twin.forward',  name: '15.2cm 前部砲', type: 'gun', ammo: 160, desc: '均衡型・連射性能良好' },
-        { id: 'weapon.gun.203mm.forward',        name: '20.3cm 前部砲', type: 'gun', ammo:  90, desc: '重砲・高威力・長射程' },
+        { id: 'weapon.gun.152mm.twin', name: '15.2cm 連装砲', type: 'gun', ammo: 160, desc: '均衡型・連射性能良好' },
+        { id: 'weapon.gun.203mm',      name: '20.3cm 重砲',   type: 'gun', ammo:  90, desc: '重砲・高威力・長射程' },
       ],
     },
     {
       label: '後部主砲',
       options: [
-        { id: 'weapon.gun.152mm.twin.aft',      name: '15.2cm 後部砲', type: 'gun', ammo: 160, desc: '均衡型・連射性能良好' },
-        { id: 'weapon.gun.203mm.aft',            name: '20.3cm 後部砲', type: 'gun', ammo:  90, desc: '重砲・高威力・長射程' },
+        { id: 'weapon.gun.152mm.twin', name: '15.2cm 連装砲', type: 'gun', ammo: 160, desc: '均衡型・連射性能良好' },
+        { id: 'weapon.gun.203mm',      name: '20.3cm 重砲',   type: 'gun', ammo:  90, desc: '重砲・高威力・長射程' },
       ],
     },
     {
@@ -91,39 +91,39 @@ export const WEAPON_CATALOG: Record<PlayerShipType, SlotCatalog[]> = {
     {
       label: '前部主砲',
       options: [
-        { id: 'weapon.gun.406mm.twin.forward',  name: '40.6cm AP 前部砲', type: 'gun', ammo: 180, desc: '徹甲弾・重装甲貫通' },
-        { id: 'weapon.gun.406mm.he.forward',    name: '40.6cm HE 前部砲', type: 'gun', ammo: 220, desc: '榴弾・範囲威力・多装填' },
-        { id: 'weapon.gun.460mm.forward',       name: '46cm 前部主砲',    type: 'gun', ammo: 120, desc: '超重砲・最大破壊力' },
+        { id: 'weapon.gun.406mm.twin', name: '40.6cm AP 連装砲', type: 'gun', ammo: 180, desc: '徹甲弾・重装甲貫通' },
+        { id: 'weapon.gun.406mm.he',   name: '40.6cm HE 連装砲', type: 'gun', ammo: 220, desc: '榴弾・範囲威力・多装填' },
+        { id: 'weapon.gun.460mm',      name: '46cm 超重砲',       type: 'gun', ammo: 120, desc: '超重砲・最大破壊力' },
       ],
     },
     {
       label: '中央主砲',
       options: [
-        { id: 'weapon.gun.406mm.twin.center',   name: '40.6cm AP 中央砲', type: 'gun', ammo: 180, desc: '徹甲弾・重装甲貫通' },
-        { id: 'weapon.gun.406mm.he.center',     name: '40.6cm HE 中央砲', type: 'gun', ammo: 220, desc: '榴弾・範囲威力・多装填' },
-        { id: 'weapon.gun.460mm.center',        name: '46cm 中央主砲',    type: 'gun', ammo: 120, desc: '超重砲・最大破壊力' },
+        { id: 'weapon.gun.406mm.twin', name: '40.6cm AP 連装砲', type: 'gun', ammo: 180, desc: '徹甲弾・重装甲貫通' },
+        { id: 'weapon.gun.406mm.he',   name: '40.6cm HE 連装砲', type: 'gun', ammo: 220, desc: '榴弾・範囲威力・多装填' },
+        { id: 'weapon.gun.460mm',      name: '46cm 超重砲',       type: 'gun', ammo: 120, desc: '超重砲・最大破壊力' },
       ],
     },
     {
       label: '後部主砲',
       options: [
-        { id: 'weapon.gun.406mm.twin.aft',      name: '40.6cm AP 後部砲', type: 'gun', ammo: 180, desc: '徹甲弾・重装甲貫通' },
-        { id: 'weapon.gun.406mm.he.aft',        name: '40.6cm HE 後部砲', type: 'gun', ammo: 220, desc: '榴弾・範囲威力・多装填' },
-        { id: 'weapon.gun.460mm.aft',           name: '46cm 後部主砲',    type: 'gun', ammo: 120, desc: '超重砲・最大破壊力' },
+        { id: 'weapon.gun.406mm.twin', name: '40.6cm AP 連装砲', type: 'gun', ammo: 180, desc: '徹甲弾・重装甲貫通' },
+        { id: 'weapon.gun.406mm.he',   name: '40.6cm HE 連装砲', type: 'gun', ammo: 220, desc: '榴弾・範囲威力・多装填' },
+        { id: 'weapon.gun.460mm',      name: '46cm 超重砲',       type: 'gun', ammo: 120, desc: '超重砲・最大破壊力' },
       ],
     },
     {
       label: '左舷副砲',
       options: [
-        { id: 'weapon.secondary.152mm.twin.port',     name: '15.2cm 左舷副砲',  type: 'secondary', ammo: 260, desc: '重副砲・高威力' },
-        { id: 'weapon.secondary.127mm.bb.port',       name: '12.7cm 左舷副砲',  type: 'secondary', ammo: 400, desc: '速射副砲・多装填' },
+        { id: 'weapon.secondary.152mm.twin', name: '15.2cm 重副砲',  type: 'secondary', ammo: 260, desc: '重副砲・高威力' },
+        { id: 'weapon.secondary.127mm.bb',   name: '12.7cm 速射砲',  type: 'secondary', ammo: 400, desc: '速射副砲・多装填' },
       ],
     },
     {
       label: '右舷副砲',
       options: [
-        { id: 'weapon.secondary.152mm.twin.starboard', name: '15.2cm 右舷副砲', type: 'secondary', ammo: 260, desc: '重副砲・高威力' },
-        { id: 'weapon.secondary.127mm.bb.starboard',   name: '12.7cm 右舷副砲', type: 'secondary', ammo: 400, desc: '速射副砲・多装填' },
+        { id: 'weapon.secondary.152mm.twin', name: '15.2cm 重副砲', type: 'secondary', ammo: 260, desc: '重副砲・高威力' },
+        { id: 'weapon.secondary.127mm.bb',   name: '12.7cm 速射砲', type: 'secondary', ammo: 400, desc: '速射副砲・多装填' },
       ],
     },
     {

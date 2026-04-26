@@ -77,7 +77,7 @@ export function fireWeaponAtSlot(
   const dist = Math.sqrt(dx * dx + dy * dy)
 
   if (dist > cfg.maxRange) return state
-  if (!isWithinFiringArc(ship, weapon.id, dx, dy)) return state
+  if (!isWithinFiringArc(ship, weapon, dx, dy)) return state
 
   const baseDirX = dist > 0 ? dx / dist : 1
   const baseDirY = dist > 0 ? dy / dist : 0
@@ -146,9 +146,12 @@ export function fireWeaponAtSlot(
   return { ...state, entities, eventLog: [...state.eventLog, firedEvent] }
 }
 
-function isWithinFiringArc(ship: ShipEntity, weaponId: string, dx: number, dy: number): boolean {
-  const isPort = weaponId.includes('.port')
-  const isStarboard = weaponId.includes('.starboard')
+function isWithinFiringArc(ship: ShipEntity, weapon: ShipEntity['weapons'][number], dx: number, dy: number): boolean {
+  // Prefer mount.x for port/starboard detection (player weapons from prep screen).
+  // Fall back to ID suffix for legacy enemy ships that have no mount.
+  const mountX = weapon.mount?.x
+  const isPort = mountX !== undefined ? mountX < -0.15 : weapon.id.includes('.port')
+  const isStarboard = mountX !== undefined ? mountX > 0.15 : weapon.id.includes('.starboard')
   if (!isPort && !isStarboard) return true
 
   const portX = Math.sin(ship.angle)
