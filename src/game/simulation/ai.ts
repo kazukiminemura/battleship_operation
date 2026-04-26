@@ -1,17 +1,10 @@
-import type { CombatState, ShipEntity, BuildingEntity, Command, Vec3, MapObstacle, WeaponState, WeaponType } from './types'
+import type { CombatState, ShipEntity, BuildingEntity, Command, Vec3, MapObstacle, WeaponState } from './types'
 import { isShip, isBuilding } from './types'
 import type { SeededRandom } from './random'
-import { getWeaponConfig, WEAPON_CONFIGS } from './weapon-strategies'
+import { getWeaponConfig, WEAPON_CONFIGS, WEAPON_AIM_ERRORS } from './weapon-strategies'
 import { enemyCanDetectPlayer } from './detection'
 
 const RANGE_MARGIN = 0.85
-const ENEMY_AIM_ERROR_BY_WEAPON: Record<WeaponType, number> = {
-  gun: 90,
-  secondary: 75,
-  torpedo: 80,
-  aa: 55,
-  missile: 130,
-}
 
 type AiBehaviorFn = (
   enemy: ShipEntity,
@@ -122,7 +115,7 @@ function enemyAimTarget(
   dist: number,
   rng: SeededRandom,
 ): Vec3 {
-  const baseError = ENEMY_AIM_ERROR_BY_WEAPON[weapon.type]
+  const baseError = WEAPON_AIM_ERRORS[weapon.type]
   const shipFactor = enemy.templateId === 'hull.enemy.boss.dreadnought'
     ? 1.45
     : enemy.templateId === 'hull.cruiser.basic'

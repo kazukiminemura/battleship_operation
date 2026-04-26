@@ -1,6 +1,3 @@
-import { createElement } from 'react'
-import { createRoot, type Root } from 'react-dom/client'
-import { ShipDesigner } from './designer/ShipDesigner'
 import { CanvasRenderer } from './game/rendering/canvas'
 import { HUD } from './game/ui/hud'
 import { InputAdapter } from './game/input/adapter'
@@ -17,6 +14,7 @@ import { StartScreen } from './game/ui/startscreen'
 import { PrepScreen, type PrepAudioCue, type PrepResult } from './game/ui/prepscreen'
 import { StageIntroScreen } from './game/ui/stageintroscreen'
 import { ResultsScreen } from './game/ui/resultsscreen'
+import { ScreenManager } from './game/ui/screen-manager'
 import type { WeaponTemplate } from './game/data/masterdata'
 import { getDefaultLoadout } from './game/data/weapon-catalog'
 import { isAccessKey } from './game/ui/accesskeys'
@@ -36,7 +34,6 @@ import {
 } from './game/simulation/player-commands'
 
 const BASE_SEED = 12345
-type GameMode = 'start' | 'designer' | 'prep' | 'stage-intro' | 'combat' | 'results'
 
 function main(): void {
   const canvas = document.getElementById('game-canvas') as HTMLCanvasElement
@@ -44,54 +41,56 @@ function main(): void {
 
   const debugMapEnabled = new URLSearchParams(window.location.search).get('debug') === 'map'
   let debugMode = debugMapEnabled
-  let mode: GameMode = debugMode ? 'combat' : 'start'
-  const renderer = new CanvasRenderer(canvas)
-  const hud      = new HUD(canvas)
-  const start    = new StartScreen(canvas)
-  const prep     = new PrepScreen(canvas)
-  const stageIntro = new StageIntroScreen(canvas)
-  const results  = new ResultsScreen(canvas)
-  const sound    = new SoundSystem()
-  const navigator = new NavigatorVoice()
+
+  // ── Construct all subsystems ──────────────────────────────────────────────
+  const renderer     = new CanvasRenderer(canvas)
+  const hud          = new HUD(canvas)
+  const start        = new StartScreen(canvas)
+  const prep         = new PrepScreen(canvas)
+  const stageIntro   = new StageIntroScreen(canvas)
+  const results      = new ResultsScreen(canvas)
+  const sound        = new SoundSystem()
+  const navigator    = new NavigatorVoice()
   const briefingVoice = new StageBriefingVoice()
-  const input    = new InputAdapter(canvas, renderer, {
+  const input        = new InputAdapter(canvas, renderer, {
     onWeaponSelected: (weaponMode) => {
       const weapon = selectedWeapon(state, weaponMode)
-      if (mode === 'combat' && weapon) sound.playWeaponSelected(weapon.type)
+      if (screens.mode === 'combat' && weapon) sound.playWeaponSelected(weapon.type)
     },
     onSpeedChanged: (direction) => {
-      if (mode === 'combat') sound.playSpeedChange(direction)
+      if (screens.mode === 'combat') sound.playSpeedChange(direction)
     },
     onZoomIn: () => {
-      if (mode === 'combat') {
-        const currentZoom = renderer.getZoom()
-        renderer.setZoom(currentZoom + 0.1)
-      }
+      if (screens.mode === 'combat') renderer.setZoom(renderer.getZoom() + 0.1)
     },
     onZoomOut: () => {
-      if (mode === 'combat') {
-        const currentZoom = renderer.getZoom()
-        renderer.setZoom(currentZoom - 0.1)
-      }
+      if (screens.mode === 'combat') renderer.setZoom(renderer.getZoom() - 0.1)
     },
   })
-  let rng = createRngStreams(BASE_SEED)
 
+  // ── Game variables ────────────────────────────────────────────────────────
+  let rng              = createRngStreams(BASE_SEED)
   let selectedShip: PlayerShipType = 'destroyer'
   let selectedTemplateId: string | undefined = undefined
   let selectedLoadout: WeaponTemplate[] = getDefaultLoadout('destroyer')
   let selectedArmorBonus = 0
   let selectedDesign: PrepResult | null = null
-  let currentStage = 1
+  let currentStage     = 1
   let normalShip: PlayerShipType = selectedShip
-  let normalStage = currentStage
-  let bgmEnabled = true
+  let normalStage      = currentStage
+  let bgmEnabled       = true
   let accessKeysVisible = false
-  let paused = false
+  let paused           = false
   let pauseRegions: PauseRegion[] = []
   let state: CombatState = debugMode
     ? createDebugState('battleship')
     : createInitialState(selectedShip, currentStage)
+
+  // ── Screen manager (owns mode state machine + screen lifecycle) ───────────
+  const screens = new ScreenManager(
+    { start, prep, stageIntro, results, sound, input, briefingVoice, navigator },
+    debugMode ? 'combat' : 'start',
+  )
 
   if (!debugMode) {
     start.attach()
@@ -103,89 +102,45 @@ function main(): void {
     sound.setBgmEnabled(bgmEnabled, isBossStage(state) ? 'boss' : 'normal')
   }
 
-  let designerRoot: Root | null = null
-
+  // ── Screen transition helpers (game-state concerns remain here) ───────────
   const openDesigner = (): void => {
-    const el = document.getElementById('designer-root')!
-    el.style.display = 'block'
-    mode = 'designer'
-    start.detach()
-    if (!designerRoot) designerRoot = createRoot(el)
-    designerRoot.render(createElement(ShipDesigner, {
-      onClose:   closeDesigner,
-      onConfirm: (result) => {
-        closeDesigner(false)
+    screens.openDesigner(
+      () => screens.closeDesigner(true),
+      (result) => {
+        screens.closeDesigner(false)
         applyPrepResult(result)
-        goToStageIntro(currentStage)
+        screens.toStageIntro(currentStage, bgmEnabled)
       },
-    }))
-  }
-
-  const closeDesigner = (restoreStart = true): void => {
-    document.getElementById('designer-root')!.style.display = 'none'
-    if (designerRoot) {
-      designerRoot.unmount()
-      designerRoot = null
-    }
-    if (restoreStart && mode === 'designer') {
-      mode = 'start'
-      start.attach()
-    }
+    )
   }
 
   const goToStart = (): void => {
     paused = false
-    input.setSuspended(false)
-    mode = 'start'
-    start.attach()
-    briefingVoice.stop()
-    sound.setBgmEnabled(bgmEnabled, 'title')
-    sound.reset()
+    screens.toStart(bgmEnabled)
   }
 
   const goToPrep = (stage: number): void => {
     paused = false
-    input.setSuspended(false)
     currentStage = stage
-    start.detach()
-    results.detach()
-    briefingVoice.stop()
-    mode = 'prep'
-    prep.attach(stage, selectedDesign)
-    sound.setBgmEnabled(bgmEnabled, 'prep')
+    screens.toPrep(stage, selectedDesign, bgmEnabled)
   }
 
   const goToStageIntro = (stage: number): void => {
     paused = false
-    input.setSuspended(false)
     currentStage = stage
-    start.detach()
-    prep.detach()
-    results.detach()
-    mode = 'stage-intro'
-    stageIntro.attach()
-    briefingVoice.play(stage)
-    sound.setBgmEnabled(bgmEnabled, 'intro')
+    screens.toStageIntro(stage, bgmEnabled)
   }
 
   const beginCombat = (): void => {
     paused = false
-    input.setSuspended(false)
     debugMode = false
     state = createInitialState(selectedShip, currentStage, selectedLoadout, selectedTemplateId, selectedArmorBonus)
     rng = createRngStreams(BASE_SEED + currentStage * 1009)
-    sound.reset()
-    sound.setBgmEnabled(bgmEnabled, isBossStage(state) ? 'boss' : 'normal')
-    navigator.reset()
-    navigator.announceCombatStart()
-    mode = 'combat'
-    briefingVoice.stop()
-    stageIntro.detach()
+    screens.toCombat(bgmEnabled, isBossStage(state))
   }
 
   const beginDebugCombat = (): void => {
     paused = false
-    input.setSuspended(false)
     if (!debugMode) {
       normalShip = selectedShip
       normalStage = currentStage >= 1 && currentStage <= STATIC_DATA.stages.length ? currentStage : 1
@@ -196,16 +151,7 @@ function main(): void {
     state = createDebugState(selectedShip)
     currentStage = state.stage
     rng = createRngStreams(BASE_SEED + 99099)
-    sound.reset()
-    sound.setBgmEnabled(bgmEnabled, isBossStage(state) ? 'boss' : 'normal')
-    navigator.reset()
-    navigator.announceCombatStart()
-    mode = 'combat'
-    start.detach()
-    prep.detach()
-    stageIntro.detach()
-    results.detach()
-    briefingVoice.stop()
+    screens.toCombat(bgmEnabled, isBossStage(state))
   }
 
   const toggleDebugMap = (): void => {
@@ -220,21 +166,14 @@ function main(): void {
 
   const enterResults = (): void => {
     paused = false
-    input.setSuspended(false)
-    mode = 'results'
-    briefingVoice.stop()
-    sound.reset()
-    sound.setBgmEnabled(bgmEnabled, 'results')
-    results.attach()
+    screens.toResults(bgmEnabled)
   }
 
   const applyResultAction = (action: 'next' | 'retry' | 'title' | null): void => {
     if (action === 'next') {
       currentStage++
-      results.detach()
       openDesigner()
     } else if (action === 'retry') {
-      results.detach()
       openDesigner()
     } else if (action === 'title') {
       goToStart()
@@ -260,41 +199,28 @@ function main(): void {
 
   const applyHudAction = (id: string | null): boolean => {
     if (!id) return false
-    if (id === 'toggle-autopilot') {
-      state = toggleAutoPilot(state)
-      return true
-    }
-    if (id === 'toggle-all') {
-      state = toggleAllAutoFire(state)
-      return true
-    }
-    if (id === 'toggle-bgm') {
-      bgmEnabled = sound.toggleBgm()
-      return true
-    }
+    if (id === 'toggle-autopilot') { state = toggleAutoPilot(state); return true }
+    if (id === 'toggle-all')       { state = toggleAllAutoFire(state); return true }
+    if (id === 'toggle-bgm')       { bgmEnabled = sound.toggleBgm(); return true }
     if (id.startsWith('toggle:')) {
-      const slot = Number(id.slice(7))
-      state = toggleWeaponAutoFire(state, slot)
+      state = toggleWeaponAutoFire(state, Number(id.slice(7)))
       return true
     }
     return false
   }
 
   const togglePause = (): void => {
-    if (mode !== 'combat' || state.missionResult !== 'none') return
+    if (screens.mode !== 'combat' || state.missionResult !== 'none') return
     paused = !paused
     input.setSuspended(paused)
   }
 
   const applyPauseAction = (action: PauseAction | null): void => {
-    if (action === 'resume') {
-      paused = false
-      input.setSuspended(false)
-    } else if (action === 'title') {
-      goToStart()
-    }
+    if (action === 'resume') { paused = false; input.setSuspended(false) }
+    else if (action === 'title') { goToStart() }
   }
 
+  // ── Keyboard input ────────────────────────────────────────────────────────
   window.addEventListener('keydown', (e) => {
     if (e.code === 'AltLeft' || e.code === 'AltRight') {
       accessKeysVisible = true
@@ -305,13 +231,13 @@ function main(): void {
     if (e.altKey) {
       accessKeysVisible = true
 
-      if (mode === 'start' && start.checkKeyDown(e)) {
+      if (screens.mode === 'start' && start.checkKeyDown(e)) {
         e.preventDefault()
         if (!e.repeat) openDesigner()
         return
       }
 
-      if (mode === 'prep') {
+      if (screens.mode === 'prep') {
         const result = prep.checkKeyDown(e)
         const cue = prep.consumeAudioCue()
         playPrepAudioCue(cue)
@@ -319,13 +245,10 @@ function main(): void {
           applyPrepResult(result)
           goToStageIntro(currentStage)
         }
-        if (cue || result) {
-          e.preventDefault()
-          return
-        }
+        if (cue || result) { e.preventDefault(); return }
       }
 
-      if (mode === 'stage-intro') {
+      if (screens.mode === 'stage-intro') {
         const action = stageIntro.checkKeyDown(e)
         if (action === 'sortie') {
           e.preventDefault()
@@ -334,12 +257,12 @@ function main(): void {
         }
       }
 
-      if (mode === 'combat' && applyHudAction(hud.checkAccessKey(e))) {
+      if (screens.mode === 'combat' && applyHudAction(hud.checkAccessKey(e))) {
         e.preventDefault()
         return
       }
 
-      if (mode === 'combat' && paused) {
+      if (screens.mode === 'combat' && paused) {
         if (isAccessKey(e, pauseAccessKey('resume'))) {
           e.preventDefault()
           if (!e.repeat) applyPauseAction('resume')
@@ -352,7 +275,7 @@ function main(): void {
         }
       }
 
-      if (mode === 'results') {
+      if (screens.mode === 'results') {
         const action = results.checkKeyDown(e, state)
         if (action) {
           e.preventDefault()
@@ -369,48 +292,41 @@ function main(): void {
       return
     }
 
-    if (mode === 'combat' && !e.altKey && (e.code === 'KeyP' || e.code === 'Escape')) {
+    if (screens.mode === 'combat' && !e.altKey && (e.code === 'KeyP' || e.code === 'Escape')) {
       e.preventDefault()
       if (!e.repeat) togglePause()
       return
     }
 
-    if (mode === 'start' && start.checkKeyDown(e)) {
+    if (screens.mode === 'start' && start.checkKeyDown(e)) {
       e.preventDefault()
       if (!e.repeat) openDesigner()
       return
     }
 
-    if (mode === 'prep') {
+    if (screens.mode === 'prep') {
       const result = prep.checkKeyDown(e)
       playPrepAudioCue(prep.consumeAudioCue())
       if (result) {
         e.preventDefault()
-        if (!e.repeat) {
-          applyPrepResult(result)
-          goToStageIntro(currentStage)
-        }
+        if (!e.repeat) { applyPrepResult(result); goToStageIntro(currentStage) }
         return
       }
     }
 
-    if (mode === 'stage-intro' && (e.code === 'Enter' || e.code === 'Space')) {
+    if (screens.mode === 'stage-intro' && (e.code === 'Enter' || e.code === 'Space')) {
       e.preventDefault()
       if (!e.repeat) beginCombat()
       return
     }
 
-    if (mode === 'results') {
+    if (screens.mode === 'results') {
       const action = results.checkKeyDown(e, state)
       if (
         action ||
-        e.code === 'ArrowLeft' ||
-        e.code === 'ArrowRight' ||
-        e.code === 'Tab' ||
-        e.code === 'Enter' ||
-        e.code === 'Space' ||
-        e.code === 'KeyN' ||
-        e.code === 'KeyT'
+        e.code === 'ArrowLeft' || e.code === 'ArrowRight' ||
+        e.code === 'Tab'       || e.code === 'Enter'      ||
+        e.code === 'Space'     || e.code === 'KeyN'       || e.code === 'KeyT'
       ) {
         e.preventDefault()
         if (!e.repeat) applyResultAction(action)
@@ -418,7 +334,7 @@ function main(): void {
       }
     }
 
-    if (e.code === 'KeyR' && !e.altKey && (mode === 'combat' || mode === 'results')) {
+    if (e.code === 'KeyR' && !e.altKey && (screens.mode === 'combat' || screens.mode === 'results')) {
       goToStart()
     }
   })
@@ -430,41 +346,37 @@ function main(): void {
     }
   })
 
+  // ── Mouse / click input ───────────────────────────────────────────────────
   canvas.addEventListener('click', (e) => {
-    if (mode === 'start') {
+    if (screens.mode === 'start') {
       if (start.checkClick(e)) openDesigner()
       e.stopImmediatePropagation()
       return
     }
 
-    if (mode === 'prep') {
+    if (screens.mode === 'prep') {
       const result = prep.checkClick(e)
       playPrepAudioCue(prep.consumeAudioCue())
-      if (result) {
-        applyPrepResult(result)
-        goToStageIntro(currentStage)
-      }
+      if (result) { applyPrepResult(result); goToStageIntro(currentStage) }
       e.stopImmediatePropagation()
       return
     }
 
-    if (mode === 'stage-intro') {
+    if (screens.mode === 'stage-intro') {
       const action = stageIntro.checkClick(e)
       if (action === 'sortie') beginCombat()
       e.stopImmediatePropagation()
       return
     }
 
-    if (mode === 'results') {
-      const action = results.checkClick(e)
-      applyResultAction(action)
+    if (screens.mode === 'results') {
+      applyResultAction(results.checkClick(e))
       e.stopImmediatePropagation()
       return
     }
 
-    if (mode === 'combat' && paused) {
-      const action = hitPauseRegion(canvas, pauseRegions, e)
-      applyPauseAction(action)
+    if (screens.mode === 'combat' && paused) {
+      applyPauseAction(hitPauseRegion(canvas, pauseRegions, e))
       e.stopImmediatePropagation()
       return
     }
@@ -472,10 +384,8 @@ function main(): void {
     const rect = canvas.getBoundingClientRect()
     const cx = e.clientX - rect.left
     const cy = e.clientY - rect.top
-
     for (const region of hud.getClickRegions()) {
-      if (cx >= region.x && cx <= region.x + region.w &&
-          cy >= region.y && cy <= region.y + region.h) {
+      if (cx >= region.x && cx <= region.x + region.w && cy >= region.y && cy <= region.y + region.h) {
         applyHudAction(region.id)
         e.stopImmediatePropagation()
         return
@@ -483,40 +393,36 @@ function main(): void {
     }
   }, true)
 
+  // ── Game loop ─────────────────────────────────────────────────────────────
   const ticker = new FixedTicker({
     onTick: (tick) => {
-      if (mode !== 'combat') return
+      if (screens.mode !== 'combat') return
       if (paused) return
       if (state.missionResult !== 'none') return
       sound.setBgmMode(isBossStage(state) ? 'boss' : 'normal')
-      const commands = input.pollCommands(tick)
-      state = combatStep(state, commands, rng, STATIC_DATA)
+      state = combatStep(state, input.pollCommands(tick), rng, STATIC_DATA)
     },
     onRender: (_alpha) => {
-      if (mode === 'start') { start.render(accessKeysVisible); return }
+      const mode = screens.mode
+      if (mode === 'start')   { start.render(accessKeysVisible); return }
       if (mode === 'designer') return
-      if (mode === 'prep') { prep.render(accessKeysVisible); return }
+      if (mode === 'prep')    { prep.render(accessKeysVisible); return }
       if (mode === 'stage-intro') {
-        const stageDef = STATIC_DATA.stages[currentStage - 1]!
-        stageIntro.render(stageDef, selectedShip, accessKeysVisible)
+        stageIntro.render(STATIC_DATA.stages[currentStage - 1]!, selectedShip, accessKeysVisible)
         return
       }
       if (mode === 'results') { results.render(state, accessKeysVisible); return }
 
       // combat
-      if (state.missionResult !== 'none') {
-        enterResults()
-        return
-      }
+      if (state.missionResult !== 'none') { enterResults(); return }
 
       const player = state.entities.get('ship.player')
-      if (player && isShip(player) && !player.destroyed) {
-        renderer.setCamera(player.pos.x, player.pos.y)
-      }
+      if (player && isShip(player) && !player.destroyed) renderer.setCamera(player.pos.x, player.pos.y)
 
       renderer.render(state, selectedWeapon(state, input.getWeaponMode()), input.getAimPoint())
       const playerShip = state.entities.get('ship.player')
       const autoPilotOn = (playerShip && isShip(playerShip) ? playerShip.autoPilot : false) ?? false
+
       if (paused) {
         hud.render(state, input.getWeaponMode(), WORLD_SIZE, bgmEnabled, '', accessKeysVisible, autoPilotOn)
         pauseRegions = renderPauseOverlay(canvas, accessKeysVisible)

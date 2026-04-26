@@ -81,12 +81,19 @@ export const WEAPON_STRATEGIES: Record<WeaponType, WeaponStrategy> = {
   }),
 }
 
-export const WEAPON_CONFIGS: Record<WeaponType, WeaponConfig> = {
-  gun: WEAPON_STRATEGIES.gun.config,
-  secondary: WEAPON_STRATEGIES.secondary.config,
-  torpedo: WEAPON_STRATEGIES.torpedo.config,
-  aa: WEAPON_STRATEGIES.aa.config,
-  missile: WEAPON_STRATEGIES.missile.config,
+// Auto-derived from WEAPON_STRATEGIES — adding a new entry there is sufficient.
+export const WEAPON_CONFIGS: Record<WeaponType, WeaponConfig> = Object.fromEntries(
+  (Object.entries(WEAPON_STRATEGIES) as [WeaponType, WeaponStrategy][]).map(([k, v]) => [k, v.config])
+) as Record<WeaponType, WeaponConfig>
+
+// Aim-error radii per weapon type. Centralised here so ai.ts doesn't maintain
+// a parallel copy that can drift when weapon types change.
+export const WEAPON_AIM_ERRORS: Record<WeaponType, number> = {
+  gun: 90,
+  secondary: 75,
+  torpedo: 80,
+  aa: 55,
+  missile: 130,
 }
 
 const WEAPON_CONFIG_OVERRIDES: Record<string, WeaponConfigOverride> = {
