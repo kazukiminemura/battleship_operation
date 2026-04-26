@@ -6,9 +6,7 @@ interface Props {
   size: number
 }
 
-/** Top-down blueprint silhouette of each weapon type. */
 export function WeaponBlueprint({ type, color, size }: Props) {
-  const sw = 1.2  // base stroke width (scaled by SVG)
   return (
     <svg
       viewBox="0 0 40 40"
@@ -17,114 +15,146 @@ export function WeaponBlueprint({ type, color, size }: Props) {
       style={{ display: 'block', overflow: 'visible', pointerEvents: 'none' }}
       aria-hidden="true"
     >
-      {BLUEPRINTS[type]({ color, sw })}
+      {BLUEPRINTS[type](color)}
     </svg>
   )
 }
 
-type DrawProps = { color: string; sw: number }
+const BLUEPRINTS: Record<WeaponSlotType, (c: string) => React.ReactNode> = {
 
-const BLUEPRINTS: Record<WeaponSlotType, (p: DrawProps) => React.ReactNode> = {
-
-  /* ── 主砲 ── 単砲塔、太い単一バレル ──────────────────────────────────── */
-  gun: ({ color, sw }) => (
-    <g stroke={color} fill="none" strokeLinecap="round" strokeLinejoin="round">
-      {/* turret ring */}
-      <circle cx="20" cy="22" r="11" strokeWidth={sw * 1.3} fill={color + '20'} />
-      {/* barrel */}
-      <rect x="17.5" y="4" width="5" height="20" rx="1.5" strokeWidth={sw * 1.4} fill={color + '28'} />
-      {/* muzzle brake */}
-      <rect x="15.5" y="4" width="9" height="3" rx="0.8" strokeWidth={sw} fill={color + '30'} />
-      {/* rangefinder arms */}
-      <rect x="8" y="18" width="6" height="3.5" rx="1" strokeWidth={sw * 0.9} fill={color + '18'} />
-      <rect x="26" y="18" width="6" height="3.5" rx="1" strokeWidth={sw * 0.9} fill={color + '18'} />
-      {/* pivot point */}
-      <circle cx="20" cy="22" r="2.5" strokeWidth={sw * 0.8} fill={color + '40'} />
-      {/* detail circle */}
-      <circle cx="20" cy="22" r="7" strokeWidth={sw * 0.6} strokeDasharray="3 2" opacity="0.45" />
+  /* ── 主砲: 三連装砲塔（46cm三連装）────────────────────────────────────── */
+  gun: (c) => (
+    <g stroke={c} fill="none" strokeLinecap="round" strokeLinejoin="round">
+      {/* Barbette ring */}
+      <circle cx="20" cy="27" r="12.5" strokeWidth="1.5" fill={c + '14'} />
+      {/* Turret roof (octagonal) */}
+      <path d="M9,24 L10,17 L15,11 L25,11 L30,17 L31,24 L26,28 L14,28 Z"
+        strokeWidth="1.3" fill={c + '22'} />
+      {/* Front slope face */}
+      <path d="M12,16 L14,11 L26,11 L28,16 Z" strokeWidth="0.9" fill={c + '30'} />
+      {/* Left barrel */}
+      <rect x="11.5" y="2" width="4.5" height="21" rx="1.8" strokeWidth="1.3" fill={c + '28'} />
+      {/* Center barrel (slightly longer) */}
+      <rect x="17.75" y="0" width="4.5" height="23" rx="1.8" strokeWidth="1.3" fill={c + '28'} />
+      {/* Right barrel */}
+      <rect x="24" y="2" width="4.5" height="21" rx="1.8" strokeWidth="1.3" fill={c + '28'} />
+      {/* Muzzle brakes */}
+      <rect x="10.5" y="1.5" width="6.5" height="2.8" rx="0.7" strokeWidth="1" fill={c + '45'} />
+      <rect x="16.75" y="-0.5" width="6.5" height="2.8" rx="0.7" strokeWidth="1" fill={c + '45'} />
+      <rect x="23" y="1.5" width="6.5" height="2.8" rx="0.7" strokeWidth="1" fill={c + '45'} />
+      {/* Rangefinder arms */}
+      <rect x="5.5" y="19.5" width="7" height="3.5" rx="1.2" strokeWidth="1" fill={c + '20'} />
+      <rect x="27.5" y="19.5" width="7" height="3.5" rx="1.2" strokeWidth="1" fill={c + '20'} />
+      {/* Rangefinder end caps */}
+      <rect x="4.5" y="19.5" width="2" height="3.5" rx="0.5" strokeWidth="0.8" fill={c + '30'} />
+      <rect x="33.5" y="19.5" width="2" height="3.5" rx="0.5" strokeWidth="0.8" fill={c + '30'} />
+      {/* Pivot / gun housing center */}
+      <circle cx="20" cy="24" r="3.5" strokeWidth="1" fill={c + '35'} />
+      <circle cx="20" cy="24" r="1.5" strokeWidth="0.8" fill={c + '55'} />
+      {/* Detail dash ring */}
+      <circle cx="20" cy="27" r="8.5" strokeWidth="0.6" strokeDasharray="3 2.5" opacity="0.4" />
     </g>
   ),
 
-  /* ── 副砲 ── 双連砲塔 ────────────────────────────────────────────────── */
-  secondary: ({ color, sw }) => (
-    <g stroke={color} fill="none" strokeLinecap="round" strokeLinejoin="round">
-      {/* turret ring */}
-      <circle cx="20" cy="23" r="9" strokeWidth={sw * 1.2} fill={color + '20'} />
-      {/* twin barrels */}
-      <rect x="15" y="5" width="4" height="20" rx="1.2" strokeWidth={sw * 1.2} fill={color + '28'} />
-      <rect x="21" y="5" width="4" height="20" rx="1.2" strokeWidth={sw * 1.2} fill={color + '28'} />
-      {/* muzzle caps */}
-      <rect x="14" y="5" width="6" height="2.5" rx="0.6" strokeWidth={sw * 0.9} fill={color + '30'} />
-      <rect x="20" y="5" width="6" height="2.5" rx="0.6" strokeWidth={sw * 0.9} fill={color + '30'} />
-      {/* pivot */}
-      <circle cx="20" cy="23" r="2" strokeWidth={sw * 0.8} fill={color + '40'} />
-      <circle cx="20" cy="23" r="6" strokeWidth={sw * 0.5} strokeDasharray="2.5 2" opacity="0.4" />
+  /* ── 副砲: 連装砲塔（12.7cm連装）───────────────────────────────────────── */
+  secondary: (c) => (
+    <g stroke={c} fill="none" strokeLinecap="round" strokeLinejoin="round">
+      {/* Barbette */}
+      <circle cx="20" cy="28" r="10" strokeWidth="1.4" fill={c + '14'} />
+      {/* Turret roof */}
+      <path d="M11,25 L12,19 L17,13 L23,13 L28,19 L29,25 L24,29 L16,29 Z"
+        strokeWidth="1.2" fill={c + '22'} />
+      {/* Front slope */}
+      <path d="M14,18 L17,13 L23,13 L26,18 Z" strokeWidth="0.9" fill={c + '30'} />
+      {/* Left barrel */}
+      <rect x="13" y="3" width="4" height="20" rx="1.5" strokeWidth="1.2" fill={c + '28'} />
+      {/* Right barrel */}
+      <rect x="23" y="3" width="4" height="20" rx="1.5" strokeWidth="1.2" fill={c + '28'} />
+      {/* Muzzle brakes */}
+      <rect x="12" y="2.5" width="6" height="2.5" rx="0.6" strokeWidth="0.9" fill={c + '45'} />
+      <rect x="22" y="2.5" width="6" height="2.5" rx="0.6" strokeWidth="0.9" fill={c + '45'} />
+      {/* Pivot */}
+      <circle cx="20" cy="25" r="3" strokeWidth="0.9" fill={c + '35'} />
+      <circle cx="20" cy="25" r="1.3" strokeWidth="0.8" fill={c + '55'} />
+      {/* Detail dash ring */}
+      <circle cx="20" cy="28" r="6.5" strokeWidth="0.6" strokeDasharray="3 2" opacity="0.38" />
     </g>
   ),
 
-  /* ── 魚雷 ── 双発発射管（上面視） ───────────────────────────────────── */
-  torpedo: ({ color, sw }) => (
-    <g stroke={color} fill="none" strokeLinecap="round" strokeLinejoin="round">
-      {/* left tube */}
-      <rect x="7" y="5" width="10" height="30" rx="4" strokeWidth={sw * 1.2} fill={color + '20'} />
-      {/* right tube */}
-      <rect x="23" y="5" width="10" height="30" rx="4" strokeWidth={sw * 1.2} fill={color + '20'} />
-      {/* warhead caps */}
-      <ellipse cx="12" cy="7" rx="4" ry="2.5" strokeWidth={sw} fill={color + '35'} />
-      <ellipse cx="28" cy="7" rx="4" ry="2.5" strokeWidth={sw} fill={color + '35'} />
-      {/* connecting yoke */}
-      <rect x="10" y="17" width="20" height="4" rx="1.5" strokeWidth={sw * 0.9} fill={color + '18'} />
-      {/* detail lines on tubes */}
-      <line x1="7" y1="14" x2="17" y2="14" strokeWidth={sw * 0.6} strokeDasharray="2 2" opacity="0.5" />
-      <line x1="23" y1="14" x2="33" y2="14" strokeWidth={sw * 0.6} strokeDasharray="2 2" opacity="0.5" />
-      {/* tail fins */}
-      <polyline points="7,33 4,37 10,35" strokeWidth={sw * 0.8} />
-      <polyline points="17,33 20,37 14,35" strokeWidth={sw * 0.8} />
-      <polyline points="23,33 20,37 26,35" strokeWidth={sw * 0.8} />
-      <polyline points="33,33 36,37 30,35" strokeWidth={sw * 0.8} />
-    </g>
-  ),
-
-  /* ── 対空砲 ── 旋回台座 + 放射バレル ────────────────────────────────── */
-  aa: ({ color, sw }) => (
-    <g stroke={color} fill="none" strokeLinecap="round" strokeLinejoin="round">
-      {/* base ring */}
-      <circle cx="20" cy="20" r="11" strokeWidth={sw * 1.1} fill={color + '18'} />
-      <circle cx="20" cy="20" r="7" strokeWidth={sw * 0.8} fill={color + '10'} strokeDasharray="3 2" opacity="0.5" />
-      {/* four barrels at 45° angles */}
-      {[45, 135, 225, 315].map(deg => {
-        const r = deg * Math.PI / 180
-        const x1 = 20 + Math.cos(r) * 7
-        const y1 = 20 + Math.sin(r) * 7
-        const x2 = 20 + Math.cos(r) * 16
-        const y2 = 20 + Math.sin(r) * 16
-        return <line key={deg} x1={x1} y1={y1} x2={x2} y2={y2} strokeWidth={sw * 1.6} strokeLinecap="round" />
-      })}
-      {/* center pivot */}
-      <circle cx="20" cy="20" r="3" strokeWidth={sw * 0.9} fill={color + '50'} />
-    </g>
-  ),
-
-  /* ── ミサイル ── 3×1 セル ランチャー（上面視） ──────────────────────── */
-  missile: ({ color, sw }) => (
-    <g stroke={color} fill="none" strokeLinecap="round" strokeLinejoin="round">
-      {/* outer launcher box */}
-      <rect x="5" y="6" width="30" height="28" rx="3" strokeWidth={sw * 1.2} fill={color + '15'} />
-      {/* three missile cells */}
-      {[10, 20, 30].map(cx => (
-        <g key={cx}>
-          {/* missile body (top-down = thin oval) */}
-          <ellipse cx={cx} cy="20" rx="3.5" ry="10" strokeWidth={sw * 1.1} fill={color + '28'} />
-          {/* nose tip */}
-          <ellipse cx={cx} cy="10.5" rx="2" ry="1.5" strokeWidth={sw * 0.9} fill={color + '45'} />
-          {/* fin cross */}
-          <line x1={cx - 3.5} y1="28" x2={cx - 5.5} y2="32" strokeWidth={sw * 0.8} />
-          <line x1={cx + 3.5} y1="28" x2={cx + 5.5} y2="32" strokeWidth={sw * 0.8} />
+  /* ── 魚雷: 五連装魚雷発射管（九三式）────────────────────────────────────── */
+  torpedo: (c) => (
+    <g stroke={c} fill="none" strokeLinecap="round" strokeLinejoin="round">
+      {/* Mounting frame base */}
+      <rect x="2" y="15" width="36" height="11" rx="2.5" strokeWidth="1.1" fill={c + '14'} />
+      {/* 5 torpedo tubes (pointing up = bow) */}
+      {[3, 9.5, 16, 22.5, 29].map((x, i) => (
+        <g key={i}>
+          {/* Tube cylinder */}
+          <rect x={x} y="2" width="6" height="28" rx="3" strokeWidth="1.2" fill={c + '20'} />
+          {/* Nose cap */}
+          <ellipse cx={x + 3} cy="3.5" rx="2.8" ry="2" strokeWidth="1" fill={c + '40'} />
+          {/* Torpedo outline inside tube */}
+          <ellipse cx={x + 3} cy="16" rx="2" ry="9" strokeWidth="0.7" fill={c + '12'} strokeDasharray="2 1.5" opacity="0.6" />
         </g>
       ))}
-      {/* cell dividers */}
-      <line x1="15" y1="7" x2="15" y2="33" strokeWidth={sw * 0.7} opacity="0.5" />
-      <line x1="25" y1="7" x2="25" y2="33" strokeWidth={sw * 0.7} opacity="0.5" />
+      {/* Cross bracing */}
+      <line x1="2" y1="20.5" x2="38" y2="20.5" strokeWidth="0.8" opacity="0.5" />
+      {/* Mounting pivot circle */}
+      <circle cx="20" cy="20.5" r="4" strokeWidth="0.9" fill={c + '20'} />
+      <circle cx="20" cy="20.5" r="1.5" strokeWidth="0.7" fill={c + '45'} />
+    </g>
+  ),
+
+  /* ── 対空砲: 三連装25mm機銃───────────────────────────────────────────── */
+  aa: (c) => (
+    <g stroke={c} fill="none" strokeLinecap="round" strokeLinejoin="round">
+      {/* Shield (D-shaped gun shield from above) */}
+      <path d="M8,32 L8,20 C8,10 12,7 20,6 C28,7 32,10 32,20 L32,32 Z"
+        strokeWidth="1.2" fill={c + '16'} />
+      {/* Inner shield edge */}
+      <path d="M11,30 L11,20 C11,13 14,10 20,9 C26,10 29,13 29,20 L29,30 Z"
+        strokeWidth="0.8" fill={c + '10'} opacity="0.7" />
+      {/* Left barrel */}
+      <rect x="11.5" y="2" width="3.5" height="22" rx="1.5" strokeWidth="1.1" fill={c + '28'} />
+      {/* Center barrel (longer) */}
+      <rect x="18.25" y="0" width="3.5" height="24" rx="1.5" strokeWidth="1.1" fill={c + '28'} />
+      {/* Right barrel */}
+      <rect x="25" y="2" width="3.5" height="22" rx="1.5" strokeWidth="1.1" fill={c + '28'} />
+      {/* Muzzle flash guards */}
+      <rect x="10.5" y="1.5" width="5.5" height="2" rx="0.5" strokeWidth="0.9" fill={c + '45'} />
+      <rect x="17.25" y="-0.5" width="5.5" height="2" rx="0.5" strokeWidth="0.9" fill={c + '45'} />
+      <rect x="24" y="1.5" width="5.5" height="2" rx="0.5" strokeWidth="0.9" fill={c + '45'} />
+      {/* Rotating platform */}
+      <ellipse cx="20" cy="30" rx="9" ry="4.5" strokeWidth="1" fill={c + '18'} />
+      {/* Pivot pin */}
+      <circle cx="20" cy="30" r="2.5" strokeWidth="0.9" fill={c + '40'} />
+      <circle cx="20" cy="30" r="1" strokeWidth="0.7" fill={c + '60'} />
+    </g>
+  ),
+
+  /* ── ミサイル: 4連装箱型ランチャー（ハープーン式）──────────────────────── */
+  missile: (c) => (
+    <g stroke={c} fill="none" strokeLinecap="round" strokeLinejoin="round">
+      {/* Launcher outer box */}
+      <rect x="4" y="4" width="32" height="32" rx="3" strokeWidth="1.3" fill={c + '10'} />
+      {/* 4 missile canisters: 2×2 grid */}
+      {([[5, 5], [21, 5], [5, 21], [21, 21]] as [number, number][]).map(([x, y], i) => (
+        <g key={i}>
+          {/* Canister box */}
+          <rect x={x} y={y} width="14" height="14" rx="2" strokeWidth="1.1" fill={c + '1a'} />
+          {/* Missile cross-section (circle) */}
+          <circle cx={x + 7} cy={y + 7} r="4.5" strokeWidth="1" fill={c + '22'} />
+          {/* Missile inner detail */}
+          <circle cx={x + 7} cy={y + 7} r="2.2" strokeWidth="0.7" fill={c + '38'} />
+          {/* Nose indicator */}
+          <line x1={x + 7} y1={y + 1} x2={x + 7} y2={y + 4} strokeWidth="1.2" strokeLinecap="round" />
+        </g>
+      ))}
+      {/* Center cross divider */}
+      <line x1="4" y1="20" x2="36" y2="20" strokeWidth="0.8" opacity="0.55" />
+      <line x1="20" y1="4" x2="20" y2="36" strokeWidth="0.8" opacity="0.55" />
+      {/* Aiming sight (center cross) */}
+      <circle cx="20" cy="20" r="3" strokeWidth="0.8" fill="none" opacity="0.5" />
     </g>
   ),
 }
