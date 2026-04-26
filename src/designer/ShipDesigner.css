@@ -213,6 +213,22 @@
   gap: 8px;
 }
 
+/* Two views side-by-side row */
+.sd-views-row {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 24px;
+}
+
+/* Each view column (label + hull graphic) */
+.sd-view-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
 .sd-hull-label {
   font-size: 12px;
   color: var(--sd-dim);
@@ -247,6 +263,14 @@
   inset: 0;
   width: 100%;
   height: 100%;
+}
+
+/* ── Side view wrapper ───────────────────────────────────────────────────── */
+.sd-hull-side-wrapper {
+  position: relative;
+  flex-shrink: 0;
+  border: 1px solid rgba(80,200,120,0.18);
+  box-shadow: 0 0 18px rgba(80,200,120,0.08) inset;
 }
 
 /* ── Ship slots ──────────────────────────────────────────────────────────── */

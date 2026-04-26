@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo, useEffect } from 'react'
 import { WeaponPalette } from './WeaponPalette'
 import { HullView } from './HullView'
+import { HullSideView } from './HullSideView'
 import { WeightGauge } from './WeightGauge'
 import { StatsPanel } from './StatsPanel'
 import {
@@ -148,7 +149,7 @@ export function ShipDesigner({ onClose, onConfirm }: Props) {
           />
         </aside>
 
-        {/* Center: hull selector tabs + hull view */}
+        {/* Center: hull selector tabs + top-down + side views */}
         <main className="sd-center">
           {hulls.length > 1 && (
             <div className="sd-hull-tabs">
@@ -163,15 +164,28 @@ export function ShipDesigner({ onClose, onConfirm }: Props) {
               ))}
             </div>
           )}
-          <div className="sd-hull-label">{hull.className} — 上面図</div>
-          <HullView
-            slots={slots}
-            design={design}
-            draggingWeaponId={draggingWeaponId}
-            scale={1 + hullIdx * 0.1}
-            onDrop={handleDrop}
-            onRemove={handleRemove}
-          />
+
+          <div className="sd-views-row">
+            {/* Top-down view */}
+            <div className="sd-view-col">
+              <div className="sd-hull-label">{hull.className} — 上面図</div>
+              <HullView
+                slots={slots}
+                design={design}
+                draggingWeaponId={draggingWeaponId}
+                scale={1 + hullIdx * 0.1}
+                onDrop={handleDrop}
+                onRemove={handleRemove}
+              />
+            </div>
+
+            {/* Side view */}
+            <div className="sd-view-col">
+              <div className="sd-hull-label">{hull.className} — 側面図</div>
+              <HullSideView shipType={shipType} scale={1 + hullIdx * 0.1} />
+            </div>
+          </div>
+
           <div className="sd-hull-hint">スロットに兵装をドロップ ／ クリックで取り外し</div>
         </main>
 
