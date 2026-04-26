@@ -1,28 +1,36 @@
 import { WEAPONS } from './data'
 import type { Weapon, WeaponSlotType } from './types'
+import type { HullCatalogEntry } from '../game/data/hull-catalog'
 
 const TYPE_LABEL: Record<WeaponSlotType, string> = {
-  main: '主砲',
+  gun:       '主砲',
   secondary: '副砲',
-  aa: '機銃',
+  torpedo:   '魚雷',
+  aa:        '対空',
+  missile:   'ミサイル',
 }
 
 const TYPE_COLOR: Record<WeaponSlotType, string> = {
-  main: '#f97316',
+  gun:       '#f97316',
   secondary: '#38bdf8',
-  aa: '#4ade80',
+  torpedo:   '#06b6d4',
+  aa:        '#4ade80',
+  missile:   '#a78bfa',
 }
 
 interface Props {
+  hull: HullCatalogEntry
   onDragStart: (weaponId: string) => void
   onDragEnd: () => void
 }
 
-export function WeaponPalette({ onDragStart, onDragEnd }: Props) {
-  const groups = (Object.keys(TYPE_LABEL) as WeaponSlotType[]).map(type => ({
-    type,
-    weapons: WEAPONS.filter(w => w.type === type),
-  }))
+export function WeaponPalette({ hull, onDragStart, onDragEnd }: Props) {
+  const allowedTypes = new Set(hull.slots.flatMap(s => s.compatibleTypes) as WeaponSlotType[])
+
+  const groups = (Object.keys(TYPE_LABEL) as WeaponSlotType[])
+    .filter(type => allowedTypes.has(type))
+    .map(type => ({ type, weapons: WEAPONS.filter(w => w.type === type) }))
+    .filter(g => g.weapons.length > 0)
 
   return (
     <div className="sd-palette">
@@ -47,16 +55,9 @@ export function WeaponPalette({ onDragStart, onDragEnd }: Props) {
   )
 }
 
-function WeaponCard({
-  weapon,
-  color,
-  onDragStart,
-  onDragEnd,
-}: {
-  weapon: Weapon
-  color: string
-  onDragStart: (id: string) => void
-  onDragEnd: () => void
+function WeaponCard({ weapon, color, onDragStart, onDragEnd }: {
+  weapon: Weapon; color: string
+  onDragStart: (id: string) => void; onDragEnd: () => void
 }) {
   return (
     <div
@@ -69,7 +70,7 @@ function WeaponCard({
       }}
       onDragEnd={onDragEnd}
       style={{ borderColor: color + '60' }}
-      title={`ドラッグしてスロットに配置`}
+      title="ドラッグしてスロットに配置"
     >
       <div className="sd-weapon-card-badge" style={{ background: color + '30', color }}>
         {TYPE_LABEL[weapon.type]}

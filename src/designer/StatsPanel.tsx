@@ -6,6 +6,7 @@ interface Props {
 
 export function StatsPanel({ stats }: Props) {
   const { totalFirepower, totalAntiAir, avgAccuracy, speed, turnRate, weaponList } = stats
+  // speed is already in knots; turnRate is scaled ×1000 for display
 
   return (
     <div className="sd-stats">

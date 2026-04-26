@@ -433,6 +433,114 @@
   transform: translateX(-50%) translateY(0);
 }
 
+/* ── Deploy button ───────────────────────────────────────────────────────── */
+.sd-btn-deploy {
+  background: #0a2e14;
+  border-color: #16a34a;
+  color: #4ade80;
+  font-weight: bold;
+}
+.sd-btn-deploy:hover {
+  background: #0f3d1c;
+  border-color: #22c55e;
+  color: #86efac;
+}
+
+/* ── Hull selector tabs ──────────────────────────────────────────────────── */
+.sd-hull-tabs {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.sd-hull-tab {
+  padding: 4px 10px;
+  background: #0b1810;
+  border: 1px solid var(--sd-border);
+  border-radius: 4px;
+  color: var(--sd-dim);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.sd-hull-tab:hover { background: #111e14; color: var(--sd-text); }
+.sd-hull-tab--active {
+  background: #0d2a14;
+  border-color: var(--sd-accent);
+  color: #a0d8a0;
+}
+
+/* ── Ship type selection screen ──────────────────────────────────────────── */
+.sd-ship-select {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 32px;
+}
+
+.sd-ship-select-title {
+  font-size: 22px;
+  font-weight: bold;
+  color: #a0d8a0;
+  letter-spacing: 0.12em;
+}
+
+.sd-ship-cards {
+  display: flex;
+  gap: 24px;
+}
+
+.sd-ship-card {
+  width: 180px;
+  padding: 24px 16px 20px;
+  background: #0b1810;
+  border: 2px solid var(--sd-border);
+  border-radius: 10px;
+  color: var(--sd-text);
+  cursor: pointer;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+.sd-ship-card:hover {
+  background: #102018;
+  border-color: var(--sd-accent);
+  box-shadow: 0 0 18px rgba(22,163,74,0.25);
+}
+
+.sd-ship-card-class {
+  font-size: 22px;
+  font-weight: bold;
+  color: #a0d8a0;
+}
+
+.sd-ship-card-desc {
+  font-size: 12px;
+  color: var(--sd-dim);
+  white-space: pre-line;
+  line-height: 1.6;
+}
+
+.sd-ship-card-badges {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.sd-ship-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+.sd-ship-badge--hp  { background: #1a0e0a; border: 1px solid #7a3010; color: #f97316; }
+.sd-ship-badge--spd { background: #0a101a; border: 1px solid #1e3a7a; color: #38bdf8; }
+
 /* ── Animation ───────────────────────────────────────────────────────────── */
 @keyframes sd-pulse {
   0%, 100% { opacity: 1; }

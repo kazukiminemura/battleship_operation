@@ -109,7 +109,14 @@ function main(): void {
     const el = document.getElementById('designer-root')!
     el.style.display = 'block'
     if (!designerRoot) designerRoot = createRoot(el)
-    designerRoot.render(createElement(ShipDesigner, { onClose: closeDesigner }))
+    designerRoot.render(createElement(ShipDesigner, {
+      onClose:   closeDesigner,
+      onConfirm: (result) => {
+        closeDesigner()
+        applyPrepResult(result)
+        goToStageIntro(currentStage)
+      },
+    }))
   }
 
   const closeDesigner = (): void => {
@@ -212,9 +219,12 @@ function main(): void {
 
   const applyResultAction = (action: 'next' | 'retry' | 'title' | null): void => {
     if (action === 'next') {
-      goToPrep(currentStage + 1)
+      currentStage++
+      results.detach()
+      openDesigner()
     } else if (action === 'retry') {
-      goToPrep(currentStage)
+      results.detach()
+      openDesigner()
     } else if (action === 'title') {
       goToStart()
     }
@@ -286,7 +296,7 @@ function main(): void {
 
       if (mode === 'start' && start.checkKeyDown(e)) {
         e.preventDefault()
-        if (!e.repeat) goToPrep(currentStage)
+        if (!e.repeat) openDesigner()
         return
       }
 
@@ -356,7 +366,7 @@ function main(): void {
 
     if (mode === 'start' && start.checkKeyDown(e)) {
       e.preventDefault()
-      if (!e.repeat) goToPrep(currentStage)
+      if (!e.repeat) openDesigner()
       return
     }
 
@@ -411,8 +421,7 @@ function main(): void {
 
   canvas.addEventListener('click', (e) => {
     if (mode === 'start') {
-      if (start.checkDesignerClick(e)) { openDesigner(); return }
-      if (start.checkClick(e)) goToPrep(currentStage)
+      if (start.checkClick(e)) openDesigner()
       e.stopImmediatePropagation()
       return
     }

@@ -9,9 +9,7 @@ export class StartScreen {
   private canvas: HTMLCanvasElement
   private ctx: CanvasRenderingContext2D
   private btnRegion: Region | null = null
-  private designerBtnRegion: Region | null = null
   private hovered = false
-  private designerHovered = false
   private keyboardFocused = false
   private onMoveRef: (e: MouseEvent) => void
 
@@ -47,27 +45,13 @@ export class StartScreen {
     return mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h
   }
 
-  checkDesignerClick(e: MouseEvent): boolean {
-    if (!this.designerBtnRegion) return false
-    const rect = this.canvas.getBoundingClientRect()
-    const mx = e.clientX - rect.left
-    const my = e.clientY - rect.top
-    const r = this.designerBtnRegion
-    return mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h
-  }
-
   private onMouseMove(e: MouseEvent): void {
+    if (!this.btnRegion) return
     const rect = this.canvas.getBoundingClientRect()
     const mx = e.clientX - rect.left
     const my = e.clientY - rect.top
-    if (this.btnRegion) {
-      const r = this.btnRegion
-      this.hovered = mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h
-    }
-    if (this.designerBtnRegion) {
-      const r = this.designerBtnRegion
-      this.designerHovered = mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h
-    }
+    const r = this.btnRegion
+    this.hovered = mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h
   }
 
   render(showAccessKeys = false): void {
@@ -124,24 +108,6 @@ export class StartScreen {
     ctx.font = `bold ${Math.round(btnH * 0.50)}px sans-serif`
     ctx.fillText('BATTLE START', cx, btnY + btnH * 0.67)
     if (showAccessKeys) drawAccessKeyHint(ctx, BATTLE_KEY, btnX + 8, btnY + 8)
-
-    // Designer button
-    const dbtnW = W * 0.20
-    const dbtnH = H * 0.055
-    const dbtnX = cx - dbtnW / 2
-    const dbtnY = btnY + btnH + H * 0.024
-    this.designerBtnRegion = { x: dbtnX, y: dbtnY, w: dbtnW, h: dbtnH }
-    const dactive = this.designerHovered
-    ctx.fillStyle = dactive ? '#14532d' : '#071a0e'
-    roundRect(ctx, dbtnX, dbtnY, dbtnW, dbtnH, 8)
-    ctx.fill()
-    ctx.strokeStyle = dactive ? '#4ade80' : '#1e4226'
-    ctx.lineWidth = 1.5
-    roundRect(ctx, dbtnX, dbtnY, dbtnW, dbtnH, 8)
-    ctx.stroke()
-    ctx.fillStyle = dactive ? '#86efac' : '#4ade80'
-    ctx.font = `${Math.round(dbtnH * 0.48)}px sans-serif`
-    ctx.fillText('⚙ 艦船設計', cx, dbtnY + dbtnH * 0.68)
 
     ctx.fillStyle = '#1e293b'
     ctx.font = `${Math.round(H * 0.022)}px sans-serif`

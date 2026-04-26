@@ -1,4 +1,4 @@
-export type WeaponSlotType = 'main' | 'secondary' | 'aa'
+export type WeaponSlotType = 'gun' | 'secondary' | 'torpedo' | 'aa' | 'missile'
 
 export interface Weapon {
   id: string
@@ -14,6 +14,7 @@ export interface Weapon {
 export interface SlotDef {
   id: string
   type: WeaponSlotType
+  compatibleTypes: WeaponSlotType[]
   /** % from left of hull container */
   x: number
   /** % from top of hull container */
@@ -28,8 +29,11 @@ export interface ShipStats {
   totalFirepower: number
   totalAntiAir: number
   avgAccuracy: number
+  /** knots (display-ready) */
   speed: number
+  /** scaled turn value (display-ready) */
   turnRate: number
   totalWeight: number
+  maxWeight: number
   weaponList: Array<{ slotId: string; slotLabel: string; weapon: Weapon }>
 }

@@ -1,13 +1,6 @@
 import { WEAPON_BY_ID } from './data'
 import { ShipSlot } from './ShipSlot'
-import type { SlotDef, Design, WeaponSlotType } from './types'
-
-// Compatible weapon types per slot type (cached for isDragTarget check)
-const COMPATIBLE: Record<WeaponSlotType, WeaponSlotType[]> = {
-  main: ['main'],
-  secondary: ['secondary'],
-  aa: ['aa'],
-}
+import type { SlotDef, Design } from './types'
 
 interface Props {
   slots: SlotDef[]
@@ -24,7 +17,7 @@ export function HullView({ slots, design, draggingWeaponId, onDrop, onRemove }: 
     const slot   = slots.find(s => s.id === slotId)
     const weapon = WEAPON_BY_ID[weaponId]
     if (!slot || !weapon) return
-    if (!COMPATIBLE[slot.type].includes(weapon.type)) return
+    if (!slot.compatibleTypes.includes(weapon.type)) return
     onDrop(slotId, weaponId)
   }
 
@@ -104,7 +97,7 @@ export function HullView({ slots, design, draggingWeaponId, onDrop, onRemove }: 
         {slots.map(slot => {
           const weaponId = design[slot.id]
           const weapon   = weaponId ? (WEAPON_BY_ID[weaponId] ?? null) : null
-          const isDragTarget = draggingWeapon !== null && draggingWeapon.type === slot.type
+          const isDragTarget = draggingWeapon !== null && slot.compatibleTypes.includes(draggingWeapon.type)
           return (
             <ShipSlot
               key={slot.id}

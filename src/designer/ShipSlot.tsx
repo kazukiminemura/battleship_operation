@@ -2,15 +2,19 @@ import { useState } from 'react'
 import type { SlotDef, Weapon, WeaponSlotType } from './types'
 
 const TYPE_COLOR: Record<WeaponSlotType, string> = {
-  main: '#f97316',
+  gun:       '#f97316',
   secondary: '#38bdf8',
-  aa: '#4ade80',
+  torpedo:   '#06b6d4',
+  aa:        '#4ade80',
+  missile:   '#a78bfa',
 }
 
 const SLOT_SIZE: Record<WeaponSlotType, number> = {
-  main: 46,
+  gun:       46,
   secondary: 36,
-  aa: 28,
+  torpedo:   40,
+  aa:        28,
+  missile:   32,
 }
 
 interface Props {
@@ -27,8 +31,6 @@ export function ShipSlot({ slot, equippedWeapon, isDragTarget, onDrop, onRemove 
   const size  = SLOT_SIZE[slot.type]
 
   const handleDragOver = (e: React.DragEvent) => {
-    // Only accept drops of matching type: check via data is not possible in dragover,
-    // so we always allow and validate on drop
     e.preventDefault()
     e.dataTransfer.dropEffect = 'copy'
     setIsOver(true)
@@ -47,23 +49,18 @@ export function ShipSlot({ slot, equippedWeapon, isDragTarget, onDrop, onRemove 
     if (equippedWeapon) onRemove(slot.id)
   }
 
-  const filled = equippedWeapon !== null
+  const filled    = equippedWeapon !== null
   const highlight = isOver && isDragTarget
 
   return (
     <div
-      className={[
-        'sd-slot',
-        `sd-slot--${slot.type}`,
-        filled   ? 'sd-slot--filled' : '',
-        highlight ? 'sd-slot--hover'  : '',
-      ].join(' ')}
+      className={['sd-slot', `sd-slot--${slot.type}`, filled ? 'sd-slot--filled' : '', highlight ? 'sd-slot--hover' : ''].join(' ')}
       style={{
-        position: 'absolute',
-        left:   `${slot.x}%`,
-        top:    `${slot.y}%`,
-        width:  size,
-        height: size,
+        position:   'absolute',
+        left:       `${slot.x}%`,
+        top:        `${slot.y}%`,
+        width:      size,
+        height:     size,
         marginLeft: -(size / 2),
         marginTop:  -(size / 2),
         borderColor: filled ? color : color + '70',
@@ -82,9 +79,7 @@ export function ShipSlot({ slot, equippedWeapon, isDragTarget, onDrop, onRemove 
           <div className="sd-slot-name">{equippedWeapon!.name.slice(0, 4)}</div>
         </div>
       ) : (
-        <div className="sd-slot-empty" style={{ color: color + '90' }}>
-          +
-        </div>
+        <div className="sd-slot-empty" style={{ color: color + '90' }}>+</div>
       )}
       <div className="sd-slot-label">{slot.label}</div>
     </div>
