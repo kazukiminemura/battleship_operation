@@ -58,7 +58,7 @@ export function HullSideView({
   hoveredSlotId, onDrop, onRemove, onSlotHover,
 }: Props) {
   const w      = Math.round(480 * scale)
-  const h      = Math.round(210 * scale)
+  const h      = Math.round(240 * scale)
   const gridPx = Math.round(20 * scale)
 
   const draggingWeapon = draggingWeaponId ? (WEAPON_BY_ID[draggingWeaponId] ?? null) : null
@@ -86,7 +86,7 @@ export function HullSideView({
         position: 'relative',
       }}
     >
-      <svg className="sd-hull-svg" viewBox="0 0 600 210"
+      <svg className="sd-hull-svg" viewBox="0 0 600 240"
         preserveAspectRatio="xMidYMid meet" aria-hidden="true">
         <defs>
           <filter id="sbp-glow">
@@ -336,6 +336,25 @@ function DestroyerSide() {
       {/* Rudder */}
       <path d="M 560,167 L 566,165 L 566,181 L 560,183 Z"
         fill={FILLD} stroke={G} strokeWidth="0.8" opacity="0.6" />
+
+      {/* ── Hull section compartments ── */}
+      {[
+        { label: '①', x1:  30, x2:  97, c: '#3a88c8' },
+        { label: '②', x1:  97, x2: 164, c: '#3a88c8' },
+        { label: '③', x1: 164, x2: 231, c: '#c84a4a' },
+        { label: '④', x1: 231, x2: 298, c: '#c84a4a' },
+        { label: '⑤', x1: 298, x2: 366, c: '#c84a4a' },
+        { label: '⑥', x1: 366, x2: 433, c: '#c84a4a' },
+        { label: '⑦', x1: 433, x2: 499, c: '#c84a4a' },
+        { label: '⑧', x1: 499, x2: 565, c: '#c84a4a' },
+      ].map(({ label, x1, x2, c }) => (
+        <g key={label}>
+          <rect x={x1 + 1} y={213} width={x2 - x1 - 2} height={16}
+            fill="rgba(0,0,0,0.5)" stroke={c} strokeWidth="0.9" opacity="0.85" />
+          <text x={(x1 + x2) / 2} y={224} fontSize="7" fill={c} opacity="0.9"
+            textAnchor="middle" fontFamily="monospace">{label}</text>
+        </g>
+      ))}
     </g>
   )
 }
@@ -459,6 +478,27 @@ function CruiserSide() {
       <line x1="546" y1="169" x2="570" y2="169" stroke={G} strokeWidth="1.2" opacity="0.45" />
       <path d="M 562,166 L 568,164 L 568,182 L 562,184 Z"
         fill={FILLD} stroke={G} strokeWidth="0.8" opacity="0.6" />
+
+      {/* ── Hull section compartments ── */}
+      {[
+        { label: '①', x1:  24, x2:  78, c: '#3a88c8' },
+        { label: '②', x1:  78, x2: 132, c: '#3a88c8' },
+        { label: '③', x1: 132, x2: 186, c: '#c84a4a' },
+        { label: '④', x1: 186, x2: 241, c: '#c84a4a' },
+        { label: '⑤', x1: 241, x2: 295, c: '#c84a4a' },
+        { label: '⑥', x1: 295, x2: 349, c: '#c84a4a' },
+        { label: '⑦', x1: 349, x2: 403, c: '#c84a4a' },
+        { label: '⑧', x1: 403, x2: 458, c: '#c84a4a' },
+        { label: '⑨', x1: 458, x2: 512, c: '#c84a4a' },
+        { label: '⑩', x1: 512, x2: 565, c: '#c84a4a' },
+      ].map(({ label, x1, x2, c }) => (
+        <g key={label}>
+          <rect x={x1 + 1} y={213} width={x2 - x1 - 2} height={16}
+            fill="rgba(0,0,0,0.5)" stroke={c} strokeWidth="0.9" opacity="0.85" />
+          <text x={(x1 + x2) / 2} y={224} fontSize="7" fill={c} opacity="0.9"
+            textAnchor="middle" fontFamily="monospace">{label}</text>
+        </g>
+      ))}
     </g>
   )
 }
@@ -601,6 +641,29 @@ function BattleshipSide() {
       <path d="M 558,166 L 566,163 L 566,185 L 558,187 Z"
         fill={FILLD} stroke={G} strokeWidth="0.9" opacity="0.65" />
       <text x="556" y="203" fontSize="5" fill={G} opacity="0.3" textAnchor="middle" fontFamily="monospace">4-SHAFT</text>
+
+      {/* ── Hull section compartments ── */}
+      {[
+        { label: '①',  x1:  20, x2:  65, c: '#3a88c8' },
+        { label: '②',  x1:  65, x2: 110, c: '#3a88c8' },
+        { label: '③',  x1: 110, x2: 155, c: '#3a88c8' },
+        { label: '④',  x1: 155, x2: 201, c: '#c84a4a' },
+        { label: '⑤',  x1: 201, x2: 246, c: '#c84a4a' },
+        { label: '⑥',  x1: 246, x2: 291, c: '#c84a4a' },
+        { label: '⑦',  x1: 291, x2: 337, c: '#c84a4a' },
+        { label: '⑧',  x1: 337, x2: 382, c: '#c84a4a' },
+        { label: '⑨',  x1: 382, x2: 427, c: '#c84a4a' },
+        { label: '⑩',  x1: 427, x2: 472, c: '#c84a4a' },
+        { label: '⑪',  x1: 472, x2: 517, c: '#c84a4a' },
+        { label: '⑫',  x1: 517, x2: 563, c: '#c84a4a' },
+      ].map(({ label, x1, x2, c }) => (
+        <g key={label}>
+          <rect x={x1 + 1} y={213} width={x2 - x1 - 2} height={16}
+            fill="rgba(0,0,0,0.5)" stroke={c} strokeWidth="0.9" opacity="0.85" />
+          <text x={(x1 + x2) / 2} y={224} fontSize="7" fill={c} opacity="0.9"
+            textAnchor="middle" fontFamily="monospace">{label}</text>
+        </g>
+      ))}
     </g>
   )
 }
