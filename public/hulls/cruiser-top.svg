@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 875">
+  <defs>
+    <filter id="bp-glow">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <g filter="url(#bp-glow)">
+    <!-- Hull wider cruiser form -->
+    <path d="M 100,40 C 108,55 122,88 126,158 L 130,420 C 130,565 124,668 116,738 L 112,796 L 100,842 L 88,796 L 84,738 C 76,668 70,565 70,420 L 74,158 C 78,88 92,55 100,40 Z"
+      fill="rgba(8,26,13,0.92)" stroke="#50c878" stroke-width="2"/>
+    <!-- Inner hull line -->
+    <path d="M 100,52 C 106,66 118,96 121,162 L 124,420 C 124,558 119,655 112,723 L 100,832 L 88,723 C 81,655 76,558 76,420 L 79,162 C 82,96 94,66 100,52 Z"
+      fill="none" stroke="#50c878" stroke-width="0.7" stroke-dasharray="10 7" opacity="0.28"/>
+    <!-- Frame section lines -->
+    <line x1="82" y1="160" x2="118" y2="160" stroke="#50c878" stroke-width="0.5" opacity="0.13"/>
+    <line x1="72" y1="240" x2="128" y2="240" stroke="#50c878" stroke-width="0.5" opacity="0.13"/>
+    <line x1="72" y1="320" x2="128" y2="320" stroke="#50c878" stroke-width="0.5" opacity="0.13"/>
+    <line x1="72" y1="400" x2="128" y2="400" stroke="#50c878" stroke-width="0.5" opacity="0.13"/>
+    <line x1="72" y1="480" x2="128" y2="480" stroke="#50c878" stroke-width="0.5" opacity="0.13"/>
+    <line x1="72" y1="560" x2="128" y2="560" stroke="#50c878" stroke-width="0.5" opacity="0.13"/>
+    <line x1="72" y1="640" x2="128" y2="640" stroke="#50c878" stroke-width="0.5" opacity="0.13"/>
+    <line x1="88" y1="715" x2="112" y2="715" stroke="#50c878" stroke-width="0.5" opacity="0.13"/>
+    <!-- Forecastle break -->
+    <line x1="76" y1="295" x2="124" y2="295" stroke="#50c878" stroke-width="1.1" opacity="0.45"/>
+    <!-- A turret (triple) -->
+    <rect x="84" y="116" width="32" height="42" rx="3" fill="rgba(4,14,8,0.97)" stroke="#50c878" stroke-width="1.2"/>
+    <ellipse cx="100" cy="137" rx="12" ry="18" fill="rgba(4,12,8,0.9)" stroke="#50c878" stroke-width="1"/>
+    <line x1="96" y1="118" x2="96" y2="98" stroke="#7eeaa0" stroke-width="2.4" stroke-linecap="round"/>
+    <line x1="100" y1="118" x2="100" y2="98" stroke="#7eeaa0" stroke-width="2.4" stroke-linecap="round"/>
+    <line x1="104" y1="118" x2="104" y2="98" stroke="#7eeaa0" stroke-width="2.4" stroke-linecap="round"/>
+    <!-- B turret (superfiring) -->
+    <rect x="85" y="172" width="30" height="38" rx="3" fill="rgba(4,14,8,0.97)" stroke="#50c878" stroke-width="1.1"/>
+    <ellipse cx="100" cy="191" rx="11" ry="16" fill="rgba(4,12,8,0.9)" stroke="#50c878" stroke-width="0.9"/>
+    <line x1="96" y1="174" x2="96" y2="156" stroke="#7eeaa0" stroke-width="2.2" stroke-linecap="round"/>
+    <line x1="100" y1="174" x2="100" y2="156" stroke="#7eeaa0" stroke-width="2.2" stroke-linecap="round"/>
+    <line x1="104" y1="174" x2="104" y2="156" stroke="#7eeaa0" stroke-width="2.2" stroke-linecap="round"/>
+    <!-- Bridge tower -->
+    <rect x="82" y="228" width="36" height="58" rx="2" fill="rgba(4,14,8,0.97)" stroke="#50c878" stroke-width="1.3"/>
+    <!-- Bridge windows left -->
+    <rect x="84" y="234" width="6" height="6" rx="1" fill="rgba(126,234,160,0.16)" stroke="#50c878" stroke-width="0.6"/>
+    <rect x="84" y="244" width="6" height="6" rx="1" fill="rgba(126,234,160,0.16)" stroke="#50c878" stroke-width="0.6"/>
+    <rect x="84" y="254" width="6" height="6" rx="1" fill="rgba(126,234,160,0.16)" stroke="#50c878" stroke-width="0.6"/>
+    <rect x="84" y="264" width="6" height="6" rx="1" fill="rgba(126,234,160,0.16)" stroke="#50c878" stroke-width="0.6"/>
+    <rect x="84" y="274" width="6" height="6" rx="1" fill="rgba(126,234,160,0.16)" stroke="#50c878" stroke-width="0.6"/>
+    <!-- Bridge windows right -->
+    <rect x="110" y="234" width="6" height="6" rx="1" fill="rgba(126,234,160,0.16)" stroke="#50c878" stroke-width="0.6"/>
+    <rect x="110" y="244" width="6" height="6" rx="1" fill="rgba(126,234,160,0.16)" stroke="#50c878" stroke-width="0.6"/>
+    <rect x="110" y="254" width="6" height="6" rx="1" fill="rgba(126,234,160,0.16)" stroke="#50c878" stroke-width="0.6"/>
+    <rect x="110" y="264" width="6" height="6" rx="1" fill="rgba(126,234,160,0.16)" stroke="#50c878" stroke-width="0.6"/>
+    <rect x="110" y="274" width="6" height="6" rx="1" fill="rgba(126,234,160,0.16)" stroke="#50c878" stroke-width="0.6"/>
+    <!-- CIC inner -->
+    <rect x="88" y="236" width="24" height="38" rx="1" fill="rgba(4,12,8,0.95)" stroke="#50c878" stroke-width="0.8"/>
+    <!-- Mainmast -->
+    <circle cx="100" cy="316" r="5" fill="rgba(4,14,8,0.97)" stroke="#7eeaa0" stroke-width="1.1"/>
+    <circle cx="100" cy="316" r="2" fill="#7eeaa0" opacity="0.7"/>
+    <!-- Forward funnel -->
+    <rect x="86" y="376" width="28" height="26" rx="4" fill="rgba(4,14,8,0.97)" stroke="#50c878" stroke-width="1.3"/>
+    <ellipse cx="100" cy="389" rx="11" ry="10" fill="rgba(4,10,6,0.98)" stroke="#50c878" stroke-width="0.9"/>
+    <!-- Aft funnel -->
+    <rect x="88" y="420" width="24" height="22" rx="4" fill="rgba(4,14,8,0.97)" stroke="#50c878" stroke-width="1.2"/>
+    <ellipse cx="100" cy="431" rx="9" ry="8" fill="rgba(4,10,6,0.98)" stroke="#50c878" stroke-width="0.8"/>
+    <!-- Aft superstructure -->
+    <rect x="84" y="510" width="32" height="44" rx="2" fill="rgba(4,14,8,0.97)" stroke="#50c878" stroke-width="1"/>
+    <!-- X turret -->
+    <rect x="85" y="574" width="30" height="38" rx="3" fill="rgba(4,14,8,0.97)" stroke="#50c878" stroke-width="1.1"/>
+    <ellipse cx="100" cy="593" rx="11" ry="16" fill="rgba(4,12,8,0.9)" stroke="#50c878" stroke-width="0.9"/>
+    <line x1="96" y1="612" x2="96" y2="630" stroke="#7eeaa0" stroke-width="2.2" stroke-linecap="round"/>
+    <line x1="100" y1="612" x2="100" y2="630" stroke="#7eeaa0" stroke-width="2.2" stroke-linecap="round"/>
+    <line x1="104" y1="612" x2="104" y2="630" stroke="#7eeaa0" stroke-width="2.2" stroke-linecap="round"/>
+    <!-- Propeller shafts -->
+    <line x1="92" y1="806" x2="87" y2="836" stroke="#50c878" stroke-width="1.3" opacity="0.45"/>
+    <line x1="108" y1="806" x2="113" y2="836" stroke="#50c878" stroke-width="1.3" opacity="0.45"/>
+    <ellipse cx="86" cy="838" rx="6" ry="3.5" fill="none" stroke="#50c878" stroke-width="1" opacity="0.4"/>
+    <ellipse cx="114" cy="838" rx="6" ry="3.5" fill="none" stroke="#50c878" stroke-width="1" opacity="0.4"/>
+  </g>
+</svg>

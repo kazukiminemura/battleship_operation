@@ -179,6 +179,7 @@ export function ShipDesigner({ onClose, onConfirm }: Props) {
                   <div className="sd-hull-label">{hull.className} — 側面図</div>
                   <HullSideView
                       shipType={shipType}
+                      templateId={hull.templateId}
                       scale={sideScale}
                       slots={slots}
                       design={design}
@@ -209,6 +210,7 @@ export function ShipDesigner({ onClose, onConfirm }: Props) {
                         draggingWeaponId={draggingWeaponId}
                         scale={topScale}
                         shipType={shipType}
+                        templateId={hull.templateId}
                         hoveredSlotId={hoveredSlotId}
                         onDrop={handleDrop}
                         onRemove={handleRemove}

@@ -3,11 +3,13 @@ import type { PlayerShipType } from '../game/data/masterdata'
 import { WEAPON_BY_ID } from './data'
 import { wouldInterfere } from './collision'
 import { HULL_VIEWS } from './hulls'
+import { HULL_PNG } from './hulls/hull-images'
 import { G, GD } from './hulls/colors'
 import type { SlotDef, Design, WeaponSlotType } from './types'
 
 interface Props {
   shipType: PlayerShipType
+  templateId?: string
   scale?: number
   slots?: SlotDef[]
   design?: Design
@@ -47,7 +49,7 @@ function slotToLeftPct(slotY: number): number {
 }
 
 export function HullSideView({
-  shipType, scale = 1,
+  shipType, templateId, scale = 1,
   slots = [], design = {}, draggingWeaponId = null,
   hoveredSlotId, onDrop, onRemove, onSlotHover,
 }: Props) {
@@ -149,7 +151,7 @@ export function HullSideView({
         <text x="28"  y="207" fontSize="6.5" fill={G} opacity="0.3" fontFamily="monospace">BOW</text>
         <text x="572" y="207" fontSize="6.5" fill={G} opacity="0.3" fontFamily="monospace" textAnchor="end">STERN</text>
 
-        <HullSideViewInner shipType={shipType} />
+        <HullSideViewInner shipType={shipType} templateId={templateId} />
       </svg>
 
       {/* Slot overlay — interactive markers at deck positions */}
@@ -185,7 +187,20 @@ export function HullSideView({
   )
 }
 
-function HullSideViewInner({ shipType }: { shipType: PlayerShipType }) {
+function HullSideViewInner({ shipType, templateId }: { shipType: PlayerShipType; templateId?: string }) {
+  // PNG: lower half of the image is the side view
+  const png = templateId ? HULL_PNG[templateId] : undefined
+  if (png) {
+    return (
+      <image
+        href={png}
+        x="0" y="0"
+        width="600" height="240"
+        preserveAspectRatio="xMidYMid meet"
+        opacity="0.9"
+      />
+    )
+  }
   const hull = HULL_VIEWS[shipType]
   if (!hull) return null
   return <hull.SideView />

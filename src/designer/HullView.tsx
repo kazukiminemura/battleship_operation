@@ -3,6 +3,7 @@ import { WEAPON_BY_ID } from './data'
 import { ShipSlot } from './ShipSlot'
 import { wouldInterfere } from './collision'
 import { HULL_VIEWS } from './hulls'
+import { HULL_PNG } from './hulls/hull-images'
 import { G } from './hulls/colors'
 import type { SlotDef, Design } from './types'
 import type { PlayerShipType } from '../game/data/masterdata'
@@ -13,13 +14,14 @@ interface Props {
   draggingWeaponId: string | null
   scale?: number
   shipType?: PlayerShipType
+  templateId?: string
   hoveredSlotId?: string | null
   onDrop: (slotId: string, weaponId: string) => void
   onRemove: (slotId: string) => void
   onSlotHover?: (slotId: string | null) => void
 }
 
-export function HullView({ slots, design, draggingWeaponId, scale = 1, shipType = 'destroyer', hoveredSlotId, onDrop, onRemove, onSlotHover }: Props) {
+export function HullView({ slots, design, draggingWeaponId, scale = 1, shipType = 'destroyer', templateId, hoveredSlotId, onDrop, onRemove, onSlotHover }: Props) {
   const draggingWeapon = draggingWeaponId ? WEAPON_BY_ID[draggingWeaponId] ?? null : null
 
   const getType = (weaponId: string) => WEAPON_BY_ID[weaponId]?.type
@@ -82,7 +84,7 @@ export function HullView({ slots, design, draggingWeaponId, scale = 1, shipType 
         <text x="100" y="14" fontSize="8" fill={G} opacity="0.3"
           textAnchor="middle" fontFamily="monospace">BOW</text>
 
-        <HullTopView shipType={shipType} />
+        <HullTopView shipType={shipType} templateId={templateId} />
       </svg>
 
       <div className="sd-slots-overlay">
@@ -111,7 +113,20 @@ export function HullView({ slots, design, draggingWeaponId, scale = 1, shipType 
   )
 }
 
-function HullTopView({ shipType }: { shipType: PlayerShipType }) {
+function HullTopView({ shipType, templateId }: { shipType: PlayerShipType; templateId?: string }) {
+  // PNG: upper half of the image is the top-down view
+  const png = templateId ? HULL_PNG[templateId] : undefined
+  if (png) {
+    return (
+      <image
+        href={png}
+        x="0" y="0"
+        width="200" height="875"
+        preserveAspectRatio="xMidYMid meet"
+        opacity="0.9"
+      />
+    )
+  }
   const hull = HULL_VIEWS[shipType]
   if (!hull) return null
   return <hull.TopView />
