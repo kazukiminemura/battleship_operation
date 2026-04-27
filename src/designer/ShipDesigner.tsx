@@ -190,7 +190,7 @@ export function ShipDesigner({ onClose, onConfirm }: Props) {
                       top: 0,
                       left: 0,
                       transformOrigin: '0 0',
-                      transform: `rotate(90deg) translateX(-${topW}px)`,
+                      transform: `translateY(${topW}px) rotate(-90deg)`,
                     }}>
                       <HullView
                         slots={slots}
