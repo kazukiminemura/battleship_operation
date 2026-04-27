@@ -16,11 +16,13 @@ interface Props {
   draggingWeaponId: string | null
   scale?: number
   shipType?: PlayerShipType
+  hoveredSlotId?: string | null
   onDrop: (slotId: string, weaponId: string) => void
   onRemove: (slotId: string) => void
+  onSlotHover?: (slotId: string | null) => void
 }
 
-export function HullView({ slots, design, draggingWeaponId, scale = 1, shipType = 'destroyer', onDrop, onRemove }: Props) {
+export function HullView({ slots, design, draggingWeaponId, scale = 1, shipType = 'destroyer', hoveredSlotId, onDrop, onRemove, onSlotHover }: Props) {
   const draggingWeapon = draggingWeaponId ? WEAPON_BY_ID[draggingWeaponId] ?? null : null
 
   const getType = (weaponId: string) => WEAPON_BY_ID[weaponId]?.type
@@ -101,8 +103,11 @@ export function HullView({ slots, design, draggingWeaponId, scale = 1, shipType 
               equippedWeapon={weapon}
               isDragTarget={isDragTarget}
               isBlocked={isBlocked}
+              isHighlighted={hoveredSlotId === slot.id}
               onDrop={handleDrop}
               onRemove={onRemove}
+              onMouseEnter={() => onSlotHover?.(slot.id)}
+              onMouseLeave={() => onSlotHover?.(null)}
             />
           )
         })}

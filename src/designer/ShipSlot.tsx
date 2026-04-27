@@ -31,11 +31,14 @@ interface Props {
   equippedWeapon: Weapon | null
   isDragTarget: boolean
   isBlocked: boolean
+  isHighlighted?: boolean
   onDrop: (slotId: string, weaponId: string) => void
   onRemove: (slotId: string) => void
+  onMouseEnter?: () => void
+  onMouseLeave?: () => void
 }
 
-export function ShipSlot({ slot, equippedWeapon, isDragTarget, isBlocked, onDrop, onRemove }: Props) {
+export function ShipSlot({ slot, equippedWeapon, isDragTarget, isBlocked, isHighlighted, onDrop, onRemove, onMouseEnter, onMouseLeave }: Props) {
   const [isOver, setIsOver] = useState(false)
   const color = TYPE_COLOR[slot.type]
   const size  = SLOT_SIZE[slot.type]
@@ -63,6 +66,11 @@ export function ShipSlot({ slot, equippedWeapon, isDragTarget, isBlocked, onDrop
   let bg        = 'transparent'
   let shadow    = filled ? `0 0 10px ${color}70, 0 0 20px ${color}30` : 'none'
   let cursor    = filled ? 'pointer' : 'default'
+
+  if (isHighlighted) {
+    shadow = `0 0 16px ${color}cc, 0 0 32px ${color}66`
+    border = `1px solid ${color}aa`
+  }
 
   if (isBlocked && !filled) {
     border = '1px dashed #ff444466'
@@ -101,6 +109,8 @@ export function ShipSlot({ slot, equippedWeapon, isDragTarget, isBlocked, onDrop
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       onClick={handleClick}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
       title={
         isBlocked
           ? `${slot.label}: 他の兵装と干渉しています`

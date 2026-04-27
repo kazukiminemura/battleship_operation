@@ -33,6 +33,7 @@ export function ShipDesigner({ onClose, onConfirm }: Props) {
   const [design, setDesign]     = useState<Design>(() => loadDesign())
   const [draggingWeaponId, setDraggingWeaponId] = useState<string | null>(null)
   const [armorBonus, setArmorBonus] = useState(0)
+  const [hoveredSlotId, setHoveredSlotId] = useState<string | null>(null)
 
   const ARMOR_STEP = 5
   const ARMOR_MAX  = 100
@@ -176,7 +177,17 @@ export function ShipDesigner({ onClose, onConfirm }: Props) {
                 {/* Side view */}
                 <div className="sd-view-col">
                   <div className="sd-hull-label">{hull.className} — 側面図</div>
-                  <HullSideView shipType={shipType} scale={sideScale} />
+                  <HullSideView
+                      shipType={shipType}
+                      scale={sideScale}
+                      slots={slots}
+                      design={design}
+                      draggingWeaponId={draggingWeaponId}
+                      hoveredSlotId={hoveredSlotId}
+                      onDrop={handleDrop}
+                      onRemove={handleRemove}
+                      onSlotHover={setHoveredSlotId}
+                    />
                 </div>
 
                 {/* Top-down view rotated 90° CW so bow faces left, matching side view */}
@@ -198,8 +209,10 @@ export function ShipDesigner({ onClose, onConfirm }: Props) {
                         draggingWeaponId={draggingWeaponId}
                         scale={topScale}
                         shipType={shipType}
+                        hoveredSlotId={hoveredSlotId}
                         onDrop={handleDrop}
                         onRemove={handleRemove}
+                        onSlotHover={setHoveredSlotId}
                       />
                     </div>
                   </div>
