@@ -213,12 +213,12 @@
   gap: 8px;
 }
 
-/* Two views side-by-side row */
-.sd-views-row {
+/* Views stacked vertically: side view on top, top-down view below */
+.sd-views-stack {
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   align-items: flex-start;
-  gap: 24px;
+  gap: 12px;
 }
 
 /* Each view column (label + hull graphic) */

@@ -165,26 +165,47 @@ export function ShipDesigner({ onClose, onConfirm }: Props) {
             </div>
           )}
 
-          <div className="sd-views-row">
-            {/* Top-down view */}
-            <div className="sd-view-col">
-              <div className="sd-hull-label">{hull.className} — 上面図</div>
-              <HullView
-                slots={slots}
-                design={design}
-                draggingWeaponId={draggingWeaponId}
-                scale={1 + hullIdx * 0.1}
-                onDrop={handleDrop}
-                onRemove={handleRemove}
-              />
-            </div>
+          {/* Side view on top, top-down view rotated below — both at matching scale */}
+          {(() => {
+            const sideScale = 1 + hullIdx * 0.1
+            const topScale  = sideScale * (480 / 700)
+            const topW      = Math.round(160 * topScale)
+            const topH      = Math.round(700 * topScale)
+            return (
+              <div className="sd-views-stack">
+                {/* Side view */}
+                <div className="sd-view-col">
+                  <div className="sd-hull-label">{hull.className} — 側面図</div>
+                  <HullSideView shipType={shipType} scale={sideScale} />
+                </div>
 
-            {/* Side view */}
-            <div className="sd-view-col">
-              <div className="sd-hull-label">{hull.className} — 側面図</div>
-              <HullSideView shipType={shipType} scale={1 + hullIdx * 0.1} />
-            </div>
-          </div>
+                {/* Top-down view rotated 90° CW so bow faces left, matching side view */}
+                <div className="sd-view-col">
+                  <div className="sd-hull-label">{hull.className} — 上面図</div>
+                  <div style={{ width: topH, height: topW, position: 'relative', overflow: 'hidden' }}>
+                    <div style={{
+                      width: topW,
+                      height: topH,
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      transformOrigin: '0 0',
+                      transform: `rotate(90deg) translateX(-${topW}px)`,
+                    }}>
+                      <HullView
+                        slots={slots}
+                        design={design}
+                        draggingWeaponId={draggingWeaponId}
+                        scale={topScale}
+                        onDrop={handleDrop}
+                        onRemove={handleRemove}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )
+          })()}
 
           <div className="sd-hull-hint">スロットに兵装をドロップ ／ クリックで取り外し</div>
         </main>
