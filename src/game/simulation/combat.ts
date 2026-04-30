@@ -143,14 +143,15 @@ function fireSlotAndTrack(
   s = fireWeaponAtSlot(s, actorId, slot, target, rng.combat)
   const after = countAmmoAtSlot(s, actorId, slot)
   if (team === 'player' && after < before) {
+    const spent = before - after
     s = {
       ...s,
       metrics: {
         ...s.metrics,
-        playerAmmoSpent: s.metrics.playerAmmoSpent + 1,
+        playerAmmoSpent: s.metrics.playerAmmoSpent + spent,
         shotCountByWeapon: {
           ...s.metrics.shotCountByWeapon,
-          [weapon.id]: (s.metrics.shotCountByWeapon[weapon.id] ?? 0) + 1,
+          [weapon.id]: (s.metrics.shotCountByWeapon[weapon.id] ?? 0) + spent,
         },
       },
     }
@@ -171,14 +172,15 @@ function fireAndTrack(
   s = fireWeapon(s, actorId, weaponType, target, rng.combat)
   const after = countAmmo(s, actorId, weaponType)
   if (team === 'player' && after < before) {
+    const spent = before - after
     s = {
       ...s,
       metrics: {
         ...s.metrics,
-        playerAmmoSpent: s.metrics.playerAmmoSpent + 1,
+        playerAmmoSpent: s.metrics.playerAmmoSpent + spent,
         shotCountByWeapon: {
           ...s.metrics.shotCountByWeapon,
-          [weaponType]: (s.metrics.shotCountByWeapon[weaponType] ?? 0) + 1,
+          [weaponType]: (s.metrics.shotCountByWeapon[weaponType] ?? 0) + spent,
         },
       },
     }
@@ -215,4 +217,3 @@ function updateMetrics(state: CombatState): CombatState {
     },
   }
 }
-

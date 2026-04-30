@@ -54,6 +54,133 @@ describe('combatStep', () => {
     )).toBe(true)
   })
 
+  it('spawns one projectile per configured barrel', () => {
+    const state = createInitialState(
+      'cruiser',
+      1,
+      [{ id: 'weapon.gun.152mm.twin', name: '四連装テスト砲', type: 'gun', ammo: 20, barrels: 4, mount: { x: 0, y: 0.4 } }],
+      'hull.cruiser.player',
+    )
+    const player = state.entities.get('ship.player') as ShipEntity
+
+    const next = combatStep(
+      state,
+      [{
+        tick: 0,
+        actorId: 'ship.player',
+        type: 'fire.slot',
+        value: 0,
+        target: { x: player.pos.x, y: player.pos.y - 500, z: 0 },
+      }],
+      createRngStreams(12345),
+      STATIC_DATA,
+    )
+
+    const projectiles = [...next.entities.values()].filter((e): e is Extract<typeof e, { kind: 'projectile' }> =>
+      e.kind === 'projectile' &&
+      e.ownerId === 'ship.player' &&
+      e.weaponId === 'weapon.gun.152mm.twin'
+    )
+    const fired = next.eventLog.find(e => e.type === 'weapon.fired' && e.weaponId === 'weapon.gun.152mm.twin')
+    const updatedPlayer = next.entities.get('ship.player') as ShipEntity
+    expect(projectiles).toHaveLength(4)
+    expect(fired?.salvoCount).toBe(4)
+    expect(fired?.muzzlePositions).toHaveLength(4)
+    expect(updatedPlayer.weapons[0]!.ammo).toBe(16)
+    expect(next.metrics.playerAmmoSpent).toBe(4)
+    expect(next.metrics.shotCountByWeapon['weapon.gun.152mm.twin']).toBe(4)
+
+    const xPositions = projectiles.map(p => p.pos.x)
+    expect(Math.max(...xPositions) - Math.min(...xPositions)).toBeGreaterThan(14)
+  })
+
+  it('fires only remaining ammo when a multi-barrel weapon is almost empty', () => {
+    const state = createInitialState(
+      'cruiser',
+      1,
+      [{ id: 'weapon.gun.152mm.twin', name: '四連装テスト砲', type: 'gun', ammo: 2, barrels: 4, mount: { x: 0, y: 0.4 } }],
+      'hull.cruiser.player',
+    )
+    const player = state.entities.get('ship.player') as ShipEntity
+
+    const next = combatStep(
+      state,
+      [{
+        tick: 0,
+        actorId: 'ship.player',
+        type: 'fire.slot',
+        value: 0,
+        target: { x: player.pos.x, y: player.pos.y - 500, z: 0 },
+      }],
+      createRngStreams(12345),
+      STATIC_DATA,
+    )
+
+    const projectiles = [...next.entities.values()].filter(e =>
+      e.kind === 'projectile' &&
+      e.ownerId === 'ship.player' &&
+      e.weaponId === 'weapon.gun.152mm.twin'
+    )
+    const updatedPlayer = next.entities.get('ship.player') as ShipEntity
+    expect(projectiles).toHaveLength(2)
+    expect(updatedPlayer.weapons[0]!.ammo).toBe(0)
+  })
+
+  it('uses barrel count for torpedo salvos and ammo consumption', () => {
+    const state = createInitialState(
+      'destroyer',
+      1,
+      [{ id: 'weapon.torpedo.533mm.basic', name: '三連装魚雷', type: 'torpedo', ammo: 9, barrels: 3, mount: { x: 0, y: 0.2 } }],
+      'hull.destroyer.basic',
+    )
+    const player = state.entities.get('ship.player') as ShipEntity
+
+    const next = combatStep(
+      state,
+      [{ tick: 0, actorId: 'ship.player', type: 'fire.slot', value: 0, target: { x: player.pos.x, y: player.pos.y - 500, z: 0 } }],
+      createRngStreams(12345),
+      STATIC_DATA,
+    )
+
+    const projectiles = [...next.entities.values()].filter((e): e is Extract<typeof e, { kind: 'projectile' }> =>
+      e.kind === 'projectile' &&
+      e.ownerId === 'ship.player' &&
+      e.weaponId === 'weapon.torpedo.533mm.basic'
+    )
+    const updatedPlayer = next.entities.get('ship.player') as ShipEntity
+    expect(projectiles).toHaveLength(3)
+    expect(updatedPlayer.weapons[0]!.ammo).toBe(6)
+
+    const angles = projectiles.map(p => Math.atan2(p.vel.y, p.vel.x))
+    expect(Math.max(...angles) - Math.min(...angles)).toBeGreaterThan(0.12)
+  })
+
+  it('uses barrel count for machine gun salvos and ammo consumption', () => {
+    const state = createInitialState(
+      'destroyer',
+      1,
+      [{ id: 'weapon.aa.20mm.dd', name: '四連装機銃', type: 'aa', ammo: 12, barrels: 4, mount: { x: 0, y: 0.2 } }],
+      'hull.destroyer.basic',
+    )
+    const player = state.entities.get('ship.player') as ShipEntity
+
+    const next = combatStep(
+      state,
+      [{ tick: 0, actorId: 'ship.player', type: 'fire.slot', value: 0, target: { x: player.pos.x, y: player.pos.y - 450, z: 0 } }],
+      createRngStreams(12345),
+      STATIC_DATA,
+    )
+
+    const projectiles = [...next.entities.values()].filter((e): e is Extract<typeof e, { kind: 'projectile' }> =>
+      e.kind === 'projectile' &&
+      e.ownerId === 'ship.player' &&
+      e.weaponId === 'weapon.aa.20mm.dd'
+    )
+    const updatedPlayer = next.entities.get('ship.player') as ShipEntity
+    expect(projectiles).toHaveLength(4)
+    expect(updatedPlayer.weapons[0]!.ammo).toBe(8)
+  })
+
   it('lets battleship main guns fire beyond standard gun range', () => {
     const state = createInitialState('battleship')
     const player = state.entities.get('ship.player') as ShipEntity

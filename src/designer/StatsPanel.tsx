@@ -2,9 +2,10 @@ import type { ShipStats } from './types'
 
 interface Props {
   stats: ShipStats
+  onBarrelsChange?: (slotId: string, barrels: number) => void
 }
 
-export function StatsPanel({ stats }: Props) {
+export function StatsPanel({ stats, onBarrelsChange }: Props) {
   const { totalFirepower, totalAntiAir, avgAccuracy, speed, turnRate, weaponList } = stats
   // speed is already in knots; turnRate is scaled ×1000 for display
 
@@ -25,10 +26,24 @@ export function StatsPanel({ stats }: Props) {
         <div className="sd-stats-empty">兵装未搭載</div>
       ) : (
         <ul className="sd-loadout-list">
-          {weaponList.map(({ slotId, slotLabel, weapon }) => (
+          {weaponList.map(({ slotId, slotLabel, weapon, barrels }) => (
             <li key={slotId} className="sd-loadout-item">
-              <span className="sd-loadout-slot">{slotLabel}</span>
-              <span className="sd-loadout-weapon">{weapon.name}</span>
+              <div className="sd-loadout-main">
+                <span className="sd-loadout-slot">{slotLabel}</span>
+                <span className="sd-loadout-weapon">{weapon.name}</span>
+              </div>
+              <div className="sd-barrel-control" aria-label={`${slotLabel} 連装数`}>
+                {[1, 2, 3, 4].map(count => (
+                  <button
+                    key={count}
+                    className={`sd-barrel-btn${count === barrels ? ' sd-barrel-btn--active' : ''}`}
+                    onClick={() => onBarrelsChange?.(slotId, count)}
+                    type="button"
+                  >
+                    {count}
+                  </button>
+                ))}
+              </div>
             </li>
           ))}
         </ul>

@@ -1,4 +1,5 @@
-import type { WeaponSlotType } from './types'
+import { designWeaponId } from './data'
+import type { Design, WeaponSlotType } from './types'
 import type { SlotDef } from './types'
 
 /** Hull canvas base dimensions (scale=1). */
@@ -43,11 +44,13 @@ export function wouldInterfere(
   targetSlot: SlotDef,
   weaponType: WeaponSlotType,
   slots: SlotDef[],
-  design: Record<string, string>,            // slotId → weaponId
+  design: Design,
   getType: (weaponId: string) => WeaponSlotType | undefined,
 ): boolean {
-  for (const [slotId, weaponId] of Object.entries(design)) {
+  for (const [slotId, entry] of Object.entries(design)) {
     if (slotId === targetSlot.id) continue   // replacing same slot — ok
+    const weaponId = designWeaponId(entry)
+    if (!weaponId) continue
     const existingType = getType(weaponId)
     if (!existingType) continue
     const otherSlot = slots.find(s => s.id === slotId)

@@ -1,18 +1,36 @@
 import { useState, useCallback, useMemo, useEffect } from 'react'
+import type { CSSProperties } from 'react'
 import { WeaponPalette } from './WeaponPalette'
 import { HullView } from './HullView'
 import { HullSideView } from './HullSideView'
+import { PlacementEditor } from './PlacementEditor'
 import { Ship3DPreview } from './Ship3DPreview'
 import { WeightGauge } from './WeightGauge'
 import { StatsPanel } from './StatsPanel'
 import {
-  getHullsByClass, calcStats, saveDesign, loadDesign,
+  getHullsByClass, calcStats, saveDesign,
   getDesignerSlots, designToLoadout, WEAPONS,
+  createDesignEntry, designWeaponId,
+  designTowerMount,
+  loadDesignerState,
 } from './data'
-import type { Design } from './types'
+import {
+  buildDesignerPlacements,
+  collisionWarningText,
+  designFromPrepResult,
+  emptyLayoutForHull,
+  hullIndexForTemplate,
+  layoutFromPrepResult,
+  sanitizeDesignForHull,
+  sanitizeLayoutForHull,
+  type PlacementSelection,
+  weaponScore,
+} from './designer-state'
+import { useElementSize } from './useElementSize'
+import type { Design, DesignLayout } from './types'
 import type { PlayerShipType } from '../game/data/masterdata'
-import type { HullCatalogEntry } from '../game/data/hull-catalog'
 import type { PrepResult } from '../game/ui/prepscreen'
+import { canMoveSlotTo, canMoveTowerTo, collidingIds, gridSpec, type GridCell } from '../game/ui/prep-layout'
 import './ShipDesigner.css'
 
 interface Props {
@@ -33,10 +51,13 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
   const [step, setStep]     = useState<Step>(() => initialResult ? 'design' : 'ship-select')
   const [shipType, setShipType] = useState<PlayerShipType>(() => initialResult?.shipType ?? 'battleship')
   const [hullIdx, setHullIdx]   = useState(() => initialResult ? hullIndexForTemplate(initialResult.shipType, initialResult.templateId) : 0)
-  const [design, setDesign]     = useState<Design>(() => initialResult ? designFromPrepResult(initialResult) : loadDesign())
+  const [design, setDesign]     = useState<Design>(() => initialResult ? designFromPrepResult(initialResult) : loadDesignerState().design)
+  const [layout, setLayout]     = useState<DesignLayout>(() => initialResult ? layoutFromPrepResult(initialResult) : loadDesignerState().layout)
+  const [selectedPlacement, setSelectedPlacement] = useState<PlacementSelection>(null)
   const [draggingWeaponId, setDraggingWeaponId] = useState<string | null>(null)
   const [armorBonus, setArmorBonus] = useState(() => initialResult?.armorBonus ?? 0)
   const [hoveredSlotId, setHoveredSlotId] = useState<string | null>(null)
+  const [centerRef, centerSize] = useElementSize<HTMLElement>({ width: 760, height: 900 })
 
   const ARMOR_STEP = 5
   const ARMOR_MAX  = 100
@@ -45,45 +66,99 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
   const hull  = hulls[hullIdx] ?? hulls[0]!
   const slots = useMemo(() => getDesignerSlots(hull), [hull])
   const stats = useMemo(() => calcStats(design, hull, slots), [design, hull, slots])
+  const widthFit = centerSize.width - 32
+  const heightFit = (centerSize.height - 140) / 1.088
+  const viewWidth = Math.round(clamp(Math.min(widthFit, Math.max(heightFit, widthFit * 0.72)), 520, 1180))
+  const previewHeight = Math.round(clamp(viewWidth * 0.36, 300, 460))
+  const designerPlacements = useMemo(() => buildDesignerPlacements(hull, design, layout), [design, hull, layout])
+  const placementCollisionIds = useMemo(() => collidingIds(designerPlacements), [designerPlacements])
+  const placementCollisionWarning = useMemo(
+    () => collisionWarningText(designerPlacements, placementCollisionIds),
+    [designerPlacements, placementCollisionIds],
+  )
 
   const handleDrop   = useCallback((slotId: string, weaponId: string) =>
-    setDesign(prev => ({ ...prev, [slotId]: weaponId })), [])
+    setDesign(prev => ({ ...prev, [slotId]: createDesignEntry(weaponId) })), [])
   const handleRemove = useCallback((slotId: string) =>
     setDesign(prev => { const n = { ...prev }; delete n[slotId]; return n }), [])
+  const handleBarrelsChange = useCallback((slotId: string, barrels: number) =>
+    setDesign(prev => {
+      const weaponId = designWeaponId(prev[slotId])
+      if (!weaponId) return prev
+      return { ...prev, [slotId]: createDesignEntry(weaponId, barrels) }
+    }), [])
 
-  const handleSave  = () => { saveDesign(design); showToast('設計を保存しました') }
-  const handleLoad  = () => { setDesign(sanitizeDesignForHull(loadDesign(), hull)); showToast('設計を読み込みました') }
-  const handleReset = () => setDesign({})
+  const handleMoveSlot = useCallback((slotId: string, cell: GridCell) => {
+    const spec = gridSpec(hull)
+    const slot = hull.slots.find(s => s.id === slotId)
+    if (!slot) return
+    const placements = buildDesignerPlacements(hull, design, layout)
+    if (!canMoveSlotTo(slot, cell.c, cell.r, hull, placements, spec)) return
+    setLayout(prev => ({ ...prev, slotCells: { ...prev.slotCells, [slotId]: cell } }))
+  }, [design, hull, layout])
+
+  const handleMoveTower = useCallback((cell: GridCell) => {
+    const spec = gridSpec(hull)
+    const placements = buildDesignerPlacements(hull, design, layout)
+    if (!canMoveTowerTo(cell.c, cell.r, hull, placements, spec)) return
+    setLayout(prev => ({ ...prev, towerCell: cell }))
+  }, [design, hull, layout])
+
+  const handleSave  = () => { saveDesign(design, layout); showToast('設計を保存しました') }
+  const handleLoad  = () => {
+    const saved = loadDesignerState()
+    setDesign(sanitizeDesignForHull(saved.design, hull))
+    setLayout(sanitizeLayoutForHull(saved.layout, hull))
+    setSelectedPlacement(null)
+    showToast('設計を読み込みました')
+  }
+  const handleReset = () => {
+    setDesign({})
+    setLayout(emptyLayoutForHull(hull))
+    setSelectedPlacement(null)
+  }
   const handleAutoPlace = () => {
     const next: Design = {}
     for (const slot of slots) {
       const weapon = WEAPONS
         .filter(w => slot.compatibleTypes.includes(w.type))
         .sort((a, b) => weaponScore(b) - weaponScore(a) || b.weight - a.weight || a.name.localeCompare(b.name))[0]
-      if (weapon) next[slot.id] = weapon.id
+      if (weapon) next[slot.id] = createDesignEntry(weapon.id)
     }
     setDesign(next)
+    setLayout(emptyLayoutForHull(hull))
+    setSelectedPlacement(null)
     showToast('兵装を自動配置しました')
   }
 
   const handleSelectShip = (type: PlayerShipType) => {
     const nextHull = getHullsByClass(type)[0]
+    const saved = loadDesignerState()
     setShipType(type)
     setHullIdx(0)
-    setDesign(nextHull ? sanitizeDesignForHull(loadDesign(), nextHull) : {})
+    setDesign(nextHull ? sanitizeDesignForHull(saved.design, nextHull) : {})
+    setLayout(nextHull ? sanitizeLayoutForHull(saved.layout, nextHull) : emptyLayoutForHull(null))
+    setSelectedPlacement(null)
     setStep('design')
   }
 
   const handleDeploy = useCallback(() => {
     if (!onConfirm) return
-    saveDesign(design)
+    if (placementCollisionIds.size > 0) {
+      showToast('配置が重なっています。重なりを解消してください')
+      return
+    }
+    saveDesign(design, layout)
     onConfirm({
       templateId: hull.templateId,
       shipType:   hull.shipType,
-      loadout:    designToLoadout(design, hull),
+      loadout:    designToLoadout(design, hull, layout.slotCells),
       armorBonus,
+      slotCells:  layout.slotCells,
+      towerCell:  layout.towerCell,
+      towerMount: designTowerMount(hull, layout.towerCell),
     })
-  }, [design, hull, armorBonus, onConfirm])
+  }, [design, hull, armorBonus, layout, onConfirm, placementCollisionIds])
 
   useEffect(() => {
     if (step !== 'design' || !onConfirm) return
@@ -135,7 +210,7 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
           <button className="sd-btn" onClick={handleLoad}>📂 読込</button>
           <button className="sd-btn sd-btn-auto" onClick={handleAutoPlace}>自動配置</button>
           <button className="sd-btn sd-btn-danger" onClick={handleReset}>🗑 リセット</button>
-          <button className="sd-btn sd-btn-back" onClick={() => { setStep('ship-select'); setDesign({}) }}>
+          <button className="sd-btn sd-btn-back" onClick={() => { setStep('ship-select'); setDesign({}); setLayout(emptyLayoutForHull(null)); setSelectedPlacement(null) }}>
             ← 艦種変更
           </button>
           {onConfirm && (
@@ -155,14 +230,20 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
         </aside>
 
         {/* Center: hull selector tabs + top-down + side views */}
-        <main className="sd-center">
+        <main className="sd-center" ref={centerRef}>
           {hulls.length > 1 && (
             <div className="sd-hull-tabs">
               {hulls.map((h, i) => (
                 <button
                   key={h.templateId}
                   className={`sd-hull-tab${i === hullIdx ? ' sd-hull-tab--active' : ''}`}
-                  onClick={() => { setHullIdx(i); setDesign(sanitizeDesignForHull(loadDesign(), h)) }}
+                  onClick={() => {
+                    const saved = loadDesignerState()
+                    setHullIdx(i)
+                    setDesign(sanitizeDesignForHull(saved.design, h))
+                    setLayout(sanitizeLayoutForHull(saved.layout, h))
+                    setSelectedPlacement(null)
+                  }}
                 >
                   {h.name}
                 </button>
@@ -170,21 +251,47 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
             </div>
           )}
 
-          <Ship3DPreview
-            hull={hull}
-            design={design}
-            armorBonus={armorBonus}
-            hoveredSlotId={hoveredSlotId}
-          />
+          <div
+            className="sd-design-stage"
+            style={{
+              width: viewWidth,
+              '--sd-preview-h': `${previewHeight}px`,
+            } as CSSProperties}
+          >
+            <Ship3DPreview
+              hull={hull}
+              design={design}
+              armorBonus={armorBonus}
+              slotCells={layout.slotCells}
+              towerCell={layout.towerCell}
+              hoveredSlotId={hoveredSlotId}
+            />
 
-          {/* Side view on top, top-down view rotated below — both at matching scale */}
-          {(() => {
-            const sideScale = 1 + hullIdx * 0.1
+            {/* Side view on top, top-down view rotated below — both at matching scale */}
+            {(() => {
+            const sideScale = viewWidth / 480
             const topScale  = sideScale * (480 / 700)
             const topW      = Math.round(160 * topScale)
             const topH      = Math.round(700 * topScale)
             return (
               <div className="sd-views-stack">
+                <PlacementEditor
+                  hull={hull}
+                  design={design}
+                  slotCells={layout.slotCells}
+                  towerCell={layout.towerCell}
+                  selected={selectedPlacement}
+                  onSelect={setSelectedPlacement}
+                  onMoveSlot={handleMoveSlot}
+                  onMoveTower={handleMoveTower}
+                  onSlotHover={setHoveredSlotId}
+                />
+                {placementCollisionWarning && (
+                  <div className="sd-placement-warning" role="alert">
+                    {placementCollisionWarning}
+                  </div>
+                )}
+
                 {/* Side view */}
                 <div className="sd-view-col">
                   <div className="sd-hull-label">{hull.className} — 側面図</div>
@@ -232,7 +339,8 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
                 </div>
               </div>
             )
-          })()}
+            })()}
+          </div>
 
           <div className="sd-hull-hint">スロットに兵装をドロップ ／ クリックで取り外し</div>
         </main>
@@ -240,7 +348,7 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
         {/* Right: weight gauge + stats + armor grade */}
         <aside className="sd-panel sd-panel-right">
           <WeightGauge totalWeight={stats.totalWeight} maxWeight={stats.maxWeight} />
-          <StatsPanel stats={stats} />
+          <StatsPanel stats={stats} onBarrelsChange={handleBarrelsChange} />
           <div className="sd-armor-grade">
             <div className="sd-section-title">装甲グレード</div>
             <div className="sd-armor-grade-row">
@@ -282,44 +390,6 @@ function showToast(msg: string) {
   setTimeout(() => el.classList.remove('sd-toast--visible'), 2000)
 }
 
-function hullIndexForTemplate(shipType: PlayerShipType, templateId: string): number {
-  const hulls = getHullsByClass(shipType)
-  return Math.max(0, hulls.findIndex(h => h.templateId === templateId))
-}
-
-function designFromPrepResult(result: PrepResult): Design {
-  const hull = getHullsByClass(result.shipType).find(h => h.templateId === result.templateId)
-  if (!hull) return loadDesign()
-
-  const design: Design = {}
-  const usedSlots = new Set<string>()
-  for (const weapon of result.loadout) {
-    const slot = hull.slots.find(candidate =>
-      !usedSlots.has(candidate.id) &&
-      candidate.compatibleTypes.includes(weapon.type) &&
-      weapon.mount &&
-      Math.abs(candidate.x - weapon.mount.x) < 0.001 &&
-      Math.abs(candidate.y - weapon.mount.y) < 0.001
-    )
-    if (!slot) continue
-    design[slot.id] = weapon.id
-    usedSlots.add(slot.id)
-  }
-  return sanitizeDesignForHull(design, hull)
-}
-
-function sanitizeDesignForHull(design: Design, hull: HullCatalogEntry): Design {
-  const next: Design = {}
-  for (const slot of hull.slots) {
-    const weaponId = design[slot.id]
-    const weapon = WEAPONS.find(w => w.id === weaponId)
-    if (weapon && slot.compatibleTypes.includes(weapon.type)) next[slot.id] = weapon.id
-  }
-  return next
-}
-
-function weaponScore(weapon: { firepower?: number; antiAir?: number; accuracy: number; reload: number }): number {
-  const firepower = weapon.firepower ?? 0
-  const antiAir = weapon.antiAir ?? 0
-  return (firepower * 2.2 + antiAir * 1.6) * weapon.accuracy / Math.max(0.3, weapon.reload)
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value))
 }

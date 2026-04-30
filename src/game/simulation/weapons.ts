@@ -82,9 +82,8 @@ export function fireWeaponAtSlot(
   const baseDirX = dist > 0 ? dx / dist : 1
   const baseDirY = dist > 0 ? dy / dist : 0
 
-  // 連装砲は左右砲身をわずかにオフセットして2発発射
-  const isTwin = weapon.id.includes('.twin')
-  const barrelOffsets = isTwin ? [-0.008, 0.008] : [0]
+  const requestedBarrels = weapon.barrels ?? defaultBarrelsForWeapon(weapon.id, weaponType)
+  const barrelOffsets = barrelMuzzleOffsets(Math.min(requestedBarrels, weapon.ammo), weaponType)
 
   const profile = (weaponType === 'gun' || weaponType === 'secondary')
     ? GUN_PROFILES[weapon.id]
@@ -92,31 +91,35 @@ export function fireWeaponAtSlot(
 
   const entities = new Map(state.entities)
   const flightTicks = Math.max(1, Math.ceil(dist / cfg.speed))
+  const muzzlePositions: Array<{ x: number; y: number; z: number }> = []
 
-  for (const barrelOffset of barrelOffsets) {
+  for (let barrelIndex = 0; barrelIndex < barrelOffsets.length; barrelIndex++) {
+    const barrelOffset = barrelOffsets[barrelIndex]!
     let dirX = baseDirX
     let dirY = baseDirY
 
     if (profile) {
       const halfAngle = calcDispersionHalfAngle(profile, dist, cfg.maxRange)
-      const spread = rng.nextFloat(-halfAngle, halfAngle) + barrelOffset
-      const c = Math.cos(spread)
-      const s = Math.sin(spread)
-      ;[dirX, dirY] = [dirX * c - dirY * s, dirX * s + dirY * c]
+      const spread = rng.nextFloat(-halfAngle, halfAngle)
+      ;[dirX, dirY] = rotateDir(dirX, dirY, spread)
+    } else if (weaponType === 'torpedo') {
+      ;[dirX, dirY] = rotateDir(dirX, dirY, torpedoFanAngle(barrelIndex, barrelOffsets.length))
     }
 
+    const launchPos = offsetMuzzleByBarrel(muzzle, baseDirX, baseDirY, barrelOffset)
+    muzzlePositions.push(launchPos)
     const damage = rng.nextFloat(cfg.damageMin, cfg.damageMax)
     const projId = `proj.${actorId}.${weaponType}.${projectileCounter++}`
 
     const projectile: ProjectileEntity = {
       kind: 'projectile',
       id: projId,
-      pos: { ...muzzle },
+      pos: launchPos,
       vel: { x: dirX * cfg.speed, y: dirY * cfg.speed, z: 0 },
       ownerId: actorId,
       weaponId: weapon.id,
       weaponType,
-      launchPos: { ...muzzle },
+      launchPos,
       targetPos: { ...target },
       damage,
       lifetime: Math.min(cfg.lifetime, flightTicks),
@@ -129,7 +132,7 @@ export function fireWeaponAtSlot(
   }
 
   const updatedWeapons = ship.weapons.map((w, i) =>
-    i === weaponIdx ? { ...w, cooldownTick: cfg.cooldown, ammo: w.ammo - 1 } : w
+    i === weaponIdx ? { ...w, cooldownTick: cfg.cooldown, ammo: Math.max(0, w.ammo - barrelOffsets.length) } : w
   )
 
   const firedEvent: CombatEvent = {
@@ -139,11 +142,56 @@ export function fireWeaponAtSlot(
     weaponId: weapon.id,
     position: { ...muzzle },
     targetPosition: { ...target },
+    salvoCount: barrelOffsets.length,
+    muzzlePositions,
   }
 
   entities.set(actorId, { ...ship, weapons: updatedWeapons })
 
   return { ...state, entities, eventLog: [...state.eventLog, firedEvent] }
+}
+
+function torpedoFanAngle(index: number, count: number): number {
+  if (count <= 1) return 0
+  const totalFan = Math.min(0.34, 0.10 + count * 0.055)
+  return (index - (count - 1) / 2) * (totalFan / (count - 1))
+}
+
+function rotateDir(x: number, y: number, angle: number): [number, number] {
+  const c = Math.cos(angle)
+  const s = Math.sin(angle)
+  return [x * c - y * s, x * s + y * c]
+}
+
+function barrelMuzzleOffsets(barrels: number, weaponType: WeaponType): number[] {
+  const count = Math.min(4, Math.max(1, Math.round(Number.isFinite(barrels) ? barrels : 1)))
+  const step = weaponType === 'gun' ? 5.2
+    : weaponType === 'secondary' ? 3.4
+      : weaponType === 'torpedo' ? 4.2
+        : weaponType === 'missile' ? 3.2
+          : 1.1
+  return Array.from({ length: count }, (_, i) => (i - (count - 1) / 2) * step)
+}
+
+function offsetMuzzleByBarrel(
+  muzzle: { x: number; y: number; z: number },
+  dirX: number,
+  dirY: number,
+  lateralOffset: number,
+): { x: number; y: number; z: number } {
+  return {
+    x: muzzle.x - dirY * lateralOffset,
+    y: muzzle.y + dirX * lateralOffset,
+    z: muzzle.z,
+  }
+}
+
+function defaultBarrelsForWeapon(weaponId: string, weaponType: WeaponType): number {
+  if (weaponId.includes('single')) return 1
+  if (weaponId.includes('.twin')) return 2
+  if (weaponType === 'torpedo' || weaponType === 'missile') return 4
+  if (weaponType === 'aa') return 2
+  return 1
 }
 
 function isWithinFiringArc(ship: ShipEntity, weapon: ShipEntity['weapons'][number], dx: number, dy: number): boolean {
@@ -199,7 +247,7 @@ function weaponMuzzlePosition(
 function weaponMountOffset(mount: { x: number; y: number }, dim: { l: number; w: number }): { lon: number; lat: number } {
   return {
     lon: -mount.y * dim.l * 0.42,
-    lat: -mount.x * dim.w * 0.46,
+    lat: -mount.x * dim.w * 0.30,
   }
 }
 

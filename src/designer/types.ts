@@ -11,6 +11,21 @@ export interface Weapon {
   accuracy: number
 }
 
+export interface DesignEntry {
+  weaponId: string
+  barrels: number
+}
+
+export interface DesignLayout {
+  slotCells: Record<string, { c: number; r: number }>
+  towerCell: { c: number; r: number } | null
+}
+
+export interface SavedDesignerState {
+  design: Design
+  layout: DesignLayout
+}
+
 export interface SlotDef {
   id: string
   type: WeaponSlotType
@@ -22,8 +37,8 @@ export interface SlotDef {
   label: string
 }
 
-/** slotId → weaponId */
-export type Design = Record<string, string>
+/** slotId → weapon assignment. String values are accepted for older saves. */
+export type Design = Record<string, string | DesignEntry>
 
 export interface ShipStats {
   totalFirepower: number
@@ -35,5 +50,5 @@ export interface ShipStats {
   turnRate: number
   totalWeight: number
   maxWeight: number
-  weaponList: Array<{ slotId: string; slotLabel: string; weapon: Weapon }>
+  weaponList: Array<{ slotId: string; slotLabel: string; weapon: Weapon; barrels: number }>
 }

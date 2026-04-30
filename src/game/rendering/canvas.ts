@@ -518,31 +518,34 @@ export class CanvasRenderer {
       if (age < 0 || age >= D) continue
 
       const t = age / D
-      const [cx, cy] = this.w2s(ev.position.x, ev.position.y)
       const isTorpedo = ev.weaponId?.includes('torpedo') ?? false
+      const muzzlePositions = ev.muzzlePositions?.length ? ev.muzzlePositions : [ev.position]
       if (isTorpedo) {
-        const target = ev.targetPosition ?? { x: ev.position.x + 1, y: ev.position.y, z: 0 }
-        const dx = target.x - ev.position.x
-        const dy = target.y - ev.position.y
-        const len = Math.hypot(dx, dy) || 1
-        const wakeStart = this.w2s(ev.position.x - (dx / len) * 42, ev.position.y - (dy / len) * 42)
-        const wakeEnd = this.w2s(ev.position.x + (dx / len) * 28, ev.position.y + (dy / len) * 28)
+        for (const pos of muzzlePositions) {
+          const [cx, cy] = this.w2s(pos.x, pos.y)
+          const target = ev.targetPosition ?? { x: pos.x + 1, y: pos.y, z: 0 }
+          const dx = target.x - pos.x
+          const dy = target.y - pos.y
+          const len = Math.hypot(dx, dy) || 1
+          const wakeStart = this.w2s(pos.x - (dx / len) * 42, pos.y - (dy / len) * 42)
+          const wakeEnd = this.w2s(pos.x + (dx / len) * 28, pos.y + (dy / len) * 28)
 
-        ctx.save()
-        ctx.globalCompositeOperation = 'screen'
-        ctx.lineCap = 'round'
-        ctx.beginPath()
-        ctx.moveTo(wakeStart[0], wakeStart[1])
-        ctx.lineTo(wakeEnd[0], wakeEnd[1])
-        ctx.strokeStyle = `rgba(159,232,255,${(1 - t) * 0.82})`
-        ctx.lineWidth = Math.max(1.4, 8 * this.iso.scale * (1 - t * 0.25))
-        ctx.stroke()
-        ctx.beginPath()
-        ctx.ellipse(cx, cy, Math.max(2, 18 * this.iso.scale * (1 + t)), Math.max(1, 7 * this.iso.scale * (1 + t)), -Math.PI * 0.2, 0, Math.PI * 2)
-        ctx.strokeStyle = `rgba(221,250,255,${(1 - t) * 0.70})`
-        ctx.lineWidth = Math.max(0.8, 2.5 * this.iso.scale)
-        ctx.stroke()
-        ctx.restore()
+          ctx.save()
+          ctx.globalCompositeOperation = 'screen'
+          ctx.lineCap = 'round'
+          ctx.beginPath()
+          ctx.moveTo(wakeStart[0], wakeStart[1])
+          ctx.lineTo(wakeEnd[0], wakeEnd[1])
+          ctx.strokeStyle = `rgba(159,232,255,${(1 - t) * 0.82})`
+          ctx.lineWidth = Math.max(1.4, 8 * this.iso.scale * (1 - t * 0.25))
+          ctx.stroke()
+          ctx.beginPath()
+          ctx.ellipse(cx, cy, Math.max(2, 18 * this.iso.scale * (1 + t)), Math.max(1, 7 * this.iso.scale * (1 + t)), -Math.PI * 0.2, 0, Math.PI * 2)
+          ctx.strokeStyle = `rgba(221,250,255,${(1 - t) * 0.70})`
+          ctx.lineWidth = Math.max(0.8, 2.5 * this.iso.scale)
+          ctx.stroke()
+          ctx.restore()
+        }
         continue
       }
 
@@ -551,18 +554,21 @@ export class CanvasRenderer {
       const isSecondary = ev.weaponId?.includes('secondary') ?? false
       const r = (isMissile ? 38 : isAa ? 18 : isSecondary ? 22 : 28) * this.iso.scale * (1 + t * 1.5)
 
-      ctx.save()
-      ctx.translate(cx, cy)
-      ctx.scale(1.35, 0.55)
-      const flash = ctx.createRadialGradient(0, 0, 0, 0, 0, Math.max(3, r))
-      flash.addColorStop(0, `rgba(255,244,160,${(1 - t) * 0.95})`)
-      flash.addColorStop(0.42, `rgba(255,184,45,${(1 - t) * 0.55})`)
-      flash.addColorStop(1, 'rgba(255,184,45,0)')
-      ctx.beginPath()
-      ctx.arc(0, 0, Math.max(3, r), 0, Math.PI * 2)
-      ctx.fillStyle = flash
-      ctx.fill()
-      ctx.restore()
+      for (const pos of muzzlePositions) {
+        const [cx, cy] = this.w2s(pos.x, pos.y)
+        ctx.save()
+        ctx.translate(cx, cy)
+        ctx.scale(1.35, 0.55)
+        const flash = ctx.createRadialGradient(0, 0, 0, 0, 0, Math.max(3, r))
+        flash.addColorStop(0, `rgba(255,244,160,${(1 - t) * 0.95})`)
+        flash.addColorStop(0.42, `rgba(255,184,45,${(1 - t) * 0.55})`)
+        flash.addColorStop(1, 'rgba(255,184,45,0)')
+        ctx.beginPath()
+        ctx.arc(0, 0, Math.max(3, r), 0, Math.PI * 2)
+        ctx.fillStyle = flash
+        ctx.fill()
+        ctx.restore()
+      }
     }
   }
 
@@ -1169,14 +1175,14 @@ export class CanvasRenderer {
 
     // 4. Superstructure
     if (dim.h >= 13) {
-      const superSpec = superstructureSpec(shape, dim)
+      const superSpec = superstructureSpec(shape, dim, ship.towerMount)
       const sL = superSpec.l / 2
       const sW = superSpec.w / 2
       const superWc: [number, number][] = [
-        localToWorld(superSpec.offset + sL, sW),
-        localToWorld(superSpec.offset + sL, -sW),
-        localToWorld(superSpec.offset - sL, -sW),
-        localToWorld(superSpec.offset - sL, sW),
+        localToWorld(superSpec.offset + sL, superSpec.lateral + sW),
+        localToWorld(superSpec.offset + sL, superSpec.lateral - sW),
+        localToWorld(superSpec.offset - sL, superSpec.lateral - sW),
+        localToWorld(superSpec.offset - sL, superSpec.lateral + sW),
       ]
       const ss = superWc.map(([x, y]) => this.w2s(x, y)) as [number, number][]
       const sHpx = hPx * superSpec.h
@@ -1218,7 +1224,7 @@ export class CanvasRenderer {
       ctx.fill()
 
       if (shape === 'battleship' || shape === 'yukimura' || shape === 'boss') {
-        const mastBase = localToWorld(superSpec.offset, 0)
+        const mastBase = localToWorld(superSpec.offset, superSpec.lateral)
         const [mx, my] = this.w2s(mastBase[0], mastBase[1])
         ctx.strokeStyle = lerpHex(rimColor, '#ffffff', 0.35)
         ctx.lineWidth = Math.max(1, 2 * iso.scale)
@@ -2477,12 +2483,24 @@ function shipHullPoints(shape: ShipShapeClass, l: number, w: number): [number, n
   ]
 }
 
-function superstructureSpec(shape: ShipShapeClass, dim: { l: number; w: number; h: number }): { offset: number; l: number; w: number; h: number } {
-  if (shape === 'destroyer') return { offset: -dim.l * 0.03, l: dim.l * 0.22, w: dim.w * 0.46, h: 0.42 }
-  if (shape === 'cruiser') return { offset: -dim.l * 0.02, l: dim.l * 0.25, w: dim.w * 0.54, h: 0.58 }
-  if (shape === 'yukimura') return { offset: -dim.l * 0.02, l: dim.l * 0.28, w: dim.w * 0.60, h: 0.72 }
-  if (shape === 'boss') return { offset: -dim.l * 0.04, l: dim.l * 0.34, w: dim.w * 0.62, h: 0.82 }
-  return { offset: -dim.l * 0.03, l: dim.l * 0.30, w: dim.w * 0.58, h: 0.70 }
+function superstructureSpec(
+  shape: ShipShapeClass,
+  dim: { l: number; w: number; h: number },
+  towerMount?: { x: number; y: number },
+): { offset: number; lateral: number; l: number; w: number; h: number } {
+  const mounted = towerMount ? { offset: -towerMount.y * dim.l * 0.42, lateral: -towerMount.x * dim.w * 0.30 } : null
+  const place = (offset: number, l: number, w: number, h: number) => ({
+    offset: mounted?.offset ?? offset,
+    lateral: mounted?.lateral ?? 0,
+    l,
+    w,
+    h,
+  })
+  if (shape === 'destroyer') return place(-dim.l * 0.03, dim.l * 0.22, dim.w * 0.46, 0.42)
+  if (shape === 'cruiser') return place(-dim.l * 0.02, dim.l * 0.25, dim.w * 0.54, 0.58)
+  if (shape === 'yukimura') return place(-dim.l * 0.02, dim.l * 0.28, dim.w * 0.60, 0.72)
+  if (shape === 'boss') return place(-dim.l * 0.04, dim.l * 0.34, dim.w * 0.62, 0.82)
+  return place(-dim.l * 0.03, dim.l * 0.30, dim.w * 0.58, 0.70)
 }
 
 function turretLayout(shape: ShipShapeClass, dim: { l: number; w: number }): Array<{ lon: number; lat: number; radius: number; barrels: number }> {

@@ -32,17 +32,20 @@ interface Props {
   isDragTarget: boolean
   isBlocked: boolean
   isHighlighted?: boolean
+  scale?: number
+  barrels?: number
   onDrop: (slotId: string, weaponId: string) => void
   onRemove: (slotId: string) => void
   onMouseEnter?: () => void
   onMouseLeave?: () => void
 }
 
-export function ShipSlot({ slot, equippedWeapon, isDragTarget, isBlocked, isHighlighted, onDrop, onRemove, onMouseEnter, onMouseLeave }: Props) {
+export function ShipSlot({ slot, equippedWeapon, isDragTarget, isBlocked, isHighlighted, scale = 1, barrels = 1, onDrop, onRemove, onMouseEnter, onMouseLeave }: Props) {
   const [isOver, setIsOver] = useState(false)
   const color = TYPE_COLOR[slot.type]
-  const size  = SLOT_SIZE[slot.type]
-  const wSize = WEAPON_SIZE[slot.type]
+  const markerScale = Math.max(0.85, scale)
+  const size  = SLOT_SIZE[slot.type] * markerScale
+  const wSize = WEAPON_SIZE[slot.type] * markerScale
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault()
@@ -120,11 +123,11 @@ export function ShipSlot({ slot, equippedWeapon, isDragTarget, isBlocked, isHigh
       }
     >
       {filled ? (
-        <WeaponBlueprint type={equippedWeapon!.type} color={color} size={wSize} />
+        <WeaponBlueprint type={equippedWeapon!.type} color={color} size={wSize} barrels={barrels} />
       ) : blocked ? (
-        <span style={{ fontSize: 14, color: '#ff6666', fontWeight: 'bold', userSelect: 'none' }}>✕</span>
+        <span style={{ fontSize: 14 * markerScale, color: '#ff6666', fontWeight: 'bold', userSelect: 'none' }}>✕</span>
       ) : (
-        <span style={{ fontSize: 11, color: color + '70', fontFamily: 'monospace', userSelect: 'none' }}>+</span>
+        <span style={{ fontSize: 11 * markerScale, color: color + '70', fontFamily: 'monospace', userSelect: 'none' }}>+</span>
       )}
     </div>
   )

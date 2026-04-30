@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { PlayerShipType } from '../game/data/masterdata'
-import { WEAPON_BY_ID } from './data'
+import { designWeaponId, WEAPON_BY_ID } from './data'
 import { wouldInterfere } from './collision'
 import { HULL_VIEWS } from './hulls'
 import { HULL_PNG } from './hulls/hull-images'
@@ -157,7 +157,7 @@ export function HullSideView({
       {/* Slot overlay — interactive markers at deck positions */}
       <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
         {slots.map(slot => {
-          const weaponId      = design[slot.id]
+          const weaponId      = designWeaponId(design[slot.id])
           const weapon        = weaponId ? (WEAPON_BY_ID[weaponId] ?? null) : null
           const isDragTarget  = draggingWeapon !== null &&
             slot.compatibleTypes.includes(draggingWeapon.type as WeaponSlotType)
@@ -175,6 +175,7 @@ export function HullSideView({
               isHighlighted={isHighlighted}
               leftPct={slotToLeftPct(slot.y)}
               topPct={TYPE_DECK_PCT[slot.type] ?? 44}
+              scale={scale}
               onDrop={handleDrop}
               onRemove={() => onRemove?.(slot.id)}
               onMouseEnter={() => onSlotHover?.(slot.id)}
@@ -216,6 +217,7 @@ interface MarkerProps {
   isHighlighted: boolean
   leftPct: number
   topPct: number
+  scale: number
   onDrop: (slotId: string, weaponId: string) => void
   onRemove: () => void
   onMouseEnter: () => void
@@ -224,11 +226,12 @@ interface MarkerProps {
 
 function SideSlotMarker({
   slot, equippedWeapon, isDragTarget, isBlocked, isHighlighted,
-  leftPct, topPct, onDrop, onRemove, onMouseEnter, onMouseLeave,
+  leftPct, topPct, scale, onDrop, onRemove, onMouseEnter, onMouseLeave,
 }: MarkerProps) {
   const [isOver, setIsOver] = useState(false)
   const color = TYPE_COLOR[slot.type]
   const filled = equippedWeapon !== null
+  const markerScale = Math.max(0.85, scale)
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault()
@@ -280,17 +283,17 @@ function SideSlotMarker({
         bottom:    topPct >= deckPct ? '100%' : 'auto',
         transform: 'translateX(-50%)',
         width:     1,
-        height:    `${stemHeight * 2.1}px`,
+        height:    `${stemHeight * 2.1 * markerScale}px`,
         background: `${color}44`,
       }} />
 
       {/* Marker box */}
       <div
         style={{
-          width:      16,
-          height:     16,
+          width:      16 * markerScale,
+          height:     16 * markerScale,
           border,
-          borderRadius: 3,
+          borderRadius: 3 * markerScale,
           background:   bg,
           boxShadow:    shadow,
           cursor:       filled ? 'pointer' : 'default',
@@ -314,10 +317,10 @@ function SideSlotMarker({
         }
       >
         {filled
-          ? <div style={{ width: 6, height: 6, borderRadius: '50%', background: color }} />
+          ? <div style={{ width: 6 * markerScale, height: 6 * markerScale, borderRadius: '50%', background: color }} />
           : blocked
-            ? <span style={{ fontSize: 9, color: '#ff6666', lineHeight: 1 }}>✕</span>
-            : <span style={{ fontSize: 9, color: `${color}66`, lineHeight: 1 }}>+</span>
+            ? <span style={{ fontSize: 9 * markerScale, color: '#ff6666', lineHeight: 1 }}>✕</span>
+            : <span style={{ fontSize: 9 * markerScale, color: `${color}66`, lineHeight: 1 }}>+</span>
         }
       </div>
 
@@ -328,8 +331,8 @@ function SideSlotMarker({
           top:         '100%',
           left:        '50%',
           transform:   'translateX(-50%)',
-          marginTop:   3,
-          fontSize:    7,
+          marginTop:   3 * markerScale,
+          fontSize:    7 * markerScale,
           color:       color,
           whiteSpace:  'nowrap',
           fontFamily:  'monospace',

@@ -4,9 +4,10 @@ interface Props {
   type: WeaponSlotType
   color: string
   size: number
+  barrels?: number
 }
 
-export function WeaponBlueprint({ type, color, size }: Props) {
+export function WeaponBlueprint({ type, color, size, barrels = 1 }: Props) {
   return (
     <svg
       viewBox="0 0 40 40"
@@ -15,12 +16,12 @@ export function WeaponBlueprint({ type, color, size }: Props) {
       style={{ display: 'block', overflow: 'visible', pointerEvents: 'none' }}
       aria-hidden="true"
     >
-      {BLUEPRINTS[type](color)}
+      {BLUEPRINTS[type](color, clampBarrels(barrels))}
     </svg>
   )
 }
 
-const BLUEPRINTS: Record<WeaponSlotType, (c: string) => React.ReactNode> = {
+const BLUEPRINTS: Record<WeaponSlotType, (c: string, barrels: number) => React.ReactNode> = {
 
   /* ── 主砲: 三連装砲塔（46cm三連装）────────────────────────────────────── */
   gun: (c) => (
@@ -82,12 +83,12 @@ const BLUEPRINTS: Record<WeaponSlotType, (c: string) => React.ReactNode> = {
   ),
 
   /* ── 魚雷: 五連装魚雷発射管（九三式）────────────────────────────────────── */
-  torpedo: (c) => (
+  torpedo: (c, barrels) => (
     <g stroke={c} fill="none" strokeLinecap="round" strokeLinejoin="round">
       {/* Mounting frame base */}
       <rect x="2" y="15" width="36" height="11" rx="2.5" strokeWidth="1.1" fill={c + '14'} />
-      {/* 5 torpedo tubes (pointing up = bow) */}
-      {[3, 9.5, 16, 22.5, 29].map((x, i) => (
+      {/* Torpedo tubes (pointing up = bow) */}
+      {barrelXPositions(barrels, 6, 3, 37).map((x, i) => (
         <g key={i}>
           {/* Tube cylinder */}
           <rect x={x} y="2" width="6" height="28" rx="3" strokeWidth="1.2" fill={c + '20'} />
@@ -106,7 +107,7 @@ const BLUEPRINTS: Record<WeaponSlotType, (c: string) => React.ReactNode> = {
   ),
 
   /* ── 対空砲: 三連装25mm機銃───────────────────────────────────────────── */
-  aa: (c) => (
+  aa: (c, barrels) => (
     <g stroke={c} fill="none" strokeLinecap="round" strokeLinejoin="round">
       {/* Shield (D-shaped gun shield from above) */}
       <path d="M8,32 L8,20 C8,10 12,7 20,6 C28,7 32,10 32,20 L32,32 Z"
@@ -114,16 +115,14 @@ const BLUEPRINTS: Record<WeaponSlotType, (c: string) => React.ReactNode> = {
       {/* Inner shield edge */}
       <path d="M11,30 L11,20 C11,13 14,10 20,9 C26,10 29,13 29,20 L29,30 Z"
         strokeWidth="0.8" fill={c + '10'} opacity="0.7" />
-      {/* Left barrel */}
-      <rect x="11.5" y="2" width="3.5" height="22" rx="1.5" strokeWidth="1.1" fill={c + '28'} />
-      {/* Center barrel (longer) */}
-      <rect x="18.25" y="0" width="3.5" height="24" rx="1.5" strokeWidth="1.1" fill={c + '28'} />
-      {/* Right barrel */}
-      <rect x="25" y="2" width="3.5" height="22" rx="1.5" strokeWidth="1.1" fill={c + '28'} />
+      {/* Barrels */}
+      {barrelXPositions(barrels, 3.5, 11, 29).map((x, i) => (
+        <rect key={`barrel-${i}`} x={x} y={i % 2 === 0 ? 2 : 0} width="3.5" height={i % 2 === 0 ? 22 : 24} rx="1.5" strokeWidth="1.1" fill={c + '28'} />
+      ))}
       {/* Muzzle flash guards */}
-      <rect x="10.5" y="1.5" width="5.5" height="2" rx="0.5" strokeWidth="0.9" fill={c + '45'} />
-      <rect x="17.25" y="-0.5" width="5.5" height="2" rx="0.5" strokeWidth="0.9" fill={c + '45'} />
-      <rect x="24" y="1.5" width="5.5" height="2" rx="0.5" strokeWidth="0.9" fill={c + '45'} />
+      {barrelXPositions(barrels, 3.5, 11, 29).map((x, i) => (
+        <rect key={`muzzle-${i}`} x={x - 1} y={i % 2 === 0 ? 1.5 : -0.5} width="5.5" height="2" rx="0.5" strokeWidth="0.9" fill={c + '45'} />
+      ))}
       {/* Rotating platform */}
       <ellipse cx="20" cy="30" rx="9" ry="4.5" strokeWidth="1" fill={c + '18'} />
       {/* Pivot pin */}
@@ -133,12 +132,12 @@ const BLUEPRINTS: Record<WeaponSlotType, (c: string) => React.ReactNode> = {
   ),
 
   /* ── ミサイル: 4連装箱型ランチャー（ハープーン式）──────────────────────── */
-  missile: (c) => (
+  missile: (c, barrels) => (
     <g stroke={c} fill="none" strokeLinecap="round" strokeLinejoin="round">
       {/* Launcher outer box */}
       <rect x="4" y="4" width="32" height="32" rx="3" strokeWidth="1.3" fill={c + '10'} />
       {/* 4 missile canisters: 2×2 grid */}
-      {([[5, 5], [21, 5], [5, 21], [21, 21]] as [number, number][]).map(([x, y], i) => (
+      {([[5, 5], [21, 5], [5, 21], [21, 21]] as [number, number][]).slice(0, barrels).map(([x, y], i) => (
         <g key={i}>
           {/* Canister box */}
           <rect x={x} y={y} width="14" height="14" rx="2" strokeWidth="1.1" fill={c + '1a'} />
@@ -157,4 +156,14 @@ const BLUEPRINTS: Record<WeaponSlotType, (c: string) => React.ReactNode> = {
       <circle cx="20" cy="20" r="3" strokeWidth="0.8" fill="none" opacity="0.5" />
     </g>
   ),
+}
+
+function clampBarrels(value: number): number {
+  return Math.min(4, Math.max(1, Math.round(Number.isFinite(value) ? value : 1)))
+}
+
+function barrelXPositions(count: number, width: number, minX: number, maxX: number): number[] {
+  if (count <= 1) return [(minX + maxX - width) / 2]
+  const span = maxX - minX - width
+  return Array.from({ length: count }, (_, i) => minX + (span * i) / (count - 1))
 }

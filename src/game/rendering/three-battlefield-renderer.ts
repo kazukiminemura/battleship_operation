@@ -823,12 +823,13 @@ function combatShipPreviewConfig(ship: ShipEntity): ShipDesignerPreviewConfig {
   return {
     hull,
     armorBonus: ship.armorBonus ?? 0,
-    towerMount: bridgeMountForHull(hull),
+    towerMount: ship.towerMount ?? bridgeMountForHull(hull),
     weapons: ship.weapons.map((weapon, index) => ({
       id: weapon.id,
       name: weapon.name,
       type: weapon.type,
       mount: combatVisualMount(ship, weapon, index),
+      barrels: weapon.barrels,
       selected: false,
     })),
   }
@@ -870,7 +871,7 @@ function combatVisualMount(ship: ShipEntity, weapon: ShipEntity['weapons'][numbe
   const dim = SHIP_DIMS[ship.templateId] ?? { l: 100, w: 22, h: 12 }
   const offset = visualWeaponLocalOffset(weapon.id, index, dim)
   return {
-    x: -offset.lat / (dim.w * 0.46),
+    x: -offset.lat / (dim.w * 0.30),
     y: -offset.lon / (dim.l * 0.42),
   }
 }

@@ -9,6 +9,7 @@ export interface ShipDesignerPreviewWeapon {
   name: string
   type: WeaponType
   mount: { x: number; y: number }
+  barrels?: number
   selected: boolean
 }
 
@@ -35,7 +36,7 @@ const MATERIALS = {
 }
 
 const MOUNT_LENGTH_SCALE = 0.42
-const MOUNT_BEAM_SCALE = 0.46
+const MOUNT_BEAM_SCALE = 0.30
 
 export class ThreeShipDesignerRenderer {
   private readonly container: HTMLDivElement
@@ -271,7 +272,7 @@ function addHull(parent: THREE.Group, shape: ShipShapeClass, length: number, bea
   parent.add(deck)
 
   const beltThickness = 0.14 + Math.min(0.16, armorBonus / 900)
-  const belt = mesh(new THREE.BoxGeometry(length * 0.78, height * beltThickness, beam * 0.98), MATERIALS.armor)
+  const belt = mesh(new THREE.BoxGeometry(length * 0.78, height * beltThickness, beam * 0.74), MATERIALS.armor)
   belt.position.y = height * 0.05
   parent.add(belt)
 
@@ -326,10 +327,11 @@ function addSuperstructure(
 }
 
 function createWeapon(weapon: ShipDesignerPreviewWeapon): THREE.Group {
-  if (weapon.type === 'torpedo') return torpedoLauncher()
-  if (weapon.type === 'aa') return aaGun()
-  if (weapon.type === 'missile') return missileRack()
-  return gunTurret(weapon.type === 'gun' ? 1 : 0.58, barrelsFor(weapon))
+  const barrels = barrelsFor(weapon)
+  if (weapon.type === 'torpedo') return torpedoLauncher(barrels)
+  if (weapon.type === 'aa') return aaGun(barrels)
+  if (weapon.type === 'missile') return missileRack(barrels)
+  return gunTurret(weapon.type === 'gun' ? 1 : 0.58, barrels)
 }
 
 function mesh(geometry: THREE.BufferGeometry, material: THREE.Material): THREE.Mesh {
@@ -423,22 +425,25 @@ function gunTurret(scale: number, barrels: number): THREE.Group {
   return group
 }
 
-function torpedoLauncher(): THREE.Group {
+function torpedoLauncher(barrels: number): THREE.Group {
   const group = new THREE.Group()
   group.add(mesh(new THREE.BoxGeometry(0.72, 0.18, 0.32), MATERIALS.torpedo))
-  for (let i = 0; i < 4; i++) {
+  const count = Math.min(4, Math.max(1, barrels))
+  for (let i = 0; i < count; i++) {
     const tube = mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.78, 16), MATERIALS.metal)
     tube.rotation.x = Math.PI / 2
-    tube.position.set((i - 1.5) * 0.09, 0.08, 0)
+    tube.position.set((i - (count - 1) / 2) * 0.09, 0.08, 0)
     group.add(tube)
   }
   return group
 }
 
-function aaGun(): THREE.Group {
+function aaGun(barrels: number): THREE.Group {
   const group = new THREE.Group()
   group.add(mesh(new THREE.CylinderGeometry(0.12, 0.15, 0.12, 16), MATERIALS.aa))
-  for (const x of [-0.04, 0.04]) {
+  const count = Math.min(4, Math.max(1, barrels))
+  for (let i = 0; i < count; i++) {
+    const x = (i - (count - 1) / 2) * 0.05
     const barrel = mesh(new THREE.CylinderGeometry(0.012, 0.014, 0.5, 10), MATERIALS.dark)
     barrel.rotation.x = Math.PI / 2
     barrel.position.set(x, 0.12, -0.24)
@@ -447,22 +452,24 @@ function aaGun(): THREE.Group {
   return group
 }
 
-function missileRack(): THREE.Group {
+function missileRack(barrels: number): THREE.Group {
   const group = new THREE.Group()
   const rack = mesh(new THREE.BoxGeometry(0.46, 0.30, 0.46), MATERIALS.missile)
   rack.position.y = 0.12
   group.add(rack)
-  for (const x of [-0.12, 0.12]) {
-    for (const z of [-0.12, 0.12]) {
-      const cell = mesh(new THREE.BoxGeometry(0.12, 0.36, 0.12), MATERIALS.dark)
-      cell.position.set(x, 0.16, z)
-      group.add(cell)
-    }
+  const positions = [[-0.12, -0.12], [0.12, -0.12], [-0.12, 0.12], [0.12, 0.12]] as const
+  const count = Math.min(4, Math.max(1, barrels))
+  for (let i = 0; i < count; i++) {
+    const [x, z] = positions[i]!
+    const cell = mesh(new THREE.BoxGeometry(0.12, 0.36, 0.12), MATERIALS.dark)
+    cell.position.set(x, 0.16, z)
+    group.add(cell)
   }
   return group
 }
 
 function barrelsFor(weapon: ShipDesignerPreviewWeapon): number {
+  if (weapon.barrels) return Math.min(4, Math.max(1, Math.round(weapon.barrels)))
   if (weapon.id.includes('single')) return 1
   if (weapon.id.includes('460mm') || weapon.id.includes('406mm')) return 3
   return 2
@@ -473,6 +480,6 @@ function previewKey(config: ShipDesignerPreviewConfig): string {
     hull: config.hull.templateId,
     armor: config.armorBonus,
     tower: config.towerMount,
-    weapons: config.weapons.map(w => [w.id, w.type, w.mount.x, w.mount.y, w.selected]),
+    weapons: config.weapons.map(w => [w.id, w.type, w.mount.x, w.mount.y, w.barrels, w.selected]),
   })
 }

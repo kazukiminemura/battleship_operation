@@ -19,6 +19,7 @@ export interface WeaponTemplate {
   name?: string
   type: WeaponType
   ammo: number
+  barrels?: number
   mount?: { x: number; y: number }
 }
 
@@ -349,6 +350,7 @@ function makeWeaponState(template: WeaponTemplate): WeaponState {
     name: template.name ?? template.id,
     type: template.type,
     mount: template.mount ? { ...template.mount } : undefined,
+    barrels: template.barrels,
     cooldownTick: 0,
     ammo: template.ammo,
     maxAmmo: template.ammo,
@@ -376,13 +378,14 @@ export function createInitialState(
   customLoadout?: WeaponTemplate[],
   customTemplateId?: string,
   armorBonus = 0,
+  towerMount?: { x: number; y: number },
 ): CombatState {
   const stage = getStageDefinition(stageNumber)
   const entities = new Map<string, Entity>()
   const playerShip = makePlayerShip(playerType, customTemplateId)
   const armoredShip = armorBonus > 0 ? applyArmorBonus(playerShip, armorBonus) : playerShip
   const finalPlayer = customLoadout
-    ? { ...armoredShip, weapons: customLoadout.slice(0, MAX_WEAPON_SLOTS).map(makeWeaponState) }
+    ? { ...armoredShip, weapons: customLoadout.slice(0, MAX_WEAPON_SLOTS).map(makeWeaponState), towerMount }
     : armoredShip
   entities.set('ship.player', finalPlayer)
 

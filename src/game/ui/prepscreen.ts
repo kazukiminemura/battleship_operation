@@ -40,6 +40,7 @@ export interface PrepResult {
   armorBonus: number
   slotCells?: Record<string, GridCell>
   towerCell?: GridCell | null
+  towerMount?: { x: number; y: number }
 }
 
 type ScreenTab = 'hull' | 'armament'
@@ -122,6 +123,7 @@ export class PrepScreen {
   private armamentView: ArmamentView = 'grid'
   private weaponFilter: WeaponFilter = 'all'
   private slotWeapons = new Map<string, ShopWeapon>()  // slotId → weapon
+  private slotBarrels = new Map<string, number>()       // slotId → simultaneous barrels/tubes
   private slotCells = new Map<string, { c: number; r: number }>()
   private towerCell: GridCell | null = null
   private armorBonus = 0
@@ -145,6 +147,7 @@ export class PrepScreen {
     this.armamentView = 'grid'
     this.weaponFilter = 'all'
     this.slotWeapons = new Map()
+    this.slotBarrels = new Map()
     this.slotCells = new Map()
     this.towerCell = null
     this.armorBonus = 0
@@ -312,6 +315,7 @@ export class PrepScreen {
         }
         if (this.slotWeapons.get(slot.id)?.id === w.id) {
           this.slotWeapons.delete(slot.id)   // clicking current weapon removes it
+          this.slotBarrels.delete(slot.id)
         } else {
           const spec = gridSpec(hull)
           const cell = currentSlotCell(slot, spec, this.slotCells)
@@ -321,6 +325,7 @@ export class PrepScreen {
             break
           }
           this.slotWeapons.set(slot.id, w)
+          this.slotBarrels.set(slot.id, defaultBarrelsForWeapon(w))
           this.selectedSlotId = null
         }
         this.lastAudioCue = 'equip'
@@ -341,6 +346,7 @@ export class PrepScreen {
         })
         if (!emptySlot) { this.lastAudioCue = 'denied'; break }
         this.slotWeapons.set(emptySlot.id, w)
+        this.slotBarrels.set(emptySlot.id, defaultBarrelsForWeapon(w))
         this.lastAudioCue = 'equip'
         break
       }
@@ -352,7 +358,9 @@ export class PrepScreen {
         if (!w) { this.lastAudioCue = 'denied'; break }
         const equippedSlots = hull.slots.filter(s => this.slotWeapons.get(s.id)?.id === w.id)
         if (equippedSlots.length === 0) { this.lastAudioCue = 'denied'; break }
-        this.slotWeapons.delete(equippedSlots[equippedSlots.length - 1]!.id)
+        const slotId = equippedSlots[equippedSlots.length - 1]!.id
+        this.slotWeapons.delete(slotId)
+        this.slotBarrels.delete(slotId)
         this.lastAudioCue = 'equip'
         break
       }
@@ -422,7 +430,14 @@ export class PrepScreen {
     for (const slot of hull.slots) {
       const w = this.slotWeapons.get(slot.id) ?? this.defaultWeapon(hull, slot)
       const cell = currentSlotCell(slot, spec, this.slotCells)
-      if (w) loadout.push({ id: w.id, name: w.name, type: w.type, ammo: w.ammo, mount: cellToMount(cell.c, cell.r, spec) })
+      if (w) loadout.push({
+        id: w.id,
+        name: w.name,
+        type: w.type,
+        ammo: w.ammo,
+        mount: cellToMount(cell.c, cell.r, spec),
+        barrels: this.slotBarrels.get(slot.id) ?? defaultBarrelsForWeapon(w),
+      })
     }
     if (loadout.length === 0) return null
     return {
@@ -432,6 +447,7 @@ export class PrepScreen {
       armorBonus: this.armorBonus,
       slotCells: Object.fromEntries(this.slotCells),
       towerCell: this.towerCell ? { ...this.towerCell } : null,
+      towerMount: cellToMount((this.towerCell ?? defaultTowerCell(hull, spec)).c, (this.towerCell ?? defaultTowerCell(hull, spec)).r, spec),
     }
   }
 
@@ -446,6 +462,7 @@ export class PrepScreen {
     this.tab = 'armament'
     this.armorBonus = Math.max(0, Math.min(ARMOR_BONUS_MAX, design.armorBonus))
     this.slotWeapons = new Map()
+    this.slotBarrels = new Map()
     this.slotCells = new Map()
     this.towerCell = design.towerCell ? { ...design.towerCell } : null
 
@@ -455,6 +472,7 @@ export class PrepScreen {
       const weapon = design.loadout[i]
       if (!weapon || !slot.compatibleTypes.includes(weapon.type)) continue
       this.slotWeapons.set(slot.id, this.shopWeaponFromTemplate(weapon))
+      this.slotBarrels.set(slot.id, clampBarrels(weapon.barrels ?? defaultBarrelsForWeapon(weapon)))
       const savedCell = design.slotCells?.[slot.id]
       if (savedCell) this.slotCells.set(slot.id, { ...savedCell })
       else if (weapon.mount) this.slotCells.set(slot.id, mountToCell(weapon.mount, spec))
@@ -495,6 +513,7 @@ export class PrepScreen {
 
     const spec = gridSpec(hull)
     const nextWeapons = new Map<string, ShopWeapon>()
+    const nextBarrels = new Map<string, number>()
     const nextCells = new Map<string, GridCell>()
     const towerCell = defaultTowerCell(hull, spec)
     const placements: Placement[] = [{
@@ -516,6 +535,7 @@ export class PrepScreen {
       if (!cell) continue
 
       nextWeapons.set(slot.id, weapon)
+      nextBarrels.set(slot.id, defaultBarrelsForWeapon(weapon))
       nextCells.set(slot.id, cell)
       placements.push({
         id: slot.id,
@@ -531,6 +551,7 @@ export class PrepScreen {
 
     if (nextWeapons.size === 0) return false
     this.slotWeapons = nextWeapons
+    this.slotBarrels = nextBarrels
     this.slotCells = nextCells
     this.towerCell = towerCell
     this.selectedSlotId = null
@@ -592,10 +613,11 @@ export class PrepScreen {
           name: weapon.name,
           type: weapon.type,
           mount: cellToMount(cell.c, cell.r, spec),
+          barrels: this.slotBarrels.get(slot.id) ?? defaultBarrelsForWeapon(weapon),
           selected: this.selectedSlotId === slot.id,
         }
       })
-      .filter((weapon): weapon is ShipDesignerPreviewConfig['weapons'][number] => weapon !== null)
+      .filter((weapon): weapon is NonNullable<typeof weapon> => weapon !== null)
 
     return {
       hull,
@@ -1790,6 +1812,18 @@ function squaredCellDistance(a: GridCell, b: GridCell): number {
   const dc = a.c - b.c
   const dr = a.r - b.r
   return dc * dc + dr * dr
+}
+
+function clampBarrels(value: number): number {
+  return Math.min(4, Math.max(1, Math.round(Number.isFinite(value) ? value : 1)))
+}
+
+function defaultBarrelsForWeapon(weapon: Pick<WeaponTemplate, 'id' | 'type'>): number {
+  if (weapon.id.includes('single')) return 1
+  if (weapon.id.includes('.twin')) return 2
+  if (weapon.type === 'torpedo' || weapon.type === 'missile') return 4
+  if (weapon.type === 'aa') return 2
+  return 1
 }
 
 function polygonPath(ctx: CanvasRenderingContext2D, points: [number, number][]): void {

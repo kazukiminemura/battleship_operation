@@ -9,24 +9,28 @@ export interface GunProfile {
 /**
  * 散布界の半角（ラジアン）を返す。
  *
- * - 口径大 → 散布大
+ * - 口径大 → 散布大。ただし口径へ線形比例させず、平方根で穏やかに増やす
  * - 砲身長 → 長いほど初速↑・弾道安定 → 散布小
  * - 弾種 AP < SAP < HE の順で散布大
  * - 距離依存: 最大射程に近づくほど散布増大
+ *
+ * 返す値は「照準線からの半角」。このゲームの交戦距離は実距離より
+ * 圧縮されているため、画面上で読める程度に数十m級の散布へ換算する。
  */
 export function calcDispersionHalfAngle(
   profile: GunProfile,
   range: number,
   maxRange: number,
 ): number {
-  const barrelFactor  = 50 / profile.barrelLength   // 基準 L/50
-  const caliberFactor = profile.caliber / 127        // 基準 127mm
-  const shellFactor   = profile.shellType === 'AP'  ? 0.8
-                      : profile.shellType === 'SAP' ? 1.0
-                      : 1.25                          // HE
+  const barrelFactor  = 45 / profile.barrelLength
+  const caliberFactor = Math.sqrt(profile.caliber / 127)
+  const shellFactor   = profile.shellType === 'AP'  ? 0.90
+                      : profile.shellType === 'SAP' ? 1.00
+                      : 1.12
 
-  const baseAngle  = 0.005 * caliberFactor * barrelFactor * shellFactor
-  const rangeFactor = 0.4 + 0.6 * (range / maxRange)
+  const baseAngle = 0.046 * caliberFactor * barrelFactor * shellFactor
+  const ratio = Math.max(0, Math.min(1, range / Math.max(1, maxRange)))
+  const rangeFactor = 0.35 + 0.65 * Math.pow(ratio, 1.25)
 
   return baseAngle * rangeFactor
 }

@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { WEAPON_BY_ID } from './data'
+import { designBarrels, designWeaponId, WEAPON_BY_ID } from './data'
 import { ShipSlot } from './ShipSlot'
 import { wouldInterfere } from './collision'
 import { HULL_VIEWS } from './hulls'
@@ -89,7 +89,7 @@ export function HullView({ slots, design, draggingWeaponId, scale = 1, shipType 
 
       <div className="sd-slots-overlay">
         {slots.map(slot => {
-          const weaponId = design[slot.id]
+          const weaponId = designWeaponId(design[slot.id])
           const weapon   = weaponId ? (WEAPON_BY_ID[weaponId] ?? null) : null
           const isDragTarget = draggingWeapon !== null && slot.compatibleTypes.includes(draggingWeapon.type)
           const isBlocked    = blockedSlots.has(slot.id)
@@ -101,6 +101,8 @@ export function HullView({ slots, design, draggingWeaponId, scale = 1, shipType 
               isDragTarget={isDragTarget}
               isBlocked={isBlocked}
               isHighlighted={hoveredSlotId === slot.id}
+              scale={scale}
+              barrels={designBarrels(design[slot.id], weapon ?? undefined)}
               onDrop={handleDrop}
               onRemove={onRemove}
               onMouseEnter={() => onSlotHover?.(slot.id)}
@@ -131,4 +133,3 @@ function HullTopView({ shipType, templateId }: { shipType: PlayerShipType; templ
   if (!hull) return null
   return <hull.TopView />
 }
-

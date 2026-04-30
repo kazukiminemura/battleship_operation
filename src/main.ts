@@ -74,6 +74,9 @@ function main(): void {
   let selectedTemplateId: string | undefined = undefined
   let selectedLoadout: WeaponTemplate[] = getDefaultLoadout('destroyer')
   let selectedArmorBonus = 0
+  let selectedSlotCells: PrepResult['slotCells'] | undefined
+  let selectedTowerCell: PrepResult['towerCell'] | undefined
+  let selectedTowerMount: { x: number; y: number } | undefined
   let currentStage     = 1
   let normalShip: PlayerShipType = selectedShip
   let normalStage      = currentStage
@@ -122,7 +125,7 @@ function main(): void {
   const beginCombat = (): void => {
     paused = false
     debugMode = false
-    state = createInitialState(selectedShip, currentStage, selectedLoadout, selectedTemplateId, selectedArmorBonus)
+    state = createInitialState(selectedShip, currentStage, selectedLoadout, selectedTemplateId, selectedArmorBonus, selectedTowerMount)
     rng = createRngStreams(BASE_SEED + currentStage * 1009)
     screens.toCombat(bgmEnabled, isBossStage(state))
   }
@@ -173,6 +176,9 @@ function main(): void {
     selectedTemplateId = result.templateId
     selectedLoadout = result.loadout
     selectedArmorBonus = result.armorBonus
+    selectedSlotCells = result.slotCells
+    selectedTowerCell = result.towerCell
+    selectedTowerMount = result.towerMount
   }
 
   const currentPrepResult = (): PrepResult | null => {
@@ -182,6 +188,9 @@ function main(): void {
       shipType: selectedShip,
       loadout: selectedLoadout,
       armorBonus: selectedArmorBonus,
+      slotCells: selectedSlotCells,
+      towerCell: selectedTowerCell,
+      towerMount: selectedTowerMount,
     }
   }
 

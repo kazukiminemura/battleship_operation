@@ -24,6 +24,7 @@ export interface WeaponState {
   name: string
   type: WeaponType
   mount?: { x: number; y: number }
+  barrels?: number
   cooldownTick: number
   ammo: number
   maxAmmo: number
@@ -47,6 +48,7 @@ export interface ShipEntity {
   weapons: WeaponState[]
   armor: number
   armorBonus?: number
+  towerMount?: { x: number; y: number }
   team: 'player' | 'enemy'
   destroyed: boolean
   templateId: string
@@ -150,6 +152,8 @@ export interface CombatEvent {
   damage?: number
   position?: Vec3
   targetPosition?: Vec3
+  salvoCount?: number
+  muzzlePositions?: Vec3[]
   hitSection?: string
 }
 

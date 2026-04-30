@@ -1,8 +1,9 @@
-import type { Weapon, SlotDef, Design, ShipStats, WeaponSlotType } from './types'
+import type { Weapon, SlotDef, Design, DesignEntry, DesignLayout, SavedDesignerState, ShipStats, WeaponSlotType } from './types'
 import type { WeaponTemplate, PlayerShipType } from '../game/data/masterdata'
 import { getHullsByClass } from '../game/data/hull-catalog'
 import type { HullCatalogEntry } from '../game/data/hull-catalog'
 import { WEAPON_SHOP } from '../game/data/weapon-shop'
+import { cellToMount, currentSlotCell, defaultTowerCell, gridSpec, type GridCell } from '../game/ui/prep-layout'
 
 export { getHullsByClass }
 
@@ -43,6 +44,7 @@ export const WEAPONS: Weapon[] = [
 export const WEAPON_BY_ID: Record<string, Weapon> = Object.fromEntries(WEAPONS.map(w => [w.id, w]))
 
 const GAME_AMMO: Record<string, number> = Object.fromEntries(WEAPON_SHOP.map(w => [w.id, w.ammo]))
+const BARREL_WEIGHT_STEP = 0.18
 
 /** Convert a hull-catalog entry into designer slot definitions */
 export function getDesignerSlots(hull: HullCatalogEntry): SlotDef[] {
@@ -60,17 +62,17 @@ export function getDesignerSlots(hull: HullCatalogEntry): SlotDef[] {
 export function calcStats(design: Design, hull: HullCatalogEntry, slots: SlotDef[]): ShipStats {
   const maxWeight = CLASS_MAX_WEIGHT[hull.shipType]
   const equipped = slots.flatMap(slot => {
-    const weaponId = design[slot.id]
+    const weaponId = designWeaponId(design[slot.id])
     if (!weaponId) return []
     const weapon = WEAPON_BY_ID[weaponId]
     if (!weapon) return []
-    return [{ slotId: slot.id, slotLabel: slot.label, weapon }]
+    return [{ slotId: slot.id, slotLabel: slot.label, weapon, barrels: designBarrels(design[slot.id], weapon) }]
   })
 
-  const totalWeight  = equipped.reduce((s, e) => s + e.weapon.weight, 0)
+  const totalWeight  = equipped.reduce((s, e) => s + weaponWeightWithBarrels(e.weapon, e.barrels), 0)
   const weightRatio  = Math.min(1, totalWeight / maxWeight)
-  const totalFirepower = equipped.reduce((s, e) => s + (e.weapon.firepower ?? 0), 0)
-  const totalAntiAir   = equipped.reduce((s, e) => s + (e.weapon.antiAir   ?? 0), 0)
+  const totalFirepower = equipped.reduce((s, e) => s + (e.weapon.firepower ?? 0) * e.barrels, 0)
+  const totalAntiAir   = equipped.reduce((s, e) => s + (e.weapon.antiAir   ?? 0) * e.barrels, 0)
   const avgAccuracy    = equipped.length
     ? equipped.reduce((s, e) => s + e.weapon.accuracy, 0) / equipped.length
     : 0
@@ -84,28 +86,106 @@ export function calcStats(design: Design, hull: HullCatalogEntry, slots: SlotDef
 }
 
 /** Convert the designer's slot assignments into a game-ready WeaponTemplate array */
-export function designToLoadout(design: Design, hull: HullCatalogEntry): WeaponTemplate[] {
+export function designToLoadout(
+  design: Design,
+  hull: HullCatalogEntry,
+  slotCells: ReadonlyMap<string, GridCell> | Record<string, GridCell> = new Map(),
+): WeaponTemplate[] {
+  const spec = gridSpec(hull)
+  const cells = slotCells instanceof Map ? slotCells : new Map(Object.entries(slotCells))
   return hull.slots
-    .filter(slot => design[slot.id])
-    .map(slot => ({
-      id:    design[slot.id]!,
-      type:  slot.compatibleTypes[0]!,
-      ammo:  GAME_AMMO[design[slot.id]!] ?? 100,
-      mount: { x: slot.x, y: slot.y },
-    }))
+    .flatMap(slot => {
+      const entry = design[slot.id]
+      const weaponId = designWeaponId(entry)
+      if (!weaponId) return []
+      const weapon = WEAPON_BY_ID[weaponId]
+      const cell = currentSlotCell(slot, spec, cells)
+      return [{
+        id: weaponId,
+        type: slot.compatibleTypes[0]!,
+        ammo: GAME_AMMO[weaponId] ?? 100,
+        mount: cellToMount(cell.c, cell.r, spec),
+        barrels: designBarrels(entry, weapon),
+      }]
+    })
+}
+
+export function designTowerMount(hull: HullCatalogEntry, towerCell: GridCell | null | undefined): { x: number; y: number } {
+  const spec = gridSpec(hull)
+  const cell = towerCell ?? defaultTowerCell(hull, spec)
+  return cellToMount(cell.c, cell.r, spec)
 }
 
 export const STORAGE_KEY = 'battleship-designer-v1'
 
-export function saveDesign(design: Design): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(design))
+export function saveDesign(design: Design, layout: DesignLayout = emptyDesignLayout()): void {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ design, layout }))
 }
 
 export function loadDesign(): Design {
+  return loadDesignerState().design
+}
+
+export function loadDesignerState(): SavedDesignerState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    return raw ? (JSON.parse(raw) as Design) : {}
+    if (!raw) return { design: {}, layout: emptyDesignLayout() }
+    const parsed = JSON.parse(raw) as Design | Partial<SavedDesignerState>
+    if (isSavedDesignerState(parsed)) {
+      return {
+        design: parsed.design ?? {},
+        layout: {
+          slotCells: parsed.layout?.slotCells ?? {},
+          towerCell: parsed.layout?.towerCell ?? null,
+        },
+      }
+    }
+    return { design: parsed as Design, layout: emptyDesignLayout() }
   } catch {
-    return {}
+    return { design: {}, layout: emptyDesignLayout() }
   }
+}
+
+export function emptyDesignLayout(): DesignLayout {
+  return { slotCells: {}, towerCell: null }
+}
+
+export function createDesignEntry(weaponId: string, barrels = defaultBarrelsForWeaponId(weaponId)): DesignEntry {
+  return { weaponId, barrels: clampBarrels(barrels) }
+}
+
+export function designWeaponId(entry: Design[string] | undefined): string | undefined {
+  if (!entry) return undefined
+  return typeof entry === 'string' ? entry : entry.weaponId
+}
+
+export function designBarrels(entry: Design[string] | undefined, weapon?: Weapon): number {
+  if (entry && typeof entry !== 'string') return clampBarrels(entry.barrels)
+  return clampBarrels(defaultBarrelsForWeapon(weapon ?? (entry ? WEAPON_BY_ID[entry] : undefined)))
+}
+
+export function defaultBarrelsForWeaponId(weaponId: string): number {
+  return defaultBarrelsForWeapon(WEAPON_BY_ID[weaponId])
+}
+
+export function defaultBarrelsForWeapon(weapon?: Weapon): number {
+  if (!weapon) return 1
+  if (weapon.id.includes('single')) return 1
+  if (weapon.id.includes('.twin')) return 2
+  if (weapon.type === 'missile' || weapon.type === 'torpedo') return 4
+  if (weapon.type === 'aa') return 2
+  return 1
+}
+
+export function clampBarrels(value: number): number {
+  return Math.min(4, Math.max(1, Math.round(Number.isFinite(value) ? value : 1)))
+}
+
+export function weaponWeightWithBarrels(weapon: Weapon, barrels: number): number {
+  const extraBarrels = Math.max(0, clampBarrels(barrels) - defaultBarrelsForWeapon(weapon))
+  return Math.round(weapon.weight * (1 + extraBarrels * BARREL_WEIGHT_STEP))
+}
+
+function isSavedDesignerState(value: unknown): value is Partial<SavedDesignerState> {
+  return !!value && typeof value === 'object' && 'design' in value
 }
