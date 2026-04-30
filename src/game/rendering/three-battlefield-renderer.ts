@@ -1,7 +1,9 @@
 import * as THREE from 'three'
-import type { CombatEvent, CombatState, MapObstacle, ShipEntity } from '../simulation/types'
+import type { CombatEvent, CombatState, MapObstacle, ShipEntity, Vec3 } from '../simulation/types'
 import { WORLD_SIZE } from '../simulation/movement'
 import { SHIP_DIMS, SHIP_SHAPES, type ShipShapeClass } from './ship-rendering-data'
+import { HULL_CATALOG, type HullCatalogEntry } from '../data/hull-catalog'
+import { buildShip, type ShipDesignerPreviewConfig } from './three-ship-designer-renderer'
 import type { WeatherMode } from './canvas'
 
 interface ProjectionContext {
@@ -13,6 +15,7 @@ type WorldToScreen = (wx: number, wy: number) => [number, number]
 interface ShipVisual {
   group: THREE.Group
   wake: THREE.Mesh
+  weaponMounts: THREE.Group[]
   templateId: string
   scale: number
   team: string
@@ -397,6 +400,38 @@ export class ThreeBattlefieldRenderer {
     const modelScale = scale * visualScaleForShip(shape)
     const l = dim.l * modelScale
     const w = dim.w * modelScale
+    {
+      const designerShip = buildShip(combatShipPreviewConfig(ship))
+      const designerScale = modelScale / 0.04725
+      designerShip.rotation.x = Math.PI / 2
+      designerShip.scale.setScalar(designerScale)
+      designerShip.position.set(0, 0, 10)
+      group.add(designerShip)
+
+      const shadow = new THREE.Mesh(
+        ellipseShapeGeometry(l * 0.58, w * 0.72, 36),
+        new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.30, depthWrite: false }),
+      )
+      shadow.position.set(-l * 0.02, 5, -5)
+      shadow.scale.y = 0.58
+      group.add(shadow)
+
+      const wake = new THREE.Mesh(
+        wakeGeometry(Math.max(90, l * 2.6), Math.max(28, w * 2.6)),
+        new THREE.MeshBasicMaterial({
+          color: 0xe8fbff,
+          transparent: true,
+          opacity: 0.0,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+        }),
+      )
+      wake.position.set(-l * 0.92, w * 0.12, -2)
+      group.add(wake)
+
+      return { group, wake, weaponMounts: collectWeaponMounts(designerShip), templateId: ship.templateId, scale, team: ship.team }
+    }
+
     const h = Math.max(4, dim.h * modelScale * 0.55)
     const hullThickness = h * 0.35 // Thickness for extruded hull
     const palette = shipPalette(ship, shape)
@@ -550,9 +585,11 @@ export class ThreeBattlefieldRenderer {
 
     // === ARMOR BELT (3D) ===
     const armorBeltGeometry = new THREE.BoxGeometry(l * 0.86, Math.max(2, w * 0.13), hullThickness * 0.5)
-    const armorBeltMesh = new THREE.Mesh(armorBeltGeometry, beltMaterial)
-    armorBeltMesh.position.set(-l * 0.04, -h + w * 0.14, 8)
-    group.add(armorBeltMesh)
+    for (const side of [-1, 1] as const) {
+      const armorBeltMesh = new THREE.Mesh(armorBeltGeometry, beltMaterial)
+      armorBeltMesh.position.set(-l * 0.04, -h + side * w * 0.46, 8)
+      group.add(armorBeltMesh)
+    }
 
     // === DECK PLANKS (3D) ===
     for (let i = 0; i < 4; i++) {
@@ -680,7 +717,7 @@ export class ThreeBattlefieldRenderer {
     wake.position.set(-l * 0.92, w * 0.12, -2)
     group.add(wake)
 
-    return { group, wake, templateId: ship.templateId, scale, team: ship.team }
+    return { group, wake, weaponMounts: [], templateId: ship.templateId, scale, team: ship.team }
   }
 
   private updateShipVisual(
@@ -697,17 +734,163 @@ export class ThreeBattlefieldRenderer {
     const sinA = Math.sin(ship.angle)
     const svx = (cosA - sinA) * iso.scale
     const svy = (cosA + sinA) * iso.scale * 0.5
-    visual.group.rotation.z = -Math.atan2(svy, svx)
+    const screenHeading = -Math.atan2(svy, svx)
+    visual.group.rotation.set(-0.50, 0.08, screenHeading)
 
     const speedF = ship.maxSpeed > 0 ? Math.min(1, Math.abs(ship.speed / ship.maxSpeed)) : 0
     const wakeMat = visual.wake.material as THREE.MeshBasicMaterial
-    wakeMat.opacity = speedF * (0.18 + 0.04 * Math.sin(state.tick * 0.16 + ship.id.length))
-    visual.wake.scale.y = 0.86 + Math.sin(state.tick * 0.09 + ship.pos.x * 0.01) * 0.05
+    wakeMat.opacity = speedF * (0.24 + 0.06 * Math.sin(state.tick * 0.16 + ship.id.length))
+    visual.wake.scale.set(1 + speedF * 0.16, 0.90 + Math.sin(state.tick * 0.09 + ship.pos.x * 0.01) * 0.06, 1)
+
+    this.updateWeaponTraverse(visual, ship, state)
+  }
+
+  private updateWeaponTraverse(visual: ShipVisual, ship: ShipEntity, state: CombatState): void {
+    if (visual.weaponMounts.length === 0) return
+
+    for (const mount of visual.weaponMounts) {
+      if (!mount.userData['canTraverse']) continue
+      const weaponId = String(mount.userData['weaponId'] ?? '')
+      const target = weaponAimTarget(ship, weaponId, state)
+      const baseRotationY = Number(mount.userData['baseRotationY'] ?? 0)
+      const desired = target ? turretYawToWorldTarget(ship, target) : baseRotationY
+      const current = mount.rotation.y
+      mount.rotation.y = current + angularDelta(current, desired) * 0.16
+    }
   }
 }
 
 function screenDepth(worldY: number): number {
   return Math.max(-30, Math.min(30, (worldY / WORLD_SIZE) * 60 - 30))
+}
+
+function collectWeaponMounts(root: THREE.Object3D): THREE.Group[] {
+  const mounts: THREE.Group[] = []
+  root.traverse(child => {
+    if (child instanceof THREE.Group && child.userData['weaponId']) mounts.push(child)
+  })
+  return mounts
+}
+
+function weaponAimTarget(ship: ShipEntity, weaponId: string, state: CombatState): Vec3 | null {
+  const recent = recentWeaponTarget(ship, weaponId, state)
+  if (recent) return recent
+  return nearestHostileTarget(ship, state)
+}
+
+function recentWeaponTarget(ship: ShipEntity, weaponId: string, state: CombatState): Vec3 | null {
+  let best: CombatEvent | null = null
+  for (const ev of state.eventLog) {
+    if (ev.type !== 'weapon.fired' || ev.sourceId !== ship.id || !ev.targetPosition) continue
+    if (weaponId && ev.weaponId !== weaponId) continue
+    if (!best || ev.tick > best.tick) best = ev
+  }
+  return best?.targetPosition ?? null
+}
+
+function nearestHostileTarget(ship: ShipEntity, state: CombatState): Vec3 | null {
+  let best: { pos: Vec3; d2: number } | null = null
+  for (const entity of state.entities.values()) {
+    if (entity.kind !== 'ship') continue
+    const target = entity as ShipEntity
+    if (target.destroyed || target.team === ship.team) continue
+    if (ship.team === 'player' && !state.detectedByPlayer.has(target.id)) continue
+    const dx = target.pos.x - ship.pos.x
+    const dy = target.pos.y - ship.pos.y
+    const d2 = dx * dx + dy * dy
+    if (!best || d2 < best.d2) best = { pos: target.pos, d2 }
+  }
+  return best?.pos ?? null
+}
+
+function turretYawToWorldTarget(ship: ShipEntity, target: Vec3): number {
+  const dx = target.x - ship.pos.x
+  const dy = target.y - ship.pos.y
+  const forward = dx * Math.cos(ship.angle) + dy * Math.sin(ship.angle)
+  const starboard = dx * Math.sin(ship.angle) - dy * Math.cos(ship.angle)
+  return Math.atan2(-forward, -starboard)
+}
+
+function angularDelta(from: number, to: number): number {
+  let delta = (to - from) % (Math.PI * 2)
+  if (delta > Math.PI) delta -= Math.PI * 2
+  if (delta < -Math.PI) delta += Math.PI * 2
+  return delta
+}
+
+function combatShipPreviewConfig(ship: ShipEntity): ShipDesignerPreviewConfig {
+  const hull = hullEntryForShip(ship)
+  return {
+    hull,
+    armorBonus: ship.armorBonus ?? 0,
+    towerMount: bridgeMountForHull(hull),
+    weapons: ship.weapons.map((weapon, index) => ({
+      id: weapon.id,
+      name: weapon.name,
+      type: weapon.type,
+      mount: combatVisualMount(ship, weapon, index),
+      selected: false,
+    })),
+  }
+}
+
+function hullEntryForShip(ship: ShipEntity): HullCatalogEntry {
+  const exact = HULL_CATALOG.find(hull => hull.templateId === ship.templateId)
+  if (exact) return exact
+
+  const shipType =
+    ship.templateId.includes('cruiser') ? 'cruiser' :
+      ship.templateId.includes('battleship') || ship.templateId.includes('boss') ? 'battleship' :
+        'destroyer'
+  const fallback = HULL_CATALOG.find(hull => hull.shipType === shipType)
+  if (fallback) return { ...fallback, templateId: ship.templateId, shipType, name: ship.templateId, className: ship.team === 'enemy' ? '敵艦' : fallback.className }
+
+  return {
+    templateId: ship.templateId,
+    shipType,
+    name: ship.templateId,
+    className: ship.team === 'enemy' ? '敵艦' : '艦船',
+    minStage: 1,
+    hp: ship.maxHp,
+    armor: ship.armor,
+    maxSpeed: ship.maxSpeed,
+    turnRate: ship.turnRate,
+    slots: [],
+  }
+}
+
+function bridgeMountForHull(hull: HullCatalogEntry): { x: number; y: number } {
+  if (hull.shipType === 'destroyer') return { x: 0, y: -0.12 }
+  if (hull.shipType === 'cruiser') return { x: 0, y: -0.04 }
+  return { x: 0, y: -0.18 }
+}
+
+function combatVisualMount(ship: ShipEntity, weapon: ShipEntity['weapons'][number], index: number): { x: number; y: number } {
+  if (weapon.mount) return weapon.mount
+  const dim = SHIP_DIMS[ship.templateId] ?? { l: 100, w: 22, h: 12 }
+  const offset = visualWeaponLocalOffset(weapon.id, index, dim)
+  return {
+    x: -offset.lat / (dim.w * 0.46),
+    y: -offset.lon / (dim.l * 0.42),
+  }
+}
+
+function visualWeaponLocalOffset(weaponId: string, weaponIdx: number, dim: { l: number; w: number }): { lon: number; lat: number } {
+  if (weaponId.includes('forward')) return { lon: dim.l * 0.34, lat: 0 }
+  if (weaponId.includes('center')) return { lon: dim.l * 0.10, lat: 0 }
+  if (weaponId.includes('aft')) return { lon: -dim.l * 0.32, lat: 0 }
+  if (weaponId.includes('port')) return { lon: -dim.l * 0.08, lat: dim.w * 0.28 }
+  if (weaponId.includes('starboard')) return { lon: -dim.l * 0.08, lat: -dim.w * 0.28 }
+  if (weaponId.includes('torpedo')) return { lon: -dim.l * 0.03, lat: weaponIdx % 2 === 0 ? dim.w * 0.36 : -dim.w * 0.36 }
+  if (weaponId.includes('aa')) return { lon: -dim.l * 0.02, lat: 0 }
+  if (weaponId.includes('missile')) return { lon: -dim.l * 0.18, lat: 0 }
+  if (weaponIdx === 0) return { lon: dim.l * 0.26, lat: 0 }
+  if (weaponIdx === 1) return { lon: -dim.l * 0.26, lat: 0 }
+  const t = Math.max(0, Math.min(1, weaponIdx / 6))
+  return {
+    lon: THREE.MathUtils.lerp(dim.l * 0.22, -dim.l * 0.28, t),
+    lat: 0,
+  }
 }
 
 function shipPalette(ship: ShipEntity, shape: ShipShapeClass): ShipPalette {
@@ -847,6 +1030,7 @@ function addRealisticShipDetails(
   const deckLine = shipPartMaterial(palette.deckLine, 0.82, 0.08, 0.70)
   const brass = shipPartMaterial(shape === 'yukimura' ? 0xd6ba77 : 0xc59b54, 0.38, 0.62)
   const glass = new THREE.MeshBasicMaterial({ color: shape === 'yukimura' ? 0xbdeaff : 0x9bd7f7, transparent: true, opacity: 0.58 })
+  const rail = shipPartMaterial(palette.rail, 0.48, 0.28, 0.72)
 
   addDeckScoring(group, shape, l, w, deckY, deckLine)
   addArmorRibs(group, shape, l, w, h, dark)
@@ -855,6 +1039,11 @@ function addRealisticShipDetails(
   addFunnelCollars(group, shape, l, w, h, dark, light)
   addRealisticMasts(group, shape, l, w, h, dark)
   addDeckFittings(group, shape, l, w, h, dark, light, brass)
+  addRealisticRailings(group, shape, l, w, h, rail)
+  addLaunchersAndBoatGear(group, shape, l, w, h, dark, light, brass)
+  addRangefindersAndSensors(group, shape, l, w, h, dark, light, glass)
+  addRigging(group, shape, l, w, h, dark)
+  addHullWeathering(group, shape, l, w, h, palette)
 }
 
 function shipPartMaterial(color: number, roughness: number, metalness: number, opacity = 1): THREE.MeshStandardMaterial {
@@ -1061,6 +1250,181 @@ function addDeckFittings(
     const y = deckY + (i % 2 === 0 ? -1 : 1) * w * 0.22
     addDiskPart(group, Math.max(0.7, w * 0.025), Math.max(0.9, w * 0.032), 1.0, light, [x, y, 44], 14)
   }
+}
+
+function addRealisticRailings(
+  group: THREE.Group,
+  shape: ShipShapeClass,
+  l: number,
+  w: number,
+  h: number,
+  material: THREE.Material,
+): void {
+  const deckY = -h
+  const postCount = shape === 'destroyer' ? 14 : shape === 'cruiser' ? 18 : 24
+  const railZ = 43.5
+  const railTopZ = 47
+  const x0 = l * 0.40
+  const x1 = -l * 0.48
+  const railInset = shape === 'destroyer' ? 0.38 : 0.41
+
+  for (const side of [-1, 1] as const) {
+    const y = deckY + side * w * railInset
+    addLinePart(group, [[x0, y, railTopZ], [x1, y, railTopZ]], material)
+    addLinePart(group, [[x0, y, railZ + 1.3], [x1, y, railZ + 1.3]], material)
+    for (let i = 0; i < postCount; i++) {
+      const t = i / Math.max(1, postCount - 1)
+      const x = THREE.MathUtils.lerp(x0, x1, t)
+      const taper = Math.sin(Math.PI * t)
+      const py = y - side * w * 0.035 * taper
+      addBoxPart(group, [Math.max(0.28, w * 0.006), Math.max(0.28, w * 0.006), 3.6], material, [x, py, railZ + 1.8])
+    }
+  }
+
+  addLinePart(group, [[l * 0.44, deckY - w * 0.22, railTopZ], [l * 0.44, deckY + w * 0.22, railTopZ]], material)
+  addLinePart(group, [[-l * 0.53, deckY - w * 0.26, railTopZ], [-l * 0.53, deckY + w * 0.26, railTopZ]], material)
+}
+
+function addLaunchersAndBoatGear(
+  group: THREE.Group,
+  shape: ShipShapeClass,
+  l: number,
+  w: number,
+  h: number,
+  dark: THREE.Material,
+  light: THREE.Material,
+  brass: THREE.Material,
+): void {
+  const deckY = -h
+  const launcherCount = shape === 'destroyer' ? 1 : 2
+  for (let i = 0; i < launcherCount; i++) {
+    const x = -l * (0.02 + i * 0.13)
+    const side = i % 2 === 0 ? 1 : -1
+    addBoxPart(group, [l * 0.065, w * 0.075, 2.2], dark, [x, deckY + side * w * 0.17, 46], side * 0.18)
+    for (let tube = 0; tube < 3; tube++) {
+      addBoxPart(
+        group,
+        [l * 0.052, Math.max(0.45, w * 0.012), Math.max(0.45, w * 0.012)],
+        light,
+        [x, deckY + side * (w * 0.14 + tube * w * 0.027), 47.3],
+        side * 0.18,
+      )
+    }
+  }
+
+  const boatRows = shape === 'destroyer' ? 1 : 2
+  for (let i = 0; i < boatRows; i++) {
+    const x = -l * (0.16 + i * 0.12)
+    for (const side of [-1, 1] as const) {
+      addBoxPart(group, [Math.max(0.4, w * 0.010), w * 0.19, 0.65], dark, [x, deckY + side * w * 0.31, 48.2], side * 0.18)
+      addLinePart(group, [[x - l * 0.030, deckY + side * w * 0.23, 49], [x, deckY + side * w * 0.33, 53]], dark)
+      addLinePart(group, [[x + l * 0.030, deckY + side * w * 0.23, 49], [x, deckY + side * w * 0.33, 53]], dark)
+      addDiskPart(group, Math.max(0.9, w * 0.024), Math.max(1.1, w * 0.030), 0.65, brass, [x + l * 0.04, deckY + side * w * 0.30, 48], 16)
+    }
+  }
+}
+
+function addRangefindersAndSensors(
+  group: THREE.Group,
+  shape: ShipShapeClass,
+  l: number,
+  w: number,
+  h: number,
+  dark: THREE.Material,
+  light: THREE.Material,
+  glass: THREE.Material,
+): void {
+  const deckY = -h
+  const bridgeX = shape === 'destroyer' ? l * 0.08 : l * 0.04
+  const bridgeY = deckY - w * 0.04
+  const towerZ = shape === 'destroyer' ? 52 : 55
+
+  addBoxPart(group, [Math.max(4, w * 0.20), Math.max(1.0, w * 0.030), 1.4], dark, [bridgeX, bridgeY, towerZ], 0)
+  addBoxPart(group, [Math.max(1.8, w * 0.060), Math.max(1.5, w * 0.050), 1.1], light, [bridgeX, bridgeY, towerZ + 0.4], 0)
+  addBoxPart(group, [Math.max(0.9, w * 0.024), Math.max(0.75, w * 0.020), 0.5], glass, [bridgeX + w * 0.09, bridgeY - w * 0.02, towerZ + 1.2])
+  addBoxPart(group, [Math.max(0.9, w * 0.024), Math.max(0.75, w * 0.020), 0.5], glass, [bridgeX - w * 0.09, bridgeY - w * 0.02, towerZ + 1.2])
+
+  const radarX = shape === 'destroyer' ? l * 0.02 : -l * 0.10
+  const radarY = deckY + w * 0.02
+  addBoxPart(group, [Math.max(0.45, w * 0.012), Math.max(0.45, w * 0.012), w * 0.20], dark, [radarX, radarY, 55])
+  addBoxPart(group, [Math.max(6, w * 0.28), Math.max(0.45, w * 0.012), 0.65], light, [radarX, radarY, 55 + w * 0.12], 0.08)
+  addBoxPart(group, [Math.max(0.45, w * 0.012), Math.max(4, w * 0.18), 0.65], light, [radarX, radarY, 55 + w * 0.12], -0.08)
+}
+
+function addRigging(
+  group: THREE.Group,
+  shape: ShipShapeClass,
+  l: number,
+  w: number,
+  h: number,
+  material: THREE.Material,
+): void {
+  const deckY = -h
+  const masts = mastLayout(shape, l, w)
+  const mastTopZ = shape === 'destroyer' ? 58 : 62
+  const bow: [number, number, number] = [l * 0.42, deckY, 48]
+  const stern: [number, number, number] = [-l * 0.50, deckY, 47]
+
+  for (const mast of masts) {
+    const top: [number, number, number] = [mast.x, deckY + mast.y, mastTopZ]
+    addLinePart(group, [bow, top], material, 0.34)
+    addLinePart(group, [stern, top], material, 0.28)
+    addLinePart(group, [[mast.x, deckY + mast.y - w * 0.18, mastTopZ - 3], [mast.x, deckY + mast.y + w * 0.18, mastTopZ - 3]], material, 0.36)
+  }
+  if (masts.length >= 2) {
+    addLinePart(
+      group,
+      [[masts[0]!.x, deckY + masts[0]!.y, mastTopZ], [masts[1]!.x, deckY + masts[1]!.y, mastTopZ - 2]],
+      material,
+      0.32,
+    )
+  }
+}
+
+function addHullWeathering(
+  group: THREE.Group,
+  shape: ShipShapeClass,
+  l: number,
+  w: number,
+  h: number,
+  palette: ShipPalette,
+): void {
+  const deckY = -h
+  const rust = new THREE.MeshBasicMaterial({ color: 0x8b4a2f, transparent: true, opacity: shape === 'destroyer' ? 0.20 : 0.16, depthWrite: false })
+  const shadow = new THREE.MeshBasicMaterial({ color: palette.darkDetail, transparent: true, opacity: 0.24, depthWrite: false })
+
+  for (const side of [-1, 1] as const) {
+    for (let i = 0; i < 8; i++) {
+      const x = l * (0.32 - i * 0.105)
+      const y = deckY + side * w * (0.47 + Math.abs(signedNoise(x, w, i + 4400)) * 0.025)
+      const len = l * (0.030 + Math.abs(signedNoise(x, y, i + 4500)) * 0.030)
+      const z = 22 + Math.abs(signedNoise(y, x, i + 4600)) * 10
+      addBoxPart(group, [len, Math.max(0.28, w * 0.008), 0.45], i % 3 === 0 ? rust : shadow, [x, y, z], side * 0.08)
+    }
+  }
+
+  addBoxPart(group, [l * 0.10, Math.max(0.8, w * 0.018), 0.55], shadow, [l * 0.42, deckY, 48], 0)
+  addBoxPart(group, [l * 0.09, Math.max(0.8, w * 0.018), 0.55], shadow, [-l * 0.50, deckY, 44], 0)
+}
+
+function addLinePart(
+  group: THREE.Group,
+  points: Array<[number, number, number]>,
+  material: THREE.Material,
+  opacity?: number,
+): THREE.Line {
+  const lineMaterial = material instanceof THREE.LineBasicMaterial
+    ? material
+    : new THREE.LineBasicMaterial({
+      color: material instanceof THREE.MeshStandardMaterial || material instanceof THREE.MeshBasicMaterial ? material.color : 0xd7dee2,
+      transparent: true,
+      opacity: opacity ?? (material.transparent ? material.opacity : 0.55),
+      depthWrite: false,
+    })
+  const geometry = new THREE.BufferGeometry().setFromPoints(points.map(([x, y, z]) => new THREE.Vector3(x, y, z)))
+  const line = new THREE.Line(geometry, lineMaterial)
+  group.add(line)
+  return line
 }
 
 function addFineShipDetails(
@@ -1331,4 +1695,9 @@ function mastLayout(shape: ShipShapeClass, l: number, w: number): Array<{ x: num
   if (shape === 'destroyer') return [{ x: l * 0.08, y: 0, tilt: -0.16 }]
   if (shape === 'cruiser') return [{ x: l * 0.06, y: 0, tilt: -0.12 }, { x: -l * 0.18, y: 0, tilt: 0.10 }]
   return [{ x: l * 0.08, y: 0, tilt: -0.10 }, { x: -l * 0.18, y: 0, tilt: 0.10 }]
+}
+
+function signedNoise(x: number, y: number, salt: number): number {
+  const n = Math.sin(x * 12.9898 + y * 78.233 + salt * 37.719) * 43758.5453
+  return (n - Math.floor(n)) * 2 - 1
 }

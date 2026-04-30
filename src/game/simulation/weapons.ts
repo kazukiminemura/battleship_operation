@@ -71,7 +71,7 @@ export function fireWeaponAtSlot(
 
   const weaponType = weapon.type
   const cfg = getWeaponConfig(weapon.id, weaponType)
-  const muzzle = weaponMuzzlePosition(ship, weapon, weaponIdx)
+  const muzzle = weaponMuzzlePosition(ship, weapon, weaponIdx, target)
   const dx = target.x - muzzle.x
   const dy = target.y - muzzle.y
   const dist = Math.sqrt(dx * dx + dy * dy)
@@ -162,16 +162,36 @@ function isWithinFiringArc(ship: ShipEntity, weapon: ShipEntity['weapons'][numbe
   return sideDot <= 0
 }
 
-function weaponMuzzlePosition(ship: ShipEntity, weapon: ShipEntity['weapons'][number], weaponIdx: number): { x: number; y: number; z: number } {
+function weaponMuzzlePosition(
+  ship: ShipEntity,
+  weapon: ShipEntity['weapons'][number],
+  weaponIdx: number,
+  target?: { x: number; y: number; z: number },
+): { x: number; y: number; z: number } {
   const dim = SHIP_MOUNT_DIMS[ship.templateId] ?? { l: 100, w: 22 }
   const offset = weapon.mount
     ? weaponMountOffset(weapon.mount, dim)
     : weaponLocalOffset(weapon.id, weaponIdx, dim)
   const cosA = Math.cos(ship.angle)
   const sinA = Math.sin(ship.angle)
-  return {
+  const mountWorld = {
     x: ship.pos.x + cosA * offset.lon + sinA * offset.lat,
     y: ship.pos.y + sinA * offset.lon - cosA * offset.lat,
+    z: 0,
+  }
+  if (!target) return mountWorld
+
+  const barrel = weaponMuzzleExtension(weapon.type, weapon.id, dim)
+  if (barrel <= 0) return mountWorld
+
+  const dx = target.x - mountWorld.x
+  const dy = target.y - mountWorld.y
+  const dist = Math.hypot(dx, dy)
+  if (dist <= 0.001) return mountWorld
+
+  return {
+    x: mountWorld.x + (dx / dist) * barrel,
+    y: mountWorld.y + (dy / dist) * barrel,
     z: 0,
   }
 }
@@ -195,4 +215,14 @@ function weaponLocalOffset(weaponId: string, weaponIdx: number, dim: { l: number
   if (weaponIdx === 0) return { lon: dim.l * 0.26, lat: 0 }
   if (weaponIdx === 1) return { lon: -dim.l * 0.26, lat: 0 }
   return { lon: 0, lat: 0 }
+}
+
+function weaponMuzzleExtension(type: WeaponType, weaponId: string, dim: { l: number; w: number }): number {
+  if (type === 'torpedo') return dim.w * 0.20
+  if (type === 'aa') return dim.w * 0.14
+  if (type === 'missile') return dim.w * 0.28
+  if (weaponId.includes('460mm')) return dim.l * 0.10
+  if (weaponId.includes('406mm')) return dim.l * 0.085
+  if (type === 'secondary') return dim.l * 0.045
+  return dim.l * 0.060
 }

@@ -241,6 +241,55 @@
   opacity: 0.7;
 }
 
+/* ── 3D ship preview ────────────────────────────────────────────────────── */
+.sd-3d-preview {
+  width: min(760px, calc(100% - 28px));
+  min-height: 320px;
+  background:
+    radial-gradient(circle at 20% 12%, rgba(99, 197, 221, 0.16), transparent 34%),
+    linear-gradient(145deg, rgba(10, 34, 38, 0.96), rgba(4, 12, 14, 0.98));
+  border: 1px solid rgba(103, 232, 249, 0.24);
+  border-radius: 12px;
+  box-shadow:
+    0 20px 42px rgba(0, 0, 0, 0.28),
+    0 0 28px rgba(22, 163, 74, 0.10) inset;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.sd-3d-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 48px;
+  padding: 10px 14px;
+  background: linear-gradient(90deg, rgba(2, 8, 12, 0.88), rgba(7, 24, 28, 0.62));
+  border-bottom: 1px solid rgba(103, 232, 249, 0.16);
+}
+
+.sd-3d-preview-title {
+  font-size: 14px;
+  font-weight: bold;
+  color: #b8f7e0;
+  letter-spacing: 0.12em;
+}
+
+.sd-3d-preview-subtitle,
+.sd-3d-preview-help {
+  font-size: 11px;
+  color: #5d8f7a;
+}
+
+.sd-3d-preview-stage {
+  position: relative;
+  height: 270px;
+  cursor: grab;
+}
+
+.sd-3d-preview-stage:active {
+  cursor: grabbing;
+}
+
 /* ── Hull wrapper (SVG + slots overlay) ──────────────────────────────────── */
 .sd-hull-wrapper {
   position: relative;

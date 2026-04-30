@@ -800,6 +800,25 @@ export class CanvasRenderer {
       ))
     }
 
+    const cliff = shoreline.map(([x, y]) => [x + 10, y + 24] as [number, number])
+    drawClosedPath(ctx, cliff)
+    const cliffGrad = ctx.createLinearGradient(0, this.canvas.height * 0.34, 0, this.canvas.height * 0.84)
+    cliffGrad.addColorStop(0, 'rgba(97,91,75,0.72)')
+    cliffGrad.addColorStop(0.55, 'rgba(49,45,39,0.80)')
+    cliffGrad.addColorStop(1, 'rgba(12,19,22,0.62)')
+    ctx.fillStyle = cliffGrad
+    ctx.fill()
+
+    for (let i = 0; i < shoreline.length; i++) {
+      const a = shoreline[i]!
+      const b = shoreline[(i + 1) % shoreline.length]!
+      const c = cliff[(i + 1) % cliff.length]!
+      const d = cliff[i]!
+      drawClosedPath(ctx, [a, b, c, d])
+      ctx.fillStyle = i % 2 === 0 ? 'rgba(38,34,29,0.30)' : 'rgba(110,99,78,0.20)'
+      ctx.fill()
+    }
+
     drawClosedPath(ctx, shoreline)
     ctx.fillStyle = 'rgba(212,176,92,0.52)'
     ctx.fill()
@@ -843,8 +862,8 @@ export class CanvasRenderer {
       ctx.beginPath()
       ctx.moveTo(x0, y0)
       ctx.lineTo(x1, y1)
-      ctx.strokeStyle = 'rgba(220,245,255,0.26)'
-      ctx.lineWidth = 0.8
+      ctx.strokeStyle = 'rgba(220,245,255,0.38)'
+      ctx.lineWidth = 1.2
       ctx.stroke()
     }
   }
@@ -868,6 +887,25 @@ export class CanvasRenderer {
     const shoreline = screenLayer(1.0)
     const beach     = screenLayer(0.91)
     const grass     = screenLayer(0.74)
+
+    const cliff = shoreline.map(([x, y]) => [x + 10, y + 24] as [number, number])
+    drawSmoothClosedPath(ctx, cliff)
+    const cliffGrad = ctx.createLinearGradient(0, this.canvas.height * 0.34, 0, this.canvas.height * 0.84)
+    cliffGrad.addColorStop(0, 'rgba(97,91,75,0.72)')
+    cliffGrad.addColorStop(0.55, 'rgba(49,45,39,0.80)')
+    cliffGrad.addColorStop(1, 'rgba(12,19,22,0.62)')
+    ctx.fillStyle = cliffGrad
+    ctx.fill()
+
+    for (let i = 0; i < shoreline.length; i++) {
+      const a = shoreline[i]!
+      const b = shoreline[(i + 1) % shoreline.length]!
+      const c = cliff[(i + 1) % cliff.length]!
+      const d = cliff[i]!
+      drawClosedPath(ctx, [a, b, c, d])
+      ctx.fillStyle = i % 2 === 0 ? 'rgba(38,34,29,0.30)' : 'rgba(110,99,78,0.20)'
+      ctx.fill()
+    }
 
     drawSmoothClosedPath(ctx, shoreline)
     ctx.fillStyle = 'rgba(212,176,92,0.52)'
@@ -914,8 +952,8 @@ export class CanvasRenderer {
       ctx.beginPath()
       ctx.moveTo(x0, y0)
       ctx.lineTo(x1, y1)
-      ctx.strokeStyle = 'rgba(220,245,255,0.26)'
-      ctx.lineWidth = 0.8
+      ctx.strokeStyle = 'rgba(220,245,255,0.38)'
+      ctx.lineWidth = 1.2
       ctx.stroke()
     }
   }
@@ -1902,15 +1940,31 @@ export class CanvasRenderer {
       const barW = Math.max(12, dim.l * this.iso.scale * 0.65)
       const barY = cy - hPx - 12
       const hpRatio = Math.max(0, Math.min(1, ship.hp / ship.maxHp))
+      const accent = ship.team === 'player' ? '94,234,212' : '250,204,21'
 
       ctx.save()
-      ctx.fillStyle = 'rgba(0,0,0,0.62)'
-      ctx.fillRect(cx - barW / 2 - 1, barY - 1, barW + 2, 6)
+      ctx.globalCompositeOperation = 'screen'
+      ctx.strokeStyle = `rgba(${accent},0.30)`
+      ctx.lineWidth = 1
+      ctx.beginPath()
+      ctx.moveTo(cx + barW * 0.28, barY + 2)
+      ctx.lineTo(cx + barW * 0.72, barY - 18)
+      ctx.lineTo(cx + barW * 1.04, barY - 18)
+      ctx.stroke()
+
+      ctx.globalCompositeOperation = 'source-over'
+      ctx.fillStyle = 'rgba(0,12,18,0.48)'
+      ctx.fillRect(cx - barW / 2 - 2, barY - 2, barW + 4, 8)
       ctx.fillStyle = hpRatio > 0.55 ? '#22c55e' : hpRatio > 0.25 ? '#f59e0b' : '#ef4444'
       ctx.fillRect(cx - barW / 2, barY, barW * hpRatio, 4)
-      ctx.strokeStyle = ship.team === 'player' ? 'rgba(94,234,212,0.70)' : 'rgba(250,204,21,0.62)'
+      ctx.strokeStyle = `rgba(${accent},0.70)`
       ctx.lineWidth = 0.8
       ctx.strokeRect(cx - barW / 2 - 1, barY - 1, barW + 2, 6)
+
+      ctx.font = 'bold 10px monospace'
+      ctx.fillStyle = `rgba(${accent},0.72)`
+      ctx.textAlign = 'left'
+      ctx.fillText(ship.team === 'player' ? 'ALLY' : 'CONTACT', cx + barW * 1.07, barY - 14)
       ctx.restore()
     }
   }

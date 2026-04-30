@@ -34,6 +34,9 @@ const MATERIALS = {
   missile: new THREE.MeshStandardMaterial({ color: 0x6a5bb5, roughness: 0.52, metalness: 0.38 }),
 }
 
+const MOUNT_LENGTH_SCALE = 0.42
+const MOUNT_BEAM_SCALE = 0.46
+
 export class ThreeShipDesignerRenderer {
   private readonly container: HTMLDivElement
   private readonly renderer: THREE.WebGLRenderer
@@ -55,8 +58,8 @@ export class ThreeShipDesignerRenderer {
     this.container.style.top = '0'
     this.container.style.width = '1px'
     this.container.style.height = '1px'
-    this.container.style.zIndex = '2'
-    this.container.style.pointerEvents = 'none'
+    this.container.style.zIndex = '110'
+    this.container.style.pointerEvents = 'auto'
     this.container.style.display = 'none'
     document.body.appendChild(this.container)
 
@@ -73,14 +76,19 @@ export class ThreeShipDesignerRenderer {
     this.renderer.outputColorSpace = THREE.SRGBColorSpace
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping
     this.renderer.toneMappingExposure = 0.92
+    this.renderer.domElement.style.width = '100%'
+    this.renderer.domElement.style.height = '100%'
+    this.renderer.domElement.style.display = 'block'
     this.container.appendChild(this.renderer.domElement)
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement)
     this.controls.enableDamping = true
-    this.controls.enableZoom = false
+    this.controls.enableZoom = true
     this.controls.enablePan = false
-    this.controls.enabled = false
+    this.controls.enabled = true
     this.controls.target.set(0, 0.7, 0)
+    this.controls.minDistance = 7
+    this.controls.maxDistance = 22
     this.controls.maxPolarAngle = Math.PI * 0.48
 
     this.setupLighting()
@@ -97,6 +105,15 @@ export class ThreeShipDesignerRenderer {
     this.container.style.top = `${rect.top + y * scaleY}px`
     this.container.style.width = `${Math.max(1, w * scaleX)}px`
     this.container.style.height = `${Math.max(1, h * scaleY)}px`
+    this.resize()
+  }
+
+  setViewportFromElement(element: HTMLElement): void {
+    const rect = element.getBoundingClientRect()
+    this.container.style.left = `${rect.left}px`
+    this.container.style.top = `${rect.top}px`
+    this.container.style.width = `${Math.max(1, rect.width)}px`
+    this.container.style.height = `${Math.max(1, rect.height)}px`
     this.resize()
   }
 
@@ -208,7 +225,7 @@ export class ThreeShipDesignerRenderer {
   }
 }
 
-function buildShip(config: ShipDesignerPreviewConfig): THREE.Group {
+export function buildShip(config: ShipDesignerPreviewConfig): THREE.Group {
   const dims = scaledShipDims(config.hull.templateId ?? config.hull.shipType, config.armorBonus)
   const shape = SHIP_SHAPES[config.hull.templateId] ?? config.hull.shipType
   const l = dims.l * 0.045
@@ -223,8 +240,15 @@ function buildShip(config: ShipDesignerPreviewConfig): THREE.Group {
   for (const weapon of config.weapons) {
     const mount = createWeapon(weapon)
     mount.name = weapon.name
-    mount.position.set(-weapon.mount.y * l * 0.40, h * 0.54, weapon.mount.x * w * 0.44)
+    mount.position.set(-weapon.mount.y * l * MOUNT_LENGTH_SCALE, h * 0.54, weapon.mount.x * w * MOUNT_BEAM_SCALE)
     mount.rotation.y = weapon.mount.y > 0.34 ? Math.PI : 0
+    mount.userData = {
+      ...mount.userData,
+      weaponId: weapon.id,
+      weaponType: weapon.type,
+      baseRotationY: mount.rotation.y,
+      canTraverse: weapon.type === 'gun' || weapon.type === 'secondary' || weapon.type === 'aa' || weapon.type === 'missile',
+    }
     if (weapon.selected) mount.add(selectionRing(weapon.type === 'gun' ? 0.58 : 0.42))
     ship.add(mount)
   }

@@ -420,7 +420,7 @@ export class HUD {
   private renderRadar(state: CombatState, player: ShipEntity, _worldSize: number): void {
     const { ctx, canvas } = this
     const rSize = RADAR_SIZE
-    const rX = canvas.width - rSize - RADAR_PAD
+    const rX = RADAR_PAD + RADAR_SIZE + 6
     const rY = canvas.height - rSize - 42 - RADAR_PAD  // above bottom bar
 
     // background
@@ -709,8 +709,7 @@ export class HUD {
   private renderGlobalMap(state: CombatState, player: ShipEntity, worldSize: number): void {
     const { ctx, canvas } = this
     const mSize = RADAR_SIZE
-    const mGap  = 6
-    const mX = canvas.width - RADAR_SIZE - RADAR_PAD - mGap - mSize
+    const mX = RADAR_PAD
     const mY = canvas.height - mSize - 42 - RADAR_PAD
 
     ctx.fillStyle = '#020812'

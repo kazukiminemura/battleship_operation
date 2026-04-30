@@ -2,6 +2,7 @@ import { useState, useCallback, useMemo, useEffect } from 'react'
 import { WeaponPalette } from './WeaponPalette'
 import { HullView } from './HullView'
 import { HullSideView } from './HullSideView'
+import { Ship3DPreview } from './Ship3DPreview'
 import { WeightGauge } from './WeightGauge'
 import { StatsPanel } from './StatsPanel'
 import {
@@ -165,6 +166,13 @@ export function ShipDesigner({ onClose, onConfirm }: Props) {
               ))}
             </div>
           )}
+
+          <Ship3DPreview
+            hull={hull}
+            design={design}
+            armorBonus={armorBonus}
+            hoveredSlotId={hoveredSlotId}
+          />
 
           {/* Side view on top, top-down view rotated below — both at matching scale */}
           {(() => {
