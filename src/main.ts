@@ -102,7 +102,7 @@ function main(): void {
   }
 
   // ── Screen transition helpers (game-state concerns remain here) ───────────
-  const openDesigner = (): void => {
+  const openDesigner = (continueCurrentDesign = false): void => {
     screens.openDesigner(
       () => screens.closeDesigner(true),
       (result) => {
@@ -110,6 +110,7 @@ function main(): void {
         applyPrepResult(result)
         screens.toStageIntro(currentStage, bgmEnabled)
       },
+      continueCurrentDesign ? currentPrepResult() : null,
     )
   }
 
@@ -159,9 +160,9 @@ function main(): void {
   const applyResultAction = (action: 'next' | 'retry' | 'title' | null): void => {
     if (action === 'next') {
       currentStage++
-      openDesigner()
+      openDesigner(true)
     } else if (action === 'retry') {
-      openDesigner()
+      openDesigner(true)
     } else if (action === 'title') {
       goToStart()
     }
@@ -172,6 +173,16 @@ function main(): void {
     selectedTemplateId = result.templateId
     selectedLoadout = result.loadout
     selectedArmorBonus = result.armorBonus
+  }
+
+  const currentPrepResult = (): PrepResult | null => {
+    if (!selectedTemplateId) return null
+    return {
+      templateId: selectedTemplateId,
+      shipType: selectedShip,
+      loadout: selectedLoadout,
+      armorBonus: selectedArmorBonus,
+    }
   }
 
   const applyHudAction = (id: string | null): boolean => {

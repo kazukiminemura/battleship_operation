@@ -11,12 +11,14 @@ import {
 } from './data'
 import type { Design } from './types'
 import type { PlayerShipType } from '../game/data/masterdata'
+import type { HullCatalogEntry } from '../game/data/hull-catalog'
 import type { PrepResult } from '../game/ui/prepscreen'
 import './ShipDesigner.css'
 
 interface Props {
   onClose?: () => void
   onConfirm?: (result: PrepResult) => void
+  initialResult?: PrepResult | null
 }
 
 type Step = 'ship-select' | 'design'
@@ -27,13 +29,13 @@ const SHIP_OPTIONS: { type: PlayerShipType; name: string; desc: string; hpLabel:
   { type: 'battleship', name: '戦艦',   desc: '重装甲・低速\n超重砲・圧倒的火力',  hpLabel: '最大', speedLabel: '低速' },
 ]
 
-export function ShipDesigner({ onClose, onConfirm }: Props) {
-  const [step, setStep]     = useState<Step>('ship-select')
-  const [shipType, setShipType] = useState<PlayerShipType>('battleship')
-  const [hullIdx, setHullIdx]   = useState(0)
-  const [design, setDesign]     = useState<Design>(() => loadDesign())
+export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props) {
+  const [step, setStep]     = useState<Step>(() => initialResult ? 'design' : 'ship-select')
+  const [shipType, setShipType] = useState<PlayerShipType>(() => initialResult?.shipType ?? 'battleship')
+  const [hullIdx, setHullIdx]   = useState(() => initialResult ? hullIndexForTemplate(initialResult.shipType, initialResult.templateId) : 0)
+  const [design, setDesign]     = useState<Design>(() => initialResult ? designFromPrepResult(initialResult) : loadDesign())
   const [draggingWeaponId, setDraggingWeaponId] = useState<string | null>(null)
-  const [armorBonus, setArmorBonus] = useState(0)
+  const [armorBonus, setArmorBonus] = useState(() => initialResult?.armorBonus ?? 0)
   const [hoveredSlotId, setHoveredSlotId] = useState<string | null>(null)
 
   const ARMOR_STEP = 5
@@ -50,7 +52,7 @@ export function ShipDesigner({ onClose, onConfirm }: Props) {
     setDesign(prev => { const n = { ...prev }; delete n[slotId]; return n }), [])
 
   const handleSave  = () => { saveDesign(design); showToast('設計を保存しました') }
-  const handleLoad  = () => { setDesign(loadDesign()); showToast('設計を読み込みました') }
+  const handleLoad  = () => { setDesign(sanitizeDesignForHull(loadDesign(), hull)); showToast('設計を読み込みました') }
   const handleReset = () => setDesign({})
   const handleAutoPlace = () => {
     const next: Design = {}
@@ -65,9 +67,10 @@ export function ShipDesigner({ onClose, onConfirm }: Props) {
   }
 
   const handleSelectShip = (type: PlayerShipType) => {
+    const nextHull = getHullsByClass(type)[0]
     setShipType(type)
     setHullIdx(0)
-    setDesign({})
+    setDesign(nextHull ? sanitizeDesignForHull(loadDesign(), nextHull) : {})
     setStep('design')
   }
 
@@ -159,7 +162,7 @@ export function ShipDesigner({ onClose, onConfirm }: Props) {
                 <button
                   key={h.templateId}
                   className={`sd-hull-tab${i === hullIdx ? ' sd-hull-tab--active' : ''}`}
-                  onClick={() => { setHullIdx(i); setDesign({}) }}
+                  onClick={() => { setHullIdx(i); setDesign(sanitizeDesignForHull(loadDesign(), h)) }}
                 >
                   {h.name}
                 </button>
@@ -277,6 +280,42 @@ function showToast(msg: string) {
   el.textContent = msg
   el.classList.add('sd-toast--visible')
   setTimeout(() => el.classList.remove('sd-toast--visible'), 2000)
+}
+
+function hullIndexForTemplate(shipType: PlayerShipType, templateId: string): number {
+  const hulls = getHullsByClass(shipType)
+  return Math.max(0, hulls.findIndex(h => h.templateId === templateId))
+}
+
+function designFromPrepResult(result: PrepResult): Design {
+  const hull = getHullsByClass(result.shipType).find(h => h.templateId === result.templateId)
+  if (!hull) return loadDesign()
+
+  const design: Design = {}
+  const usedSlots = new Set<string>()
+  for (const weapon of result.loadout) {
+    const slot = hull.slots.find(candidate =>
+      !usedSlots.has(candidate.id) &&
+      candidate.compatibleTypes.includes(weapon.type) &&
+      weapon.mount &&
+      Math.abs(candidate.x - weapon.mount.x) < 0.001 &&
+      Math.abs(candidate.y - weapon.mount.y) < 0.001
+    )
+    if (!slot) continue
+    design[slot.id] = weapon.id
+    usedSlots.add(slot.id)
+  }
+  return sanitizeDesignForHull(design, hull)
+}
+
+function sanitizeDesignForHull(design: Design, hull: HullCatalogEntry): Design {
+  const next: Design = {}
+  for (const slot of hull.slots) {
+    const weaponId = design[slot.id]
+    const weapon = WEAPONS.find(w => w.id === weaponId)
+    if (weapon && slot.compatibleTypes.includes(weapon.type)) next[slot.id] = weapon.id
+  }
+  return next
 }
 
 function weaponScore(weapon: { firepower?: number; antiAir?: number; accuracy: number; reload: number }): number {

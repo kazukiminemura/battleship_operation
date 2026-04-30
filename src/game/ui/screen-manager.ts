@@ -96,6 +96,7 @@ export class ScreenManager {
   openDesigner(
     onClose: () => void,
     onConfirm: (result: PrepResult) => void,
+    initialResult?: PrepResult | null,
   ): void {
     const el = document.getElementById('designer-root')!
     el.style.display = 'block'
@@ -105,7 +106,7 @@ export class ScreenManager {
     this.d.prep.detach()
     this.d.stageIntro.detach()
     if (!this.designerRoot) this.designerRoot = createRoot(el)
-    this.designerRoot.render(createElement(ShipDesigner, { onClose, onConfirm }))
+    this.designerRoot.render(createElement(ShipDesigner, { onClose, onConfirm, initialResult }))
   }
 
   closeDesigner(restoreToStart = true): void {
