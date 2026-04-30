@@ -297,14 +297,17 @@ interface ShipSpawn {
 }
 
 function makePlayerShip(type: PlayerShipType, customTemplateId?: string): ShipEntity {
-  return makeShipFromTemplate({
+  return {
+    ...makeShipFromTemplate({
     id: 'ship.player',
     templateId: customTemplateId ?? PLAYER_TEMPLATE_BY_TYPE[type],
     x: 5000,
     y: 9200,
     angle: -Math.PI / 2,
     team: 'player',
-  })
+    }),
+    autoPilot: true,
+  }
 }
 
 function makeShipFromTemplate(spawn: ShipSpawn): ShipEntity {

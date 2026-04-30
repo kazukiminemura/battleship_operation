@@ -1,6 +1,11 @@
 import type { CombatEvent, WeaponType } from '../simulation/types'
 import surfaceExplosionUrl from '../../assets/audio/soundeffect-lab/bomb4.mp3?url'
 import heavyExplosionUrl from '../../assets/audio/soundeffect-lab/big-explosion1.mp3?url'
+import cannon04Url from '../../assets/audio/cannon/cannon-04.mp3?url'
+import cannon06Url from '../../assets/audio/cannon/cannon-06.mp3?url'
+import cannon08Url from '../../assets/audio/cannon/cannon-08.mp3?url'
+import cannon09Url from '../../assets/audio/cannon/cannon-09.mp3?url'
+import cannon09bUrl from '../../assets/audio/cannon/cannon-09b.mp3?url'
 import titleBgmUrl from '../../../music/maou_bgm_neorock01.mp3?url'
 import prepAltBgmUrl from '../../../music/maou_bgm_neorock05.mp3?url'
 import prepBgmUrl from '../../../music/maou_bgm_neorock25.mp3?url'
@@ -14,12 +19,21 @@ import resultsBgmUrl from '../../../music/maou_bgm_neorock10.mp3?url'
 import { inferWeaponSoundClass, inferWeaponType, type WeaponSoundClass } from './weapon-audio'
 
 type ExplosionSample = keyof typeof EXPLOSION_SAMPLE_URLS
+type CannonSample = keyof typeof CANNON_SAMPLE_URLS
 type SpeedDirection = 'up' | 'down'
 type BgmMode = 'title' | 'prep' | 'intro' | 'normal' | 'boss' | 'results'
 
 const EXPLOSION_SAMPLE_URLS = {
   surface: surfaceExplosionUrl,
   heavy: heavyExplosionUrl,
+} as const
+
+const CANNON_SAMPLE_URLS = {
+  light: cannon08Url,
+  medium: cannon06Url,
+  heavy: cannon04Url,
+  superHeavy: cannon09Url,
+  thunder: cannon09bUrl,
 } as const
 
 const BGM_TRACKS: Record<BgmMode, { urls: string[], volume: number }> = {
@@ -37,6 +51,8 @@ export class SoundSystem {
   private lastProcessedTick = -1
   private explosionBuffers: Partial<Record<ExplosionSample, AudioBuffer>> = {}
   private explosionLoads: Partial<Record<ExplosionSample, Promise<AudioBuffer | null>>> = {}
+  private cannonBuffers: Partial<Record<CannonSample, AudioBuffer>> = {}
+  private cannonLoads: Partial<Record<CannonSample, Promise<AudioBuffer | null>>> = {}
   private bgmEnabled = false
   private bgmGain: GainNode | null = null
   private bgmTimer: ReturnType<typeof setInterval> | null = null
@@ -98,7 +114,7 @@ export class SoundSystem {
     for (const ev of events) {
       if (ev.tick <= this.lastProcessedTick) continue
       if (ev.type === 'weapon.fired' && ev.weaponId) {
-        this.playFired(inferWeaponSoundClass(ev.weaponId))
+        this.playFired(inferWeaponSoundClass(ev.weaponId), ev.weaponId, ev.salvoCount ?? 1)
       } else if (ev.type === 'weapon.hit') {
         this.playShipHit(ev.damage ?? 30, ev.weaponId ?? 'gun')
       } else if (ev.type === 'weapon.missed' && ev.weaponId) {
@@ -209,6 +225,7 @@ export class SoundSystem {
       this.bus.release.value = 0.12
       this.bus.connect(this.actx.destination)
       this.preloadExplosionSamples(this.actx)
+      this.preloadCannonSamples(this.actx)
     }
     if (this.actx.state === 'suspended') this.actx.resume()
     return this.actx
@@ -432,40 +449,108 @@ export class SoundSystem {
     }
   }
 
-  private playFired(type: WeaponSoundClass): void {
+  private playFired(type: WeaponSoundClass, weaponId = '', salvoCount = 1): void {
     const ctx = this.getCtx()
     const dst = this.dest()
     const now = ctx.currentTime
 
     if (type === 'cannon') {
-      filteredNoise(ctx, dst, now + 0.000, 0.72, 'highpass',  1350, 0.7, 0.001, 0.040)
-      filteredNoise(ctx, dst, now + 0.003, 0.82, 'bandpass',   250, 0.9, 0.004, 0.170)
-      filteredNoise(ctx, dst, now + 0.018, 0.36, 'lowpass',     70, 0.8, 0.018, 0.520)
-      sineDecay   (ctx, dst, now + 0.005, 38,   0.92,          0.006, 0.420)
-      sineDecay   (ctx, dst, now + 0.012, 86,   0.30,          0.003, 0.130)
+      this.playNavalGunFired(ctx, dst, now, weaponId, salvoCount)
     } else if (type === 'torpedo') {
-      filteredNoise(ctx, dst, now + 0.000, 0.12, 'highpass',  1900, 0.8, 0.001, 0.060)
-      filteredNoise(ctx, dst, now + 0.012, 0.28, 'bandpass',   170, 1.0, 0.025, 0.700)
-      filteredNoise(ctx, dst, now + 0.050, 0.16, 'lowpass',     70, 0.7, 0.050, 0.950)
-      sineDecay   (ctx, dst, now + 0.016, 54,   0.46,          0.040, 0.850)
+      this.playTorpedoLaunch(ctx, dst, now, salvoCount)
     } else if (type === 'machineGun') {
-      for (let i = 0; i < 4; i++) {
-        const t = now + i * 0.035
-        filteredNoise(ctx, dst, t + 0.000, 0.34, 'highpass', 1850, 0.9, 0.001, 0.020)
-        filteredNoise(ctx, dst, t + 0.001, 0.18, 'bandpass',  520, 1.6, 0.001, 0.032)
-        sineDecay   (ctx, dst, t + 0.000, 145,  0.075,        0.001, 0.028)
-      }
-      filteredNoise(ctx, dst, now + 0.002, 0.12, 'lowpass',  180, 0.7, 0.006, 0.180)
+      this.playAutoCannonBurst(ctx, dst, now, weaponId, salvoCount)
     } else if (type === 'missile') {
-      filteredNoise(ctx, dst, now + 0.000, 0.18, 'highpass', 2400, 0.7, 0.001, 0.055)
-      filteredNoise(ctx, dst, now + 0.010, 0.32, 'bandpass',  520, 0.9, 0.018, 0.650)
-      filteredNoise(ctx, dst, now + 0.050, 0.38, 'lowpass',   135, 0.8, 0.070, 1.050)
-      sweepTone    (ctx, dst, now + 0.010, 92, 58, 0.22, 0.850)
-      sineDecay    (ctx, dst, now + 0.020, 44,    0.50,       0.080, 1.150)
+      this.playMissileLaunch(ctx, dst, now, weaponId, salvoCount)
     } else {
       sweepTone(ctx, dst, now + 0.000, 520, 1480, 0.13, 0.180)
       pulseTone(ctx, dst, now + 0.020, 1860, 0.060, 0.100, 'triangle')
       filteredNoise(ctx, dst, now + 0.030, 0.080, 'bandpass', 2100, 2.2, 0.010, 0.180)
+    }
+  }
+
+  private playNavalGunFired(ctx: AudioContext, dst: AudioNode, now: number, weaponId: string, salvoCount: number): void {
+    const caliber = inferCaliberMm(weaponId)
+    const size = Math.max(0, Math.min(1, (caliber - 100) / 360))
+    const isMainGun = !weaponId.includes('secondary')
+    const heavyMain = isMainGun ? Math.max(0, Math.min(1, (caliber - 180) / 280)) : 0
+    const shots = Math.max(1, Math.min(4, Math.round(salvoCount)))
+    const spacing = caliber >= 300 ? 0.045 : 0.026
+
+    for (let i = 0; i < shots; i++) {
+      const t = now + i * spacing
+      const stagger = 1 - i * 0.08
+      const sample = cannonSampleForCaliber(caliber)
+      const sampleRate = cannonPlaybackRateForCaliber(caliber, i)
+      const sampleVolume = (0.26 + size * 0.30 + heavyMain * 0.22) * stagger
+
+      this.playCannonSample(sample, t, sampleVolume, sampleRate, caliber >= 300
+        ? { type: 'lowpass', freq: 820 - heavyMain * 320, Q: 0.55 }
+        : { type: 'lowpass', freq: 1500, Q: 0.55 })
+      // Keep the muzzle crack subdued; the gun should read as a blast, not a snap.
+      filteredNoise(ctx, dst, t + 0.000, (0.06 + size * 0.08) * stagger, 'highpass', 900 + size * 550, 0.42, 0.004, 0.030 + size * 0.018)
+      // Propellant blast: slow, broad pressure body.
+      filteredNoise(ctx, dst, t + 0.004, (0.58 + size * 0.72 + heavyMain * 0.30) * stagger, 'bandpass', 145 - size * 58, 0.58, 0.018, 0.260 + size * 0.260)
+      // Deck and air rumble: long low tail for heavy guns.
+      filteredNoise(ctx, dst, t + 0.020, (0.34 + size * 0.52 + heavyMain * 0.44) * stagger, 'lowpass', 82 - size * 38, 0.50, 0.045, 0.760 + size * 0.780 + heavyMain * 0.620)
+      sineDecay(ctx, dst, t + 0.008, 46 - size * 20, (0.48 + size * 0.54 + heavyMain * 0.22) * stagger, 0.018, 0.620 + size * 0.760)
+      sineDecay(ctx, dst, t + 0.030, 92 - size * 32, (0.09 + size * 0.12) * stagger, 0.018, 0.220 + size * 0.180)
+      if (heavyMain > 0) {
+        // Sub-bass pressure wave for large main batteries: felt more than heard.
+        sineDecay(ctx, dst, t + 0.010, 31 - heavyMain * 12, (0.28 + heavyMain * 0.64) * stagger, 0.032, 0.980 + heavyMain * 1.020)
+        sineDecay(ctx, dst, t + 0.060, 20 - heavyMain * 5, (0.16 + heavyMain * 0.34) * stagger, 0.080, 1.400 + heavyMain * 1.100)
+        filteredNoise(ctx, dst, t + 0.055, (0.22 + heavyMain * 0.46) * stagger, 'lowpass', 48 - heavyMain * 18, 0.45, 0.090, 1.200 + heavyMain * 1.000)
+      }
+    }
+
+    // Distant reflection/echo sells large naval guns without turning them into a sci-fi zap.
+    if (caliber >= 200) {
+      filteredNoise(ctx, dst, now + 0.220 + size * 0.100, 0.16 + size * 0.24 + heavyMain * 0.22, 'lowpass', 120 - size * 48, 0.48, 0.100, 0.900 + size * 0.720 + heavyMain * 0.680)
+    }
+    if (heavyMain > 0.55) {
+      this.playExplosionSample('surface', now + 0.000, 0.18 + heavyMain * 0.20, 0.56, { type: 'lowpass', freq: 240 - heavyMain * 90, Q: 0.45 })
+      sineDecay(ctx, dst, now + 0.320, 23 - heavyMain * 5, 0.28 + heavyMain * 0.30, 0.120, 1.700 + heavyMain * 1.100)
+    }
+  }
+
+  private playAutoCannonBurst(ctx: AudioContext, dst: AudioNode, now: number, weaponId: string, salvoCount: number): void {
+    const caliber = inferCaliberMm(weaponId)
+    const isCiws = weaponId.includes('ciws') || caliber <= 25
+    const rounds = isCiws ? 8 : Math.max(3, Math.min(6, salvoCount * 2))
+    const spacing = isCiws ? 0.012 : 0.026
+    const bodyFreq = isCiws ? 780 : 460
+
+    for (let i = 0; i < rounds; i++) {
+      const t = now + i * spacing
+      const falloff = 1 - i / (rounds * 1.7)
+      filteredNoise(ctx, dst, t, 0.16 * falloff, 'highpass', isCiws ? 3100 : 1900, 0.75, 0.001, 0.014)
+      filteredNoise(ctx, dst, t + 0.001, 0.12 * falloff, 'bandpass', bodyFreq, 1.25, 0.001, 0.026)
+      sineDecay(ctx, dst, t, isCiws ? 190 : 135, 0.028 * falloff, 0.001, 0.024)
+    }
+    filteredNoise(ctx, dst, now + 0.004, isCiws ? 0.08 : 0.13, 'lowpass', 190, 0.7, 0.006, isCiws ? 0.110 : 0.180)
+  }
+
+  private playMissileLaunch(ctx: AudioContext, dst: AudioNode, now: number, weaponId: string, salvoCount: number): void {
+    const shots = Math.max(1, Math.min(4, Math.round(salvoCount)))
+    const heavy = weaponId.includes('longrange') || weaponId.includes('cruise')
+    for (let i = 0; i < shots; i++) {
+      const t = now + i * 0.055
+      filteredNoise(ctx, dst, t + 0.000, heavy ? 0.24 : 0.18, 'highpass', 2600, 0.7, 0.001, 0.040)
+      filteredNoise(ctx, dst, t + 0.006, heavy ? 0.38 : 0.28, 'bandpass', heavy ? 390 : 560, 0.85, 0.018, heavy ? 0.780 : 0.520)
+      filteredNoise(ctx, dst, t + 0.035, heavy ? 0.34 : 0.24, 'lowpass', heavy ? 125 : 170, 0.7, 0.060, heavy ? 1.050 : 0.720)
+      sweepTone(ctx, dst, t + 0.008, heavy ? 105 : 150, heavy ? 55 : 80, heavy ? 0.16 : 0.12, heavy ? 0.780 : 0.520)
+    }
+  }
+
+  private playTorpedoLaunch(ctx: AudioContext, dst: AudioNode, now: number, salvoCount: number): void {
+    const tubes = Math.max(1, Math.min(4, Math.round(salvoCount)))
+    for (let i = 0; i < tubes; i++) {
+      const t = now + i * 0.060
+      // Compressed-air pop and tube clank, followed by a water churn instead of a cannon boom.
+      filteredNoise(ctx, dst, t + 0.000, 0.12, 'highpass', 1800, 0.75, 0.001, 0.040)
+      filteredNoise(ctx, dst, t + 0.010, 0.20, 'bandpass', 240, 1.0, 0.018, 0.320)
+      filteredNoise(ctx, dst, t + 0.038, 0.18, 'lowpass', 95, 0.65, 0.050, 0.720)
+      sineDecay(ctx, dst, t + 0.014, 62, 0.17, 0.020, 0.420)
     }
   }
 
@@ -498,6 +583,12 @@ export class SoundSystem {
     this.loadExplosionSample(ctx, 'heavy')
   }
 
+  private preloadCannonSamples(ctx: AudioContext): void {
+    for (const sample of Object.keys(CANNON_SAMPLE_URLS) as CannonSample[]) {
+      this.loadCannonSample(ctx, sample)
+    }
+  }
+
   private loadExplosionSample(ctx: AudioContext, sample: ExplosionSample): Promise<AudioBuffer | null> {
     const loaded = this.explosionBuffers[sample]
     if (loaded) return Promise.resolve(loaded)
@@ -519,6 +610,30 @@ export class SoundSystem {
       .catch(() => null)
 
     this.explosionLoads[sample] = request
+    return request
+  }
+
+  private loadCannonSample(ctx: AudioContext, sample: CannonSample): Promise<AudioBuffer | null> {
+    const loaded = this.cannonBuffers[sample]
+    if (loaded) return Promise.resolve(loaded)
+
+    const loading = this.cannonLoads[sample]
+    if (loading) return loading
+
+    const url = CANNON_SAMPLE_URLS[sample]
+    const request = fetch(url)
+      .then((res) => {
+        if (!res.ok) throw new Error(`Failed to load cannon sample: ${res.status}`)
+        return res.arrayBuffer()
+      })
+      .then((data) => ctx.decodeAudioData(data.slice(0)))
+      .then((buffer) => {
+        this.cannonBuffers[sample] = buffer
+        return buffer
+      })
+      .catch(() => null)
+
+    this.cannonLoads[sample] = request
     return request
   }
 
@@ -546,6 +661,47 @@ export class SoundSystem {
     gain.gain.setValueAtTime(0, start)
     gain.gain.linearRampToValueAtTime(volume, start + 0.006)
     gain.gain.setValueAtTime(volume, fadeOutStart)
+    gain.gain.linearRampToValueAtTime(0, start + duration)
+
+    if (filter) {
+      const filt = ctx.createBiquadFilter()
+      filt.type = filter.type
+      filt.frequency.value = filter.freq
+      filt.Q.value = filter.Q
+      src.connect(filt)
+      filt.connect(gain)
+    } else {
+      src.connect(gain)
+    }
+
+    gain.connect(this.dest())
+    src.start(start)
+    src.stop(start + duration + 0.02)
+  }
+
+  private playCannonSample(
+    sample: CannonSample,
+    start: number,
+    volume: number,
+    playbackRate: number,
+    filter?: { type: BiquadFilterType, freq: number, Q: number },
+  ): void {
+    const ctx = this.getCtx()
+    const buffer = this.cannonBuffers[sample]
+    if (!buffer) {
+      this.loadCannonSample(ctx, sample)
+      return
+    }
+
+    const src = ctx.createBufferSource()
+    src.buffer = buffer
+    src.playbackRate.setValueAtTime(playbackRate, start)
+
+    const gain = ctx.createGain()
+    const duration = buffer.duration / playbackRate
+    gain.gain.setValueAtTime(0, start)
+    gain.gain.linearRampToValueAtTime(volume, start + 0.010)
+    gain.gain.setValueAtTime(volume, start + Math.max(0.025, duration - 0.070))
     gain.gain.linearRampToValueAtTime(0, start + duration)
 
     if (filter) {
@@ -703,4 +859,31 @@ function sweepTone(
   gain.connect(dst)
   osc.start(start)
   osc.stop(start + duration + 0.01)
+}
+
+function inferCaliberMm(weaponId: string): number {
+  const match = weaponId.match(/(\d{2,3})mm/i)
+  if (match) return Number(match[1])
+  if (weaponId.includes('ciws')) return 20
+  if (weaponId.includes('aa')) return 40
+  if (weaponId.includes('secondary')) return 127
+  if (weaponId.includes('boss')) return 460
+  return 152
+}
+
+function cannonSampleForCaliber(caliber: number): CannonSample {
+  if (caliber >= 450) return 'thunder'
+  if (caliber >= 380) return 'superHeavy'
+  if (caliber >= 200) return 'heavy'
+  if (caliber >= 150) return 'medium'
+  return 'light'
+}
+
+function cannonPlaybackRateForCaliber(caliber: number, shotIndex: number): number {
+  const base = caliber >= 450 ? 0.62
+    : caliber >= 380 ? 0.70
+      : caliber >= 200 ? 0.82
+        : caliber >= 150 ? 0.96
+          : 1.08
+  return base + (shotIndex % 2 === 0 ? 0 : 0.025)
 }

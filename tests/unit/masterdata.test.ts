@@ -18,6 +18,7 @@ describe('createInitialState', () => {
     expect(player.weapons.find(w => w.type === 'gun')?.ammo).toBe(220)
     expect(player.weapons.find(w => w.type === 'gun')?.name).toBe('12.7cm連装砲')
     expect(player.weapons.every(w => w.autoFire)).toBe(true)
+    expect(player.autoPilot).toBe(true)
   })
 
   it('creates each selectable player ship type with distinct stats', () => {
