@@ -45,6 +45,8 @@ export const GUN_PROFILES: Record<string, GunProfile> = {
   'weapon.gun.406mm.twin':  { caliber: 406, barrelLength: 45, shellType: 'AP' },
   'weapon.gun.406mm.he':    { caliber: 406, barrelLength: 45, shellType: 'HE' },
   'weapon.gun.460mm':       { caliber: 460, barrelLength: 45, shellType: 'AP' },
+  'weapon.gun.1000mm.hyper': { caliber: 1000, barrelLength: 35, shellType: 'HE' },
+  'weapon.gun.rail.ultimate': { caliber: 320, barrelLength: 80, shellType: 'AP' },
   // 副砲 — 正規ID
   'weapon.secondary.127mm.twin':  { caliber: 127, barrelLength: 38, shellType: 'HE' },
   'weapon.secondary.152mm.twin':  { caliber: 152, barrelLength: 55, shellType: 'AP' },

@@ -1096,7 +1096,7 @@ function isGroupedLoadoutPart(part: HLGPartDefinition): boolean {
 
 function loadoutGroupKind(part: HLGPartDefinition): LoadoutGroup['kind'] {
   if (part.category === 'aux') return 'aux'
-  return part.type === 'secondary' || part.type === 'aa' ? 'aux' : 'armament'
+  return 'armament'
 }
 
 function loadoutGroupSort(part: HLGPartDefinition): number {

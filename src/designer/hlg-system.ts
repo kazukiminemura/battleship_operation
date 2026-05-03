@@ -27,7 +27,7 @@ export interface HLGPartDefinition {
   accuracy?: number
   reload?: number
   requires?: Partial<Record<'funnelCapacity' | 'power', number>>
-  provides?: Partial<Record<'power' | 'smokeExhaust' | 'command' | 'aaControl', number>>
+  provides?: Partial<Record<'power' | 'smokeExhaust' | 'command' | 'aaControl' | 'accuracyAssist', number>>
 }
 
 export interface HLGComponentInstance {
@@ -94,10 +94,13 @@ const WEAPON_META: Record<string, { weight: number; firepower?: number; antiAir?
   'weapon.gun.406mm.twin': { weight: 1600, firepower: 105, reload: 32, accuracy: 0.72, barrels: 2 },
   'weapon.gun.406mm.he': { weight: 1550, firepower: 96, reload: 30, accuracy: 0.70, barrels: 2 },
   'weapon.gun.460mm': { weight: 2400, firepower: 145, reload: 40, accuracy: 0.70, barrels: 1 },
+  'weapon.gun.1000mm.hyper': { weight: 9800, firepower: 420, reload: 95, accuracy: 0.52, barrels: 1 },
+  'weapon.gun.rail.ultimate': { weight: 2600, firepower: 185, reload: 18, accuracy: 0.96, barrels: 1 },
   'weapon.secondary.127mm.twin': { weight: 200, firepower: 14, antiAir: 18, reload: 5, accuracy: 0.82, barrels: 2 },
   'weapon.secondary.100mm.cl': { weight: 180, firepower: 11, antiAir: 32, reload: 4, accuracy: 0.85, barrels: 2 },
   'weapon.secondary.152mm.twin': { weight: 600, firepower: 48, antiAir: 8, reload: 8, accuracy: 0.76, barrels: 2 },
   'weapon.secondary.127mm.bb': { weight: 260, firepower: 18, antiAir: 20, reload: 5, accuracy: 0.82, barrels: 2 },
+  'weapon.secondary.pulse.30mm': { weight: 140, firepower: 10, antiAir: 44, reload: 0.7, accuracy: 0.92, barrels: 4 },
   'weapon.torpedo.533mm.basic': { weight: 120, firepower: 80, reload: 75, accuracy: 0.88, barrels: 4 },
   'weapon.torpedo.610mm.dd': { weight: 200, firepower: 135, reload: 80, accuracy: 0.85, barrels: 4 },
   'weapon.torpedo.610mm.cl': { weight: 240, firepower: 145, reload: 85, accuracy: 0.84, barrels: 4 },
@@ -107,12 +110,14 @@ const WEAPON_META: Record<string, { weight: number; firepower?: number; antiAir?
   'weapon.aa.heavy': { weight: 120, antiAir: 72, reload: 1.5, accuracy: 0.75, barrels: 2 },
   'weapon.aa.sam.cl': { weight: 150, antiAir: 95, reload: 10, accuracy: 0.88, barrels: 2 },
   'weapon.aa.ciws.bb': { weight: 90, antiAir: 65, reload: 0.2, accuracy: 0.68, barrels: 2 },
+  'weapon.aa.photon.ciws': { weight: 180, antiAir: 130, reload: 0.1, accuracy: 0.98, barrels: 4 },
   'weapon.missile.antiship.dd': { weight: 160, firepower: 90, reload: 30, accuracy: 0.92, barrels: 4 },
   'weapon.missile.sam.dd': { weight: 90, antiAir: 85, reload: 12, accuracy: 0.90, barrels: 4 },
   'weapon.missile.cruiser.standard': { weight: 220, firepower: 110, reload: 28, accuracy: 0.91, barrels: 4 },
   'weapon.missile.cruise.cl': { weight: 320, firepower: 150, reload: 45, accuracy: 0.88, barrels: 2 },
   'weapon.missile.battleship.longrange': { weight: 350, firepower: 160, reload: 40, accuracy: 0.88, barrels: 4 },
   'weapon.missile.antiship.bb': { weight: 300, firepower: 140, reload: 32, accuracy: 0.90, barrels: 4 },
+  'weapon.missile.dimension': { weight: 520, firepower: 260, reload: 55, accuracy: 0.99, barrels: 2 },
 }
 
 export const HLG_PARTS: HLGPartDefinition[] = [
@@ -127,6 +132,10 @@ export const HLG_PARTS: HLGPartDefinition[] = [
   { partId: 'part.turbine.light', name: '軽量タービン', category: 'turbine', footprint: scaledFootprint(3, 2), weight: 360, cost: 500, allowedShipClasses: ['destroyer', 'cruiser'], allowedZones: ['mid', 'aft', 'internal'], requires: { power: 30 }, provides: { power: 20 } },
   { partId: 'part.turbine.heavy', name: '大出力タービン', category: 'turbine', footprint: scaledFootprint(4, 3), weight: 780, cost: 900, allowedShipClasses: ['cruiser', 'battleship'], allowedZones: ['mid', 'aft', 'internal'], requires: { power: 60 }, provides: { power: 45 } },
   { partId: 'part.aux.radar', name: '射撃管制レーダー', category: 'aux', footprint: scaledFootprint(2, 2), weight: 80, cost: 350, allowedShipClasses: ['destroyer', 'cruiser', 'battleship'], allowedZones: ['fore', 'mid', 'deck'], provides: { aaControl: 1 } },
+  { partId: 'part.aux.perfect-aim', name: '必中演算装置', category: 'aux', footprint: scaledFootprint(3, 2), weight: 240, cost: 1800, allowedShipClasses: ['cruiser', 'battleship'], allowedZones: ['fore', 'mid', 'deck'], provides: { command: 1, aaControl: 2, accuracyAssist: 1.0 } },
+  { partId: 'part.aux.fantasy-radar', name: '超越照準レーダー', category: 'aux', footprint: scaledFootprint(3, 3), weight: 180, cost: 1200, allowedShipClasses: ['destroyer', 'cruiser', 'battleship'], allowedZones: ['fore', 'mid', 'deck'], provides: { aaControl: 3, accuracyAssist: 0.18 } },
+  { partId: 'part.aux.gravity-stabilizer', name: '重力安定装置', category: 'aux', footprint: scaledFootprint(4, 3), weight: 520, cost: 1600, allowedShipClasses: ['cruiser', 'battleship'], allowedZones: ['mid', 'internal'], requires: { power: 40 }, provides: { accuracyAssist: 0.12 } },
+  { partId: 'part.aux.auto-loader', name: '無限装填補助機', category: 'aux', footprint: scaledFootprint(3, 3), weight: 420, cost: 1500, allowedShipClasses: ['battleship'], allowedZones: ['mid', 'aft', 'internal'], requires: { power: 35 }, provides: { command: 1 } },
   { partId: 'part.armor.bulkhead', name: '防御区画', category: 'armor', footprint: scaledFootprint(4, 3), weight: 700, cost: 500, allowedShipClasses: ['cruiser', 'battleship'], allowedZones: ['mid', 'internal'] },
 ]
 
@@ -194,6 +203,7 @@ export function calculateHLGStats(hull: HullCatalogEntry, design: HLGDesign): HL
   let smokeProvided = 0
   let smokeRequired = 0
   let command = 0
+  let accuracyAssist = 0
 
   for (const component of design.components) {
     const part = HLG_PART_BY_ID[component.partId]
@@ -208,6 +218,7 @@ export function calculateHLGStats(hull: HullCatalogEntry, design: HLGDesign): HL
     powerProvided += part.provides?.power ?? 0
     smokeProvided += part.provides?.smokeExhaust ?? 0
     command += part.provides?.command ?? 0
+    accuracyAssist = Math.max(accuracyAssist, part.provides?.accuracyAssist ?? 0)
     powerRequired += part.requires?.power ?? 0
     smokeRequired += part.requires?.funnelCapacity ?? 0
   }
@@ -231,7 +242,7 @@ export function calculateHLGStats(hull: HullCatalogEntry, design: HLGDesign): HL
     maxWeight,
     totalFirepower,
     totalAntiAir,
-    avgAccuracy: weaponCount ? accuracySum / weaponCount : 0,
+    avgAccuracy: weaponCount ? Math.min(1, accuracyAssist >= 1 ? 1 : accuracySum / weaponCount + accuracyAssist) : 0,
     speed,
     turnRate,
     powerRequired,
@@ -422,15 +433,17 @@ function toWeaponPart(weapon: (typeof WEAPON_SHOP)[number]): HLGPartDefinition {
 
 function weaponFootprintFor(id: string, type: WeaponType): HLGFootprint {
   if (type === 'gun') {
+    if (id.includes('1000mm')) return scaledFootprint(8, 5)
+    if (id.includes('rail')) return scaledFootprint(5, 2)
     if (id.includes('460mm')) return scaledFootprint(5, 4)
     if (id.includes('406mm')) return scaledFootprint(4, 3)
     if (id.includes('203mm')) return scaledFootprint(3, 3)
     if (id.includes('152mm')) return scaledFootprint(3, 2)
     return scaledFootprint(2, 2)
   }
-  if (type === 'secondary') return id.includes('152mm') ? scaledFootprint(3, 2) : scaledFootprint(2, 1)
+  if (type === 'secondary') return id.includes('152mm') ? scaledFootprint(3, 2) : id.includes('pulse') ? scaledFootprint(2, 2) : scaledFootprint(2, 1)
   if (type === 'torpedo') return id.includes('610mm') ? scaledFootprint(4, 1) : scaledFootprint(3, 1)
-  if (type === 'missile') return id.includes('longrange') || id.includes('cruise') ? scaledFootprint(3, 3) : scaledFootprint(2, 2)
+  if (type === 'missile') return id.includes('dimension') ? scaledFootprint(4, 4) : id.includes('longrange') || id.includes('cruise') ? scaledFootprint(3, 3) : scaledFootprint(2, 2)
   if (type === 'aa') return id.includes('ciws') || id.includes('20mm') ? scaledFootprint(1, 1) : scaledFootprint(2, 2)
   return scaledFootprint(2, 2)
 }
@@ -442,7 +455,7 @@ function zonesForWeapon(type: WeaponType): HLGZone[] {
 }
 
 function shipClassesForWeapon(id: string): PlayerShipType[] {
-  if (id.includes('.bb') || id.includes('406mm') || id.includes('460mm') || id.includes('battleship')) return ['battleship']
+  if (id.includes('.bb') || id.includes('406mm') || id.includes('460mm') || id.includes('1000mm') || id.includes('rail') || id.includes('dimension') || id.includes('battleship')) return ['battleship']
   if (id.includes('.cl') || id.includes('cruiser') || id.includes('203mm')) return ['cruiser', 'battleship']
   return ['destroyer', 'cruiser', 'battleship']
 }

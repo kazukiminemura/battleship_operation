@@ -17,12 +17,15 @@ export const WEAPON_SHOP: ShopWeapon[] = [
   { id: 'weapon.gun.406mm.twin',  name: '40.6cm AP 連装砲', type: 'gun', ammo: 180, desc: '徹甲弾・重装甲貫通',     cost: 900,  minStage: 5 },
   { id: 'weapon.gun.406mm.he',    name: '40.6cm HE 連装砲', type: 'gun', ammo: 220, desc: '榴弾・範囲威力・多装填', cost: 850,  minStage: 5 },
   { id: 'weapon.gun.460mm',       name: '46cm 超重砲',       type: 'gun', ammo: 120, desc: '超重砲・最大破壊力',     cost: 1200, minStage: 7 },
+  { id: 'weapon.gun.1000mm.hyper', name: '100cm 超弩級砲',   type: 'gun', ammo: 24,  desc: '非現実級・超重量・絶大火力', cost: 4200, minStage: 7 },
+  { id: 'weapon.gun.rail.ultimate', name: '試製レールキャノン', type: 'gun', ammo: 80, desc: '架空兵装・高初速・高命中', cost: 2600, minStage: 7 },
 
   // ── Secondaries ─────────────────────────────────────────────────────────
   { id: 'weapon.secondary.127mm.twin',   name: '12.7cm 速射副砲',  type: 'secondary', ammo: 400, desc: '高発射速度・汎用',         cost: 280, minStage: 1 },
   { id: 'weapon.secondary.100mm.cl',     name: '10cm 高角砲',      type: 'secondary', ammo: 560, desc: '高角射撃対応・豊富な弾数', cost: 320, minStage: 3 },
   { id: 'weapon.secondary.152mm.twin',   name: '15.2cm 重副砲',    type: 'secondary', ammo: 260, desc: '重副砲・高威力',           cost: 500, minStage: 5 },
   { id: 'weapon.secondary.127mm.bb',     name: '12.7cm 速射砲',    type: 'secondary', ammo: 400, desc: '速射副砲・多装填',         cost: 350, minStage: 5 },
+  { id: 'weapon.secondary.pulse.30mm',   name: '30mm パルス機銃',  type: 'secondary', ammo: 1800, desc: '架空速射・対小型目標向け', cost: 760, minStage: 5 },
 
   // ── Torpedoes ────────────────────────────────────────────────────────────
   { id: 'weapon.torpedo.533mm.basic', name: '53.3cm 魚雷',   type: 'torpedo', ammo: 24, desc: '標準魚雷・取り回し良好',     cost: 400,  minStage: 1 },
@@ -36,6 +39,7 @@ export const WEAPON_SHOP: ShopWeapon[] = [
   { id: 'weapon.aa.heavy',    name: '重対空砲',       type: 'aa', ammo: 1200, desc: '汎用高威力対空砲',         cost: 500,  minStage: 5 },
   { id: 'weapon.aa.sam.cl',   name: '艦対空 SAM',    type: 'aa', ammo: 60,   desc: '超長射程・高高度対応',     cost: 700,  minStage: 5 },
   { id: 'weapon.aa.ciws.bb',  name: 'CIWS',          type: 'aa', ammo: 2400, desc: '近接防御・超高射速',       cost: 600,  minStage: 7 },
+  { id: 'weapon.aa.photon.ciws', name: '光子CIWS',    type: 'aa', ammo: 3600, desc: '非現実級・高命中近接防御', cost: 1400, minStage: 7 },
 
   // ── Missiles ────────────────────────────────────────────────────────────
   { id: 'weapon.missile.antiship.dd',          name: '対艦ミサイル(軽)',   type: 'missile', ammo: 16, desc: '標準的な対艦誘導弾',   cost: 500,  minStage: 1 },
@@ -44,6 +48,7 @@ export const WEAPON_SHOP: ShopWeapon[] = [
   { id: 'weapon.missile.cruise.cl',            name: '巡航ミサイル',      type: 'missile', ammo: 20, desc: '長射程・最大威力',     cost: 850,  minStage: 5 },
   { id: 'weapon.missile.battleship.longrange', name: '長射程ミサイル',    type: 'missile', ammo: 64, desc: '超長射程・最大火力',   cost: 1100, minStage: 5 },
   { id: 'weapon.missile.antiship.bb',          name: '対艦ミサイル(重)',   type: 'missile', ammo: 88, desc: '中射程・多装填',       cost: 900,  minStage: 5 },
+  { id: 'weapon.missile.dimension',             name: '次元誘導ミサイル',   type: 'missile', ammo: 18, desc: '架空誘導・高威力・高命中', cost: 2100, minStage: 7 },
 ]
 
 export const TYPE_JP: Record<WeaponType, string> = {
