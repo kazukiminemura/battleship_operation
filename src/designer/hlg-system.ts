@@ -98,23 +98,40 @@ const WEAPON_META: Record<string, { weight: number; firepower?: number; antiAir?
   'weapon.gun.406mm.twin': { weight: 1600, firepower: 105, reload: 32, accuracy: 0.72, barrels: 2 },
   'weapon.gun.406mm.he': { weight: 1550, firepower: 96, reload: 30, accuracy: 0.70, barrels: 2 },
   'weapon.gun.460mm': { weight: 2400, firepower: 145, reload: 40, accuracy: 0.70, barrels: 1 },
+  'weapon.gun.508mm.long': { weight: 3200, firepower: 185, reload: 48, accuracy: 0.68, barrels: 1 },
+  'weapon.gun.610mm.long': { weight: 4200, firepower: 240, reload: 58, accuracy: 0.64, barrels: 1 },
+  'weapon.gun.800mm.super': { weight: 6800, firepower: 330, reload: 78, accuracy: 0.58, barrels: 1 },
   'weapon.gun.1000mm.hyper': { weight: 9800, firepower: 420, reload: 95, accuracy: 0.52, barrels: 1 },
   'weapon.gun.rail.ultimate': { weight: 2600, firepower: 185, reload: 18, accuracy: 0.96, barrels: 1 },
+  'weapon.gun.particle': { weight: 3800, firepower: 250, reload: 24, accuracy: 0.92, barrels: 1 },
+  'weapon.gun.wave': { weight: 11000, firepower: 620, reload: 120, accuracy: 0.50, barrels: 1 },
   'weapon.secondary.127mm.twin': { weight: 200, firepower: 14, antiAir: 18, reload: 5, accuracy: 0.82, barrels: 2 },
   'weapon.secondary.100mm.cl': { weight: 180, firepower: 11, antiAir: 32, reload: 4, accuracy: 0.85, barrels: 2 },
   'weapon.secondary.152mm.twin': { weight: 600, firepower: 48, antiAir: 8, reload: 8, accuracy: 0.76, barrels: 2 },
   'weapon.secondary.127mm.bb': { weight: 260, firepower: 18, antiAir: 20, reload: 5, accuracy: 0.82, barrels: 2 },
   'weapon.secondary.pulse.30mm': { weight: 140, firepower: 10, antiAir: 44, reload: 0.7, accuracy: 0.92, barrels: 4 },
+  'weapon.secondary.gatling.203mm': { weight: 720, firepower: 38, antiAir: 16, reload: 2.4, accuracy: 0.72, barrels: 4 },
+  'weapon.secondary.vulcan.88mm': { weight: 280, firepower: 16, antiAir: 42, reload: 1.2, accuracy: 0.78, barrels: 2 },
+  'weapon.secondary.127mm.rapid': { weight: 260, firepower: 20, antiAir: 24, reload: 3.8, accuracy: 0.86, barrels: 1 },
+  'weapon.secondary.155mm.ags': { weight: 520, firepower: 48, antiAir: 12, reload: 5.5, accuracy: 0.88, barrels: 1 },
+  'weapon.secondary.neutrino': { weight: 900, firepower: 42, antiAir: 54, reload: 2.2, accuracy: 0.95, barrels: 1 },
   'weapon.torpedo.533mm.basic': { weight: 120, firepower: 80, reload: 75, accuracy: 0.88, barrels: 4 },
   'weapon.torpedo.610mm.dd': { weight: 200, firepower: 135, reload: 80, accuracy: 0.85, barrels: 4 },
   'weapon.torpedo.610mm.cl': { weight: 240, firepower: 145, reload: 85, accuracy: 0.84, barrels: 4 },
   'weapon.torpedo.610mm.bb': { weight: 280, firepower: 160, reload: 90, accuracy: 0.83, barrels: 4 },
+  'weapon.torpedo.1000mm.oxygen': { weight: 620, firepower: 280, reload: 120, accuracy: 0.72, barrels: 2 },
+  'weapon.torpedo.supersonic': { weight: 360, firepower: 150, reload: 65, accuracy: 0.94, barrels: 2 },
+  'weapon.torpedo.photon': { weight: 520, firepower: 240, reload: 90, accuracy: 0.92, barrels: 2 },
+  'weapon.torpedo.quantum': { weight: 700, firepower: 320, reload: 110, accuracy: 0.90, barrels: 2 },
   'weapon.aa.20mm.dd': { weight: 30, antiAir: 30, reload: 0.4, accuracy: 0.70, barrels: 2 },
   'weapon.aa.cruiser': { weight: 65, antiAir: 50, reload: 0.8, accuracy: 0.72, barrels: 2 },
   'weapon.aa.heavy': { weight: 120, antiAir: 72, reload: 1.5, accuracy: 0.75, barrels: 2 },
   'weapon.aa.sam.cl': { weight: 150, antiAir: 95, reload: 10, accuracy: 0.88, barrels: 2 },
   'weapon.aa.ciws.bb': { weight: 90, antiAir: 65, reload: 0.2, accuracy: 0.68, barrels: 2 },
   'weapon.aa.photon.ciws': { weight: 180, antiAir: 130, reload: 0.1, accuracy: 0.98, barrels: 4 },
+  'weapon.aa.allround.30mm': { weight: 95, antiAir: 78, reload: 0.45, accuracy: 0.82, barrels: 4 },
+  'weapon.aa.57mm.vulcan': { weight: 150, antiAir: 86, reload: 0.65, accuracy: 0.80, barrels: 2 },
+  'weapon.aa.pulse-laser': { weight: 260, antiAir: 155, reload: 0.18, accuracy: 0.97, barrels: 1 },
   'weapon.missile.antiship.dd': { weight: 160, firepower: 90, reload: 30, accuracy: 0.92, barrels: 4 },
   'weapon.missile.sam.dd': { weight: 90, antiAir: 85, reload: 12, accuracy: 0.90, barrels: 4 },
   'weapon.missile.cruiser.standard': { weight: 220, firepower: 110, reload: 28, accuracy: 0.91, barrels: 4 },
@@ -122,13 +139,48 @@ const WEAPON_META: Record<string, { weight: number; firepower?: number; antiAir?
   'weapon.missile.battleship.longrange': { weight: 350, firepower: 160, reload: 40, accuracy: 0.88, barrels: 4 },
   'weapon.missile.antiship.bb': { weight: 300, firepower: 140, reload: 32, accuracy: 0.90, barrels: 4 },
   'weapon.missile.dimension': { weight: 520, firepower: 260, reload: 55, accuracy: 0.99, barrels: 2 },
+  'weapon.missile.vls.multiwarhead': { weight: 420, firepower: 180, antiAir: 70, reload: 36, accuracy: 0.93, barrels: 4 },
+  'weapon.missile.vls.special': { weight: 520, firepower: 260, reload: 52, accuracy: 0.90, barrels: 2 },
+  'weapon.missile.large': { weight: 680, firepower: 300, reload: 65, accuracy: 0.86, barrels: 1 },
+  'weapon.missile.rocket.20cm': { weight: 260, firepower: 88, antiAir: 18, reload: 12, accuracy: 0.66, barrels: 12 },
 }
+
+const INSPIRED_BRIDGE_PARTS: HLGPartDefinition[] = [
+  { partId: 'part.bridge.dd.front.jp', name: '駆逐前艦橋（日）', category: 'bridge', footprint: scaledFootprint(3, 3), weight: 210, cost: 520, allowedShipClasses: ['destroyer'], allowedZones: ['fore', 'mid', 'deck'], provides: { command: 1, aaControl: 1 } },
+  { partId: 'part.bridge.dd.rear.us', name: '駆逐後艦橋（米）', category: 'bridge', footprint: scaledFootprint(3, 2), weight: 170, cost: 460, allowedShipClasses: ['destroyer'], allowedZones: ['mid', 'aft', 'deck'], provides: { command: 1 } },
+  { partId: 'part.bridge.ca.front.uk', name: '巡洋前艦橋（英）', category: 'bridge', footprint: scaledFootprint(4, 4), weight: 560, cost: 980, allowedShipClasses: ['cruiser'], allowedZones: ['fore', 'mid', 'deck'], provides: { command: 2, aaControl: 2 } },
+  { partId: 'part.bridge.ca.rear.de', name: '巡洋後艦橋（独）', category: 'bridge', footprint: scaledFootprint(4, 3), weight: 430, cost: 820, allowedShipClasses: ['cruiser'], allowedZones: ['mid', 'aft', 'deck'], provides: { command: 1, aaControl: 1 } },
+  { partId: 'part.bridge.bb.front.jp', name: '戦艦前艦橋（日）', category: 'bridge', footprint: scaledFootprint(5, 5), weight: 980, cost: 1600, allowedShipClasses: ['battleship'], allowedZones: ['fore', 'mid', 'deck'], provides: { command: 3, aaControl: 2 } },
+  { partId: 'part.bridge.bb.front.us', name: '戦艦前艦橋（米）', category: 'bridge', footprint: scaledFootprint(5, 4), weight: 940, cost: 1550, allowedShipClasses: ['battleship'], allowedZones: ['fore', 'mid', 'deck'], provides: { command: 3, aaControl: 3 } },
+  { partId: 'part.bridge.bb.rear.uk', name: '戦艦後艦橋（英）', category: 'bridge', footprint: scaledFootprint(4, 4), weight: 720, cost: 1200, allowedShipClasses: ['battleship'], allowedZones: ['mid', 'aft', 'deck'], provides: { command: 2, aaControl: 1 } },
+]
+
+const INSPIRED_AUX_PARTS: HLGPartDefinition[] = [
+  { partId: 'part.aux.em-barrier', name: '電磁防壁III', category: 'aux', footprint: scaledFootprint(3, 3), weight: 480, cost: 1300, allowedShipClasses: ['cruiser', 'battleship'], allowedZones: ['mid', 'internal'], requires: { power: 35 }, provides: { command: 1 } },
+  { partId: 'part.aux.radio-sight', name: '電波照準儀VI', category: 'aux', footprint: scaledFootprint(2, 2), weight: 120, cost: 620, allowedShipClasses: ['destroyer', 'cruiser', 'battleship'], allowedZones: ['fore', 'mid', 'deck'], provides: { aaControl: 1, accuracyAssist: 0.08 } },
+  { partId: 'part.aux.radio-jammer', name: '電波妨害装置VI', category: 'aux', footprint: scaledFootprint(2, 2), weight: 150, cost: 720, allowedShipClasses: ['destroyer', 'cruiser', 'battleship'], allowedZones: ['mid', 'deck'], requires: { power: 12 }, provides: { aaControl: 1 } },
+  { partId: 'part.aux.sonar', name: '新型探信儀', category: 'aux', footprint: scaledFootprint(2, 2), weight: 110, cost: 780, allowedShipClasses: ['destroyer', 'cruiser', 'battleship'], allowedZones: ['fore', 'mid', 'internal'], provides: { command: 1 } },
+  { partId: 'part.aux.fire-delay', name: '発砲遅延装置γ', category: 'aux', footprint: scaledFootprint(2, 2), weight: 130, cost: 760, allowedShipClasses: ['destroyer', 'cruiser', 'battleship'], allowedZones: ['mid', 'internal'], provides: { accuracyAssist: 0.06 } },
+  { partId: 'part.aux.autoload.gamma', name: '自動装填装置γ', category: 'aux', footprint: scaledFootprint(3, 3), weight: 360, cost: 1200, allowedShipClasses: ['cruiser', 'battleship'], allowedZones: ['mid', 'aft', 'internal'], requires: { power: 28 }, provides: { command: 1 } },
+  { partId: 'part.aux.damage-control', name: '自動消火装置VI', category: 'aux', footprint: scaledFootprint(2, 2), weight: 160, cost: 520, allowedShipClasses: ['destroyer', 'cruiser', 'battleship'], allowedZones: ['mid', 'internal'], provides: { command: 1 } },
+  { partId: 'part.aux.flood-control', name: '応急注排水装置VI', category: 'aux', footprint: scaledFootprint(2, 2), weight: 180, cost: 560, allowedShipClasses: ['destroyer', 'cruiser', 'battleship'], allowedZones: ['mid', 'internal'], provides: { command: 1 } },
+  { partId: 'part.aux.convergence', name: '収束強化装置γ', category: 'aux', footprint: scaledFootprint(3, 3), weight: 420, cost: 1600, allowedShipClasses: ['battleship'], allowedZones: ['mid', 'internal'], requires: { power: 45 }, provides: { accuracyAssist: 0.16 } },
+  { partId: 'part.aux.aegis', name: '超イージスシステム', category: 'aux', footprint: scaledFootprint(3, 3), weight: 260, cost: 1800, allowedShipClasses: ['cruiser', 'battleship'], allowedZones: ['fore', 'mid', 'deck'], requires: { power: 24 }, provides: { aaControl: 4, accuracyAssist: 0.10 } },
+  { partId: 'part.aux.burst-control', name: 'バースト射撃装置', category: 'aux', footprint: scaledFootprint(2, 2), weight: 220, cost: 1100, allowedShipClasses: ['cruiser', 'battleship'], allowedZones: ['mid', 'internal'], requires: { power: 18 }, provides: { accuracyAssist: 0.10 } },
+  { partId: 'part.aux.ammo-magazine', name: '補助弾薬庫', category: 'aux', footprint: scaledFootprint(3, 2), weight: 520, cost: 900, allowedShipClasses: ['cruiser', 'battleship'], allowedZones: ['mid', 'aft', 'internal'] },
+  { partId: 'part.aux.thruster', name: 'バウスラスター', category: 'aux', footprint: scaledFootprint(3, 2), weight: 260, cost: 850, allowedShipClasses: ['destroyer', 'cruiser', 'battleship'], allowedZones: ['fore', 'internal'], requires: { power: 22 } },
+  { partId: 'part.aux.steering', name: '新型操舵装置', category: 'aux', footprint: scaledFootprint(2, 2), weight: 180, cost: 820, allowedShipClasses: ['destroyer', 'cruiser', 'battleship'], allowedZones: ['aft', 'internal'], requires: { power: 10 }, provides: { command: 1 } },
+  { partId: 'part.aux.optical-camo', name: '光学迷彩装置', category: 'aux', footprint: scaledFootprint(4, 3), weight: 620, cost: 2200, allowedShipClasses: ['cruiser', 'battleship'], allowedZones: ['mid', 'internal'], requires: { power: 65 }, provides: { command: 1 } },
+  { partId: 'part.aux.satellite-vision', name: '衛星視界装置', category: 'aux', footprint: scaledFootprint(3, 3), weight: 340, cost: 2000, allowedShipClasses: ['cruiser', 'battleship'], allowedZones: ['fore', 'mid', 'deck'], requires: { power: 32 }, provides: { aaControl: 2, accuracyAssist: 0.18 } },
+  { partId: 'part.aux.infinite-loader', name: '無限装填装置', category: 'aux', footprint: scaledFootprint(4, 3), weight: 760, cost: 2600, allowedShipClasses: ['battleship'], allowedZones: ['mid', 'aft', 'internal'], requires: { power: 70 }, provides: { command: 2 } },
+]
 
 export const HLG_PARTS: HLGPartDefinition[] = [
   ...WEAPON_SHOP.map(toWeaponPart),
   { partId: 'part.bridge.dd', name: '小型艦橋', category: 'bridge', footprint: scaledFootprint(3, 3), weight: 180, cost: 400, allowedShipClasses: ['destroyer', 'cruiser'], allowedZones: ['fore', 'mid', 'deck'], provides: { command: 1 } },
   { partId: 'part.bridge.ca', name: '大型艦橋', category: 'bridge', footprint: scaledFootprint(4, 4), weight: 520, cost: 900, allowedShipClasses: ['cruiser', 'battleship'], allowedZones: ['fore', 'mid', 'deck'], provides: { command: 2, aaControl: 1 } },
   { partId: 'part.bridge.bb', name: '戦艦艦橋', category: 'bridge', footprint: scaledFootprint(5, 5), weight: 900, cost: 1400, allowedShipClasses: ['battleship'], allowedZones: ['fore', 'mid', 'deck'], provides: { command: 3, aaControl: 2 } },
+  ...INSPIRED_BRIDGE_PARTS,
   { partId: 'part.funnel.small', name: '小型煙突', category: 'funnel', footprint: scaledFootprint(2, 2), weight: 90, cost: 180, allowedShipClasses: ['destroyer', 'cruiser', 'battleship'], allowedZones: ['mid', 'aft', 'deck'], provides: { smokeExhaust: 35 } },
   { partId: 'part.funnel.large', name: '大型煙突', category: 'funnel', footprint: scaledFootprint(3, 3), weight: 220, cost: 360, allowedShipClasses: ['cruiser', 'battleship'], allowedZones: ['mid', 'aft', 'deck'], provides: { smokeExhaust: 75 } },
   { partId: 'part.boiler.light', name: '軽量ボイラー', category: 'boiler', footprint: scaledFootprint(3, 3), weight: 420, cost: 500, allowedShipClasses: ['destroyer', 'cruiser'], allowedZones: ['mid', 'aft', 'internal'], requires: { funnelCapacity: 25 }, provides: { power: 55 } },
@@ -140,6 +192,7 @@ export const HLG_PARTS: HLGPartDefinition[] = [
   { partId: 'part.aux.fantasy-radar', name: '超越照準レーダー', category: 'aux', footprint: scaledFootprint(3, 3), weight: 180, cost: 1200, allowedShipClasses: ['destroyer', 'cruiser', 'battleship'], allowedZones: ['fore', 'mid', 'deck'], provides: { aaControl: 3, accuracyAssist: 0.18 } },
   { partId: 'part.aux.gravity-stabilizer', name: '重力安定装置', category: 'aux', footprint: scaledFootprint(4, 3), weight: 520, cost: 1600, allowedShipClasses: ['cruiser', 'battleship'], allowedZones: ['mid', 'internal'], requires: { power: 40 }, provides: { accuracyAssist: 0.12 } },
   { partId: 'part.aux.auto-loader', name: '無限装填補助機', category: 'aux', footprint: scaledFootprint(3, 3), weight: 420, cost: 1500, allowedShipClasses: ['battleship'], allowedZones: ['mid', 'aft', 'internal'], requires: { power: 35 }, provides: { command: 1 } },
+  ...INSPIRED_AUX_PARTS,
   { partId: 'part.armor.bulkhead', name: '防御区画', category: 'armor', footprint: scaledFootprint(4, 3), weight: 700, cost: 500, allowedShipClasses: ['cruiser', 'battleship'], allowedZones: ['mid', 'internal'] },
 ]
 
@@ -452,7 +505,11 @@ function toWeaponPart(weapon: (typeof WEAPON_SHOP)[number]): HLGPartDefinition {
 
 function weaponFootprintFor(id: string, type: WeaponType): HLGFootprint {
   if (type === 'gun') {
+    if (id.includes('wave')) return scaledFootprint(9, 5)
     if (id.includes('1000mm')) return scaledFootprint(8, 5)
+    if (id.includes('800mm')) return scaledFootprint(7, 5)
+    if (id.includes('610mm')) return scaledFootprint(6, 4)
+    if (id.includes('508mm') || id.includes('particle')) return scaledFootprint(5, 4)
     if (id.includes('rail')) return scaledFootprint(5, 2)
     if (id.includes('460mm')) return scaledFootprint(5, 4)
     if (id.includes('406mm')) return scaledFootprint(4, 3)
@@ -460,10 +517,10 @@ function weaponFootprintFor(id: string, type: WeaponType): HLGFootprint {
     if (id.includes('152mm')) return scaledFootprint(3, 2)
     return scaledFootprint(2, 2)
   }
-  if (type === 'secondary') return id.includes('152mm') ? scaledFootprint(3, 2) : id.includes('pulse') ? scaledFootprint(2, 2) : scaledFootprint(2, 1)
-  if (type === 'torpedo') return id.includes('610mm') ? scaledFootprint(4, 1) : scaledFootprint(3, 1)
-  if (type === 'missile') return id.includes('dimension') ? scaledFootprint(4, 4) : id.includes('longrange') || id.includes('cruise') ? scaledFootprint(3, 3) : scaledFootprint(2, 2)
-  if (type === 'aa') return id.includes('ciws') || id.includes('20mm') ? scaledFootprint(1, 1) : scaledFootprint(2, 2)
+  if (type === 'secondary') return id.includes('203mm') || id.includes('neutrino') ? scaledFootprint(3, 2) : id.includes('152mm') || id.includes('155mm') ? scaledFootprint(3, 2) : id.includes('pulse') ? scaledFootprint(2, 2) : scaledFootprint(2, 1)
+  if (type === 'torpedo') return id.includes('1000mm') || id.includes('quantum') || id.includes('photon') ? scaledFootprint(5, 1) : id.includes('610mm') ? scaledFootprint(4, 1) : scaledFootprint(3, 1)
+  if (type === 'missile') return id.includes('large') || id.includes('dimension') ? scaledFootprint(4, 4) : id.includes('multiwarhead') || id.includes('special') || id.includes('longrange') || id.includes('cruise') ? scaledFootprint(3, 3) : id.includes('rocket') ? scaledFootprint(3, 2) : scaledFootprint(2, 2)
+  if (type === 'aa') return id.includes('ciws') || id.includes('20mm') || id.includes('allround') ? scaledFootprint(1, 1) : scaledFootprint(2, 2)
   return scaledFootprint(2, 2)
 }
 
@@ -474,8 +531,8 @@ function zonesForWeapon(type: WeaponType): HLGZone[] {
 }
 
 function shipClassesForWeapon(id: string): PlayerShipType[] {
-  if (id.includes('.bb') || id.includes('406mm') || id.includes('460mm') || id.includes('1000mm') || id.includes('rail') || id.includes('dimension') || id.includes('battleship')) return ['battleship']
-  if (id.includes('.cl') || id.includes('cruiser') || id.includes('203mm')) return ['cruiser', 'battleship']
+  if (id.includes('.bb') || id.includes('406mm') || id.includes('460mm') || id.includes('508mm') || id.includes('610mm.long') || id.includes('800mm') || id.includes('1000mm') || id.includes('wave') || id.includes('particle') || id.includes('rail') || id.includes('dimension') || id.includes('battleship')) return ['battleship']
+  if (id.includes('.cl') || id.includes('cruiser') || id.includes('203mm') || id.includes('155mm') || id.includes('large') || id.includes('multiwarhead') || id.includes('special') || id.includes('neutrino')) return ['cruiser', 'battleship']
   return ['destroyer', 'cruiser', 'battleship']
 }
 
