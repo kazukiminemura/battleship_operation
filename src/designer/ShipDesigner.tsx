@@ -38,6 +38,7 @@ import {
   type ArmorDefenseKey,
 } from './hlg-system'
 import type { PlayerShipType } from '../game/data/masterdata'
+import type { HullCatalogEntry } from '../game/data/hull-catalog'
 import { MAX_WEAPON_SLOTS } from '../game/simulation/types'
 import type { PrepResult } from './types'
 import { firingArcForWeapon, firingArcLabel, type FiringArc } from '../game/simulation/firing-arcs'
@@ -207,10 +208,12 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
       showToast('この位置には配置できません')
       return
     }
-    const component = makeComponent(selectedPart, cell, rotation, weaponSlot)
+    const components = makePlacementComponents(hull, design, selectedPart, cell, rotation, weaponSlot)
+    const component = components[0]
+    if (!component) return
     setDesign(prev => ({
       ...prev,
-      components: [...prev.components, component],
+      components: [...prev.components, ...components],
     }))
     setSelectedComponentId(component.instanceId)
     if (weaponSlot != null) setSelectedWeaponSlot(weaponSlot)
@@ -227,10 +230,12 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
       showToast('この位置には配置できません')
       return false
     }
-    const component = makeComponent(part, cell, rotation, weaponSlot)
+    const components = makePlacementComponents(hull, design, part, cell, rotation, weaponSlot)
+    const component = components[0]
+    if (!component) return false
     setDesign(prev => ({
       ...prev,
-      components: [...prev.components, component],
+      components: [...prev.components, ...components],
     }))
     setSelectedComponentId(component.instanceId)
     if (weaponSlot != null) setSelectedWeaponSlot(weaponSlot)
@@ -893,19 +898,40 @@ function HLGGrid({
             cell: placementPreviewCell,
             rotation,
             barrels: selectedPart.barrels,
+            weaponSlot: selectedPart.type ? selectedWeaponSlot ?? undefined : undefined,
           }
           const rect = componentRect(previewComponent, selectedPart)
           const valid = canPlaceHLGPart(hull, design, selectedPart, placementPreviewCell, rotation, selectedWeaponSlot ?? undefined)
+          const mirroredCell = mirroredPlacementCell(hull, placementPreviewCell)
+          const mirrorPreview = mirroredCell && valid ? (() => {
+            const withOriginal = { ...design, components: [...design.components, previewComponent] }
+            const mirrorValid = canPlaceHLGPart(hull, withOriginal, selectedPart, mirroredCell, rotation, selectedWeaponSlot ?? undefined)
+            const mirroredComponent = { ...previewComponent, instanceId: 'placement-preview-mirror', cell: mirroredCell }
+            return { rect: componentRect(mirroredComponent, selectedPart), valid: mirrorValid }
+          })() : null
           return (
-            <div
-              className={`sd-hlg-placement-ghost sd-hlg-component--${selectedPart.category}${valid ? ' sd-hlg-placement-ghost--valid' : ' sd-hlg-placement-ghost--invalid'}`}
-              style={{
-                gridColumn: `${Math.floor(rect.top) + 1} / span ${Math.ceil(footprint.h)}`,
-                gridRow: `${Math.floor(rect.left) + 1} / span ${Math.ceil(footprint.w)}`,
-              }}
-            >
-              <span>{shortPartName(selectedPart)}</span>
-            </div>
+            <>
+              <div
+                className={`sd-hlg-placement-ghost sd-hlg-component--${selectedPart.category}${valid ? ' sd-hlg-placement-ghost--valid' : ' sd-hlg-placement-ghost--invalid'}`}
+                style={{
+                  gridColumn: `${Math.floor(rect.top) + 1} / span ${Math.ceil(footprint.h)}`,
+                  gridRow: `${Math.floor(rect.left) + 1} / span ${Math.ceil(footprint.w)}`,
+                }}
+              >
+                <span>{shortPartName(selectedPart)}</span>
+              </div>
+              {mirrorPreview && (
+                <div
+                  className={`sd-hlg-placement-ghost sd-hlg-placement-ghost--mirror sd-hlg-component--${selectedPart.category}${mirrorPreview.valid ? ' sd-hlg-placement-ghost--valid' : ' sd-hlg-placement-ghost--invalid'}`}
+                  style={{
+                    gridColumn: `${Math.floor(mirrorPreview.rect.top) + 1} / span ${Math.ceil(footprint.h)}`,
+                    gridRow: `${Math.floor(mirrorPreview.rect.left) + 1} / span ${Math.ceil(footprint.w)}`,
+                  }}
+                >
+                  <span>対称</span>
+                </div>
+              )}
+            </>
           )
         })()}
         {design.components.map(component => {
@@ -1486,6 +1512,33 @@ function componentsShareDesignerLayer(a: HLGPartDefinition, b: HLGPartDefinition
 
 function designerLayerForPart(part: HLGPartDefinition): 'internal' | 'deck' {
   return part.category === 'boiler' || part.category === 'turbine' ? 'internal' : 'deck'
+}
+
+function makePlacementComponents(
+  hull: HullCatalogEntry,
+  design: HLGDesign,
+  part: HLGPartDefinition,
+  cell: HLGCell,
+  rotation: HLGRotation,
+  weaponSlot?: number,
+): HLGComponentInstance[] {
+  const component = makeComponent(part, cell, rotation, weaponSlot)
+  const components = [component]
+  const mirroredCell = mirroredPlacementCell(hull, cell)
+  if (!mirroredCell) return components
+  const withOriginal = { ...design, components: [...design.components, component] }
+  if (canPlaceHLGPart(hull, withOriginal, part, mirroredCell, rotation, weaponSlot)) {
+    components.push(makeComponent(part, mirroredCell, rotation, weaponSlot))
+  }
+  return components
+}
+
+function mirroredPlacementCell(hull: HullCatalogEntry, cell: HLGCell): HLGCell | null {
+  const spec = hlgGridSpec(hull)
+  if (cell.c === spec.centerC) return null
+  const c = spec.centerC * 2 - cell.c
+  if (c < 0 || c >= spec.cols) return null
+  return { c, r: cell.r }
 }
 
 function isPalettePartDrag(event: ReactDragEvent<HTMLElement>): boolean {

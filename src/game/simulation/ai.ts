@@ -146,6 +146,13 @@ export function generateAutoPilotCommands(state: CombatState): Command[] {
   const tick = state.tick
   const cmds: Command[] = []
 
+  const collisionAvoidance = enemyCollisionAvoidance(ship, state)
+  if (collisionAvoidance) {
+    cmds.push({ tick, actorId, type: 'rotate', value: collisionAvoidance.steer * ship.turnRate })
+    cmds.push({ tick, actorId, type: 'move', value: ship.maxSpeed * collisionAvoidance.speedFactor })
+    return cmds
+  }
+
   // Obstacle avoidance has top priority
   const steer = obstacleSteer(ship, state.mapObstacles)
   if (steer !== 0) {
@@ -186,6 +193,33 @@ function findTarget(state: CombatState, ship: ShipEntity): Vec3 | undefined {
   if (buildings.length > 0) return nearest(ship.pos, buildings.map(b => b.pos))
 
   return undefined
+}
+
+function enemyCollisionAvoidance(ship: ShipEntity, state: CombatState): { steer: number; speedFactor: number } | null {
+  const AVOID_RADIUS = 760
+  const EMERGENCY_RADIUS = 360
+  const FORWARD_ARC = Math.PI * 0.72
+
+  let nearestThreat: ShipEntity | undefined
+  let nearestThreatDist = Infinity
+  let nearestThreatRel = 0
+  for (const entity of state.entities.values()) {
+    if (!isShip(entity) || entity.team !== 'enemy' || entity.destroyed) continue
+    const dx = entity.pos.x - ship.pos.x
+    const dy = entity.pos.y - ship.pos.y
+    const dist = Math.sqrt(dx * dx + dy * dy)
+    if (dist > AVOID_RADIUS || dist >= nearestThreatDist) continue
+    const rel = normalizeAngle(Math.atan2(dy, dx) - ship.angle)
+    if (Math.abs(rel) > FORWARD_ARC && dist > EMERGENCY_RADIUS) continue
+    nearestThreat = entity
+    nearestThreatDist = dist
+    nearestThreatRel = rel
+  }
+
+  if (!nearestThreat) return null
+  const side = nearestThreatRel >= 0 ? -1 : 1
+  const speedFactor = nearestThreatDist < EMERGENCY_RADIUS ? 0.25 : 0.55
+  return { steer: side, speedFactor }
 }
 
 

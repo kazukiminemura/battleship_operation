@@ -91,6 +91,8 @@ export class ScreenManager {
     this.d.start.detach()
     this.d.results.detach()
     this.d.stageIntro.detach()
+    this.d.briefingVoice.stop()
+    this.d.sound.setBgmEnabled(this.d.sound.isBgmEnabled(), 'prep')
     if (!this.designerRoot) this.designerRoot = createRoot(el)
     this.designerRoot.render(createElement(ShipDesigner, { onClose, onConfirm, initialResult }))
   }
@@ -104,6 +106,7 @@ export class ScreenManager {
     if (restoreToStart && this._mode === 'designer') {
       this._mode = 'start'
       this.d.start.attach()
+      this.d.sound.setBgmEnabled(this.d.sound.isBgmEnabled(), 'title')
     }
   }
 }

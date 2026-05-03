@@ -712,6 +712,18 @@
     inset 0 0 18px rgba(74, 222, 128, 0.18);
 }
 
+.sd-hlg-placement-ghost--mirror {
+  z-index: 4;
+  border-style: dashed;
+  border-color: rgba(125, 211, 252, 0.95);
+  background: rgba(14, 116, 144, 0.38);
+  color: #e0f2fe;
+  box-shadow:
+    0 0 0 1px rgba(56, 189, 248, 0.34),
+    inset 0 0 18px rgba(56, 189, 248, 0.20),
+    0 0 16px rgba(56, 189, 248, 0.30);
+}
+
 .sd-hlg-placement-ghost--invalid {
   border-color: rgba(248, 113, 113, 0.92);
   background: rgba(127, 29, 29, 0.58);
