@@ -29,7 +29,7 @@ const HULL_CARDS: HullCard[] = [
 // Stat display max references
 const MAX_DAMAGE = 200
 const MAX_RANGE  = 3200
-const MAX_COOLDOWN = 140  // highest cooldown in the game
+const MAX_COOLDOWN = 2700  // 90 seconds at the 30 Hz combat tick rate
 
 const WEAPON_TYPE_JP: Record<string, string> = {
   gun: '主砲', secondary: '副砲', torpedo: '魚雷', aa: '対空', missile: '誘導',

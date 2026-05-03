@@ -86,32 +86,32 @@ const MAX_WEIGHT: Record<PlayerShipType, number> = {
 }
 
 const WEAPON_META: Record<string, { weight: number; firepower?: number; antiAir?: number; reload: number; accuracy: number; barrels: number }> = {
-  'weapon.gun.127mm.twin': { weight: 300, firepower: 20, reload: 3, accuracy: 0.80, barrels: 2 },
-  'weapon.gun.127mm.ap': { weight: 360, firepower: 27, reload: 4, accuracy: 0.76, barrels: 2 },
-  'weapon.gun.152mm.twin': { weight: 520, firepower: 38, reload: 5, accuracy: 0.78, barrels: 2 },
-  'weapon.gun.203mm': { weight: 850, firepower: 65, reload: 8, accuracy: 0.75, barrels: 1 },
-  'weapon.gun.406mm.twin': { weight: 1600, firepower: 105, reload: 18, accuracy: 0.72, barrels: 2 },
-  'weapon.gun.406mm.he': { weight: 1550, firepower: 96, reload: 17, accuracy: 0.70, barrels: 2 },
-  'weapon.gun.460mm': { weight: 2400, firepower: 145, reload: 26, accuracy: 0.70, barrels: 1 },
-  'weapon.secondary.127mm.twin': { weight: 200, firepower: 14, antiAir: 18, reload: 2, accuracy: 0.82, barrels: 2 },
-  'weapon.secondary.100mm.cl': { weight: 180, firepower: 11, antiAir: 32, reload: 2, accuracy: 0.85, barrels: 2 },
-  'weapon.secondary.152mm.twin': { weight: 600, firepower: 48, antiAir: 8, reload: 6, accuracy: 0.76, barrels: 2 },
-  'weapon.secondary.127mm.bb': { weight: 260, firepower: 18, antiAir: 20, reload: 2, accuracy: 0.82, barrels: 2 },
-  'weapon.torpedo.533mm.basic': { weight: 120, firepower: 80, reload: 15, accuracy: 0.88, barrels: 4 },
-  'weapon.torpedo.610mm.dd': { weight: 200, firepower: 135, reload: 22, accuracy: 0.85, barrels: 4 },
-  'weapon.torpedo.610mm.cl': { weight: 240, firepower: 145, reload: 22, accuracy: 0.84, barrels: 4 },
-  'weapon.torpedo.610mm.bb': { weight: 280, firepower: 160, reload: 25, accuracy: 0.83, barrels: 4 },
-  'weapon.aa.20mm.dd': { weight: 30, antiAir: 30, reload: 0.5, accuracy: 0.70, barrels: 2 },
-  'weapon.aa.cruiser': { weight: 65, antiAir: 50, reload: 1.0, accuracy: 0.72, barrels: 2 },
-  'weapon.aa.heavy': { weight: 120, antiAir: 72, reload: 2.0, accuracy: 0.75, barrels: 2 },
-  'weapon.aa.sam.cl': { weight: 150, antiAir: 95, reload: 5.0, accuracy: 0.88, barrels: 2 },
-  'weapon.aa.ciws.bb': { weight: 90, antiAir: 65, reload: 0.3, accuracy: 0.68, barrels: 2 },
-  'weapon.missile.antiship.dd': { weight: 160, firepower: 90, reload: 10, accuracy: 0.92, barrels: 4 },
-  'weapon.missile.sam.dd': { weight: 90, antiAir: 85, reload: 5, accuracy: 0.90, barrels: 4 },
-  'weapon.missile.cruiser.standard': { weight: 220, firepower: 110, reload: 11, accuracy: 0.91, barrels: 4 },
-  'weapon.missile.cruise.cl': { weight: 320, firepower: 150, reload: 18, accuracy: 0.88, barrels: 2 },
-  'weapon.missile.battleship.longrange': { weight: 350, firepower: 160, reload: 18, accuracy: 0.88, barrels: 4 },
-  'weapon.missile.antiship.bb': { weight: 300, firepower: 140, reload: 13, accuracy: 0.90, barrels: 4 },
+  'weapon.gun.127mm.twin': { weight: 300, firepower: 20, reload: 7, accuracy: 0.80, barrels: 2 },
+  'weapon.gun.127mm.ap': { weight: 360, firepower: 27, reload: 7.5, accuracy: 0.76, barrels: 2 },
+  'weapon.gun.152mm.twin': { weight: 520, firepower: 38, reload: 10, accuracy: 0.78, barrels: 2 },
+  'weapon.gun.203mm': { weight: 850, firepower: 65, reload: 15, accuracy: 0.75, barrels: 1 },
+  'weapon.gun.406mm.twin': { weight: 1600, firepower: 105, reload: 32, accuracy: 0.72, barrels: 2 },
+  'weapon.gun.406mm.he': { weight: 1550, firepower: 96, reload: 30, accuracy: 0.70, barrels: 2 },
+  'weapon.gun.460mm': { weight: 2400, firepower: 145, reload: 40, accuracy: 0.70, barrels: 1 },
+  'weapon.secondary.127mm.twin': { weight: 200, firepower: 14, antiAir: 18, reload: 5, accuracy: 0.82, barrels: 2 },
+  'weapon.secondary.100mm.cl': { weight: 180, firepower: 11, antiAir: 32, reload: 4, accuracy: 0.85, barrels: 2 },
+  'weapon.secondary.152mm.twin': { weight: 600, firepower: 48, antiAir: 8, reload: 8, accuracy: 0.76, barrels: 2 },
+  'weapon.secondary.127mm.bb': { weight: 260, firepower: 18, antiAir: 20, reload: 5, accuracy: 0.82, barrels: 2 },
+  'weapon.torpedo.533mm.basic': { weight: 120, firepower: 80, reload: 75, accuracy: 0.88, barrels: 4 },
+  'weapon.torpedo.610mm.dd': { weight: 200, firepower: 135, reload: 80, accuracy: 0.85, barrels: 4 },
+  'weapon.torpedo.610mm.cl': { weight: 240, firepower: 145, reload: 85, accuracy: 0.84, barrels: 4 },
+  'weapon.torpedo.610mm.bb': { weight: 280, firepower: 160, reload: 90, accuracy: 0.83, barrels: 4 },
+  'weapon.aa.20mm.dd': { weight: 30, antiAir: 30, reload: 0.4, accuracy: 0.70, barrels: 2 },
+  'weapon.aa.cruiser': { weight: 65, antiAir: 50, reload: 0.8, accuracy: 0.72, barrels: 2 },
+  'weapon.aa.heavy': { weight: 120, antiAir: 72, reload: 1.5, accuracy: 0.75, barrels: 2 },
+  'weapon.aa.sam.cl': { weight: 150, antiAir: 95, reload: 10, accuracy: 0.88, barrels: 2 },
+  'weapon.aa.ciws.bb': { weight: 90, antiAir: 65, reload: 0.2, accuracy: 0.68, barrels: 2 },
+  'weapon.missile.antiship.dd': { weight: 160, firepower: 90, reload: 30, accuracy: 0.92, barrels: 4 },
+  'weapon.missile.sam.dd': { weight: 90, antiAir: 85, reload: 12, accuracy: 0.90, barrels: 4 },
+  'weapon.missile.cruiser.standard': { weight: 220, firepower: 110, reload: 28, accuracy: 0.91, barrels: 4 },
+  'weapon.missile.cruise.cl': { weight: 320, firepower: 150, reload: 45, accuracy: 0.88, barrels: 2 },
+  'weapon.missile.battleship.longrange': { weight: 350, firepower: 160, reload: 40, accuracy: 0.88, barrels: 4 },
+  'weapon.missile.antiship.bb': { weight: 300, firepower: 140, reload: 32, accuracy: 0.90, barrels: 4 },
 }
 
 export const HLG_PARTS: HLGPartDefinition[] = [
@@ -373,7 +373,7 @@ export function migrateLegacyDesignerState(hull: HullCatalogEntry, legacy: unkno
 }
 
 function toWeaponPart(weapon: (typeof WEAPON_SHOP)[number]): HLGPartDefinition {
-  const meta = WEAPON_META[weapon.id] ?? { weight: Math.max(60, Math.round(weapon.cost * 0.42)), reload: 3, accuracy: 0.75, barrels: defaultBarrelsForType(weapon.type) }
+  const meta = WEAPON_META[weapon.id] ?? { weight: Math.max(60, Math.round(weapon.cost * 0.42)), reload: defaultReloadForType(weapon.type), accuracy: 0.75, barrels: defaultBarrelsForType(weapon.type) }
   return {
     partId: `part.weapon.${weapon.id}`,
     name: weapon.name,
@@ -527,6 +527,14 @@ function defaultBarrelsForType(type: WeaponType): number {
   if (type === 'torpedo' || type === 'missile') return 4
   if (type === 'aa' || type === 'secondary') return 2
   return 1
+}
+
+function defaultReloadForType(type: WeaponType): number {
+  if (type === 'aa') return 0.8
+  if (type === 'secondary') return 6
+  if (type === 'torpedo') return 75
+  if (type === 'missile') return 25
+  return 10
 }
 
 function propulsionTarget(shipClass: PlayerShipType): number {

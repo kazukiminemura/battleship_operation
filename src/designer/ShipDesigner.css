@@ -7,6 +7,9 @@
   --sd-dim:      #3a5840;
   --sd-accent:   #16a34a;
   --sd-header-h: 34px;
+  --sd-panel-left-w: 142px;
+  --sd-panel-right-w: 164px;
+  --sd-browser-center-offset: calc((var(--sd-panel-right-w) - var(--sd-panel-left-w)) / 2);
 }
 
 /* ── Root layout ─────────────────────────────────────────────────────────── */
@@ -112,13 +115,13 @@
 .sd-panel::-webkit-scrollbar-thumb { background: var(--sd-border); border-radius: 3px; }
 
 .sd-panel-left {
-  width: 142px;
+  width: var(--sd-panel-left-w);
   border-right: 1px solid var(--sd-border);
   padding: 6px 5px;
 }
 
 .sd-panel-right {
-  width: 164px;
+  width: var(--sd-panel-right-w);
   border-left: 1px solid var(--sd-border);
   padding: 6px 6px;
 }
@@ -223,12 +226,14 @@
 
 /* ── Freeform grid designer ─────────────────────────────────────────────── */
 .sd-hlg-stage {
-  width: min(1600px, calc(100vw - 312px));
+  width: min(1600px, calc(100vw - var(--sd-panel-left-w) - var(--sd-panel-right-w) - 6px));
   max-width: calc(100% - 2px);
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 3px;
+  margin-left: var(--sd-browser-center-offset);
+  margin-right: calc(-1 * var(--sd-browser-center-offset));
 }
 
 .sd-hlg-filter {
@@ -595,6 +600,7 @@
   font-size: 10px;
   color: var(--sd-dim);
   opacity: 0.7;
+  transform: translateX(var(--sd-browser-center-offset));
 }
 
 /* ── Placement editor ───────────────────────────────────────────────────── */
@@ -1146,6 +1152,7 @@
   display: flex;
   gap: 4px;
   flex-shrink: 0;
+  transform: translateX(var(--sd-browser-center-offset));
 }
 
 .sd-hull-tab {

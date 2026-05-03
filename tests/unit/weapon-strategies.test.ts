@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { getWeaponConfig, getWeaponStrategy, WEAPON_CONFIGS } from '../../src/game/simulation/weapon-strategies'
+import { TICKS_PER_SECOND } from '../../src/game/simulation/ticker'
 import type { BuildingEntity } from '../../src/game/simulation/types'
 
 function building(team: BuildingEntity['team'] = 'enemy'): BuildingEntity {
@@ -39,5 +40,12 @@ describe('weapon strategies', () => {
       .toBeGreaterThan(WEAPON_CONFIGS.gun.maxRange)
     expect(getWeaponConfig('weapon.missile.battleship.longrange', 'missile').maxRange)
       .toBeGreaterThan(WEAPON_CONFIGS.missile.maxRange)
+  })
+
+  it('uses realistic reload windows for representative weapons', () => {
+    expect(getWeaponConfig('weapon.gun.406mm.twin', 'gun').cooldown).toBe(32 * TICKS_PER_SECOND)
+    expect(getWeaponConfig('weapon.gun.460mm', 'gun').cooldown).toBe(40 * TICKS_PER_SECOND)
+    expect(getWeaponConfig('weapon.torpedo.610mm.dd', 'torpedo').cooldown).toBe(80 * TICKS_PER_SECOND)
+    expect(getWeaponConfig('weapon.aa.ciws.bb', 'aa').cooldown).toBeLessThan(TICKS_PER_SECOND)
   })
 })

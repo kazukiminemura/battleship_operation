@@ -235,7 +235,7 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
   const handleSave = () => { saveDesign(design); showToast('自由配置設計を保存しました') }
   const handleLoad = () => { replaceDesign(loadDesignerState(hull).design); showToast('自由配置設計を読み込みました') }
 
-  const handleDeploy = () => {
+  const handleDeploy = useCallback(() => {
     if (!onConfirm) return
     const latestStats = calcStats(design, hull)
     if (!latestStats.canDeploy) {
@@ -251,7 +251,18 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
       hlgDesign: cloneHLGDesign(design),
       towerMount: designTowerMount(hull, design),
     })
-  }
+  }, [design, hull, onConfirm])
+
+  useEffect(() => {
+    if (step !== 'design' || !onConfirm) return
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.code !== 'Space' || event.repeat || isTextEntryTarget(event.target)) return
+      event.preventDefault()
+      handleDeploy()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [handleDeploy, onConfirm, step])
 
   if (step === 'ship-select') {
     return (
@@ -716,6 +727,13 @@ function shortPartName(part: HLGPartDefinition): string {
   if (part.type === 'aa') return '対'
   if (part.type === 'missile') return '誘'
   return '兵'
+}
+
+function isTextEntryTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  if (target.isContentEditable) return true
+  const tagName = target.tagName.toLowerCase()
+  return tagName === 'input' || tagName === 'textarea' || tagName === 'select'
 }
 
 function showToast(msg: string) {

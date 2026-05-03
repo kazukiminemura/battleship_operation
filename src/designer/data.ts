@@ -28,7 +28,7 @@ export const WEAPONS: Weapon[] = WEAPON_SHOP.map(weapon => ({
   weight: Math.max(40, Math.round(weapon.cost * 0.42)),
   firepower: weapon.type === 'gun' || weapon.type === 'torpedo' || weapon.type === 'missile' ? Math.max(10, Math.round(weapon.cost * 0.08)) : undefined,
   antiAir: weapon.type === 'aa' || weapon.type === 'secondary' ? Math.max(8, Math.round(weapon.cost * 0.09)) : undefined,
-  reload: weapon.type === 'aa' ? 1 : weapon.type === 'torpedo' ? 18 : weapon.type === 'missile' ? 10 : 5,
+  reload: weapon.type === 'aa' ? 0.8 : weapon.type === 'torpedo' ? 75 : weapon.type === 'missile' ? 25 : weapon.type === 'secondary' ? 6 : 10,
   accuracy: weapon.type === 'missile' ? 0.9 : weapon.type === 'torpedo' ? 0.84 : 0.76,
 }))
 
