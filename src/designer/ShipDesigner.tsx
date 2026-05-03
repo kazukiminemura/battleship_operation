@@ -18,6 +18,7 @@ import {
 import {
   HLG_PARTS,
   HLG_PART_BY_ID,
+  ARMOR_DEFENSE_OPTIONS,
   canPlaceHLGPart,
   cloneHLGDesign,
   componentRect,
@@ -34,6 +35,7 @@ import {
   type HLGDesign,
   type HLGPartDefinition,
   type HLGRotation,
+  type ArmorDefenseKey,
 } from './hlg-system'
 import type { PlayerShipType } from '../game/data/masterdata'
 import { MAX_WEAPON_SLOTS } from '../game/simulation/types'
@@ -68,6 +70,14 @@ const CATEGORY_LABEL: Record<HLGComponentCategory | 'all', string> = {
   armor: '装甲',
 }
 
+const WEAPON_TYPE_LABEL: Record<NonNullable<HLGPartDefinition['type']>, string> = {
+  gun: '主砲',
+  secondary: '副砲・速射砲',
+  torpedo: '魚雷',
+  aa: '対空兵装',
+  missile: 'ミサイル・噴進砲',
+}
+
 function partSystemMeta(part: HLGPartDefinition): string {
   const notes: string[] = []
   if (part.provides?.power) {
@@ -93,6 +103,7 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
   const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null)
   const [selectedWeaponSlot, setSelectedWeaponSlot] = useState<number | null>(null)
   const [partFilter, setPartFilter] = useState<HLGComponentCategory | 'all'>('all')
+  const [collapsedPaletteGroups, setCollapsedPaletteGroups] = useState<Set<string>>(() => new Set())
   const [draggingPartId, setDraggingPartId] = useState<string | null>(null)
   const [paletteDrag, setPaletteDrag] = useState<PaletteDragState | null>(null)
   const [paletteDrop, setPaletteDrop] = useState<PaletteDropState | null>(null)
@@ -108,10 +119,19 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
     () => HLG_PARTS.filter(part => part.allowedShipClasses.includes(shipType) && (partFilter === 'all' || part.category === partFilter)),
     [partFilter, shipType],
   )
+  const paletteGroups = useMemo(() => groupPaletteParts(visibleParts), [visibleParts])
   const selectedPart = selectedPartId ? HLG_PART_BY_ID[selectedPartId] : undefined
   const placementPart = draggingPartId ? HLG_PART_BY_ID[draggingPartId] ?? selectedPart : selectedPart
   const selectedComponent = design.components.find(component => component.instanceId === selectedComponentId) ?? null
   const selectedPlacementSlot = selectedPart?.type ? selectedWeaponSlot : null
+  const togglePaletteGroup = (label: string) => {
+    setCollapsedPaletteGroups(current => {
+      const next = new Set(current)
+      if (next.has(label)) next.delete(label)
+      else next.add(label)
+      return next
+    })
+  }
 
   useEffect(() => {
     paletteDragRef.current = paletteDrag
@@ -369,6 +389,9 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
   }
 
   const handleReset = () => replaceDesign(defaultHLGDesign(hull))
+  const handleArmorChange = (field: 'belt' | 'deck', value: ArmorDefenseKey) => {
+    setDesign(prev => ({ ...prev, armorPlan: { ...prev.armorPlan, [field]: value } }))
+  }
   const handleResetWeapons = () => {
     const weaponIds = new Set(HLG_PARTS.filter(part => part.type).map(part => part.partId))
     setDesign(prev => ({
@@ -395,7 +418,7 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
       templateId: hull.templateId,
       shipType: hull.shipType,
       loadout: designToLoadout(design, hull),
-      armorBonus: design.armorPlan.belt,
+      armorBonus: latestStats.armorDefense,
       hlgDesign: cloneHLGDesign(design),
       towerMount: designTowerMount(hull, design),
     })
@@ -482,17 +505,26 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
             ))}
           </div>
           <div className="sd-hlg-part-list">
-            {visibleParts.map(part => (
-              <button
-                key={part.partId}
-                className={`sd-hlg-part${selectedPartId === part.partId ? ' sd-hlg-part--active' : ''}${draggingPartId === part.partId ? ' sd-hlg-part--dragging' : ''}`}
-                onPointerDown={(event) => handlePartPointerDown(event, part)}
-                onClick={() => setSelectedPartId(part.partId)}
-              >
-                <span className="sd-hlg-part-kind">{CATEGORY_LABEL[part.category]}</span>
-                <span className="sd-hlg-part-name">{part.name}</span>
-                <span className="sd-hlg-part-meta">{part.footprint.w}x{part.footprint.h} / {part.weight}t{partSystemMeta(part)}</span>
-              </button>
+            {paletteGroups.map(group => (
+              <div className={`sd-hlg-part-group${collapsedPaletteGroups.has(group.label) ? ' sd-hlg-part-group--collapsed' : ''}`} key={group.label}>
+                <button className="sd-hlg-part-group-title" type="button" onClick={() => togglePaletteGroup(group.label)}>
+                  <span className="sd-hlg-tree-arrow">{collapsedPaletteGroups.has(group.label) ? '▶' : '▼'}</span>
+                  <span>{group.label}</span>
+                  <span className="sd-hlg-tree-count">{group.parts.length}</span>
+                </button>
+                {!collapsedPaletteGroups.has(group.label) && group.parts.map(part => (
+                  <button
+                    key={part.partId}
+                    className={`sd-hlg-part${selectedPartId === part.partId ? ' sd-hlg-part--active' : ''}${draggingPartId === part.partId ? ' sd-hlg-part--dragging' : ''}`}
+                    onPointerDown={(event) => handlePartPointerDown(event, part)}
+                    onClick={() => setSelectedPartId(part.partId)}
+                  >
+                    <span className="sd-hlg-part-kind">{part.type ? WEAPON_TYPE_LABEL[part.type] : CATEGORY_LABEL[part.category]}</span>
+                    <span className="sd-hlg-part-name">{part.name}</span>
+                    <span className="sd-hlg-part-meta">{part.footprint.w}x{part.footprint.h} / {part.weight}t{partSystemMeta(part)}</span>
+                  </button>
+                ))}
+              </div>
             ))}
           </div>
         </aside>
@@ -509,7 +541,7 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
           )}
 
           <div className="sd-hlg-stage">
-            <Ship3DPreview hull={hull} design={design} armorBonus={design.armorPlan.belt} />
+            <Ship3DPreview hull={hull} design={design} armorBonus={stats.armorDefense} />
             <HLGGrid
               hull={hull}
               design={design}
@@ -541,6 +573,7 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
 
         <aside className="sd-panel sd-panel-right">
           <WeightGauge totalWeight={stats.totalWeight} maxWeight={stats.maxWeight} />
+          <ArmorPlanPanel design={design} stats={stats} onChange={handleArmorChange} />
           <HLGStatsPanel stats={stats} selectedComponent={selectedComponent} onRotate={handleRotate} onDelete={handleDelete} onNudge={handleNudge} />
           <div className="sd-section-title" style={{ marginTop: 16 }}>設計情報</div>
           <div className="sd-hlg-info">
@@ -1022,6 +1055,8 @@ function HLGStatsPanel({
         <StatRow label="旋回性能" value={stats.turnRate.toFixed(1)} color="#fb923c" />
         <StatRow label="機関出力" value={`${stats.powerProvided}/${stats.powerRequired}`} color="#22c55e" />
         <StatRow label="排煙能力" value={`${stats.smokeProvided}/${stats.smokeRequired}`} color="#eab308" />
+        <StatRow label="装甲防御" value={`${stats.armorDefense}%`} color="#facc15" />
+        <StatRow label="水中防御" value={`${stats.underwaterDefense}%`} color="#38bdf8" />
       </div>
 
       <EngineBalancePanel stats={stats} />
@@ -1058,6 +1093,67 @@ function HLGStatsPanel({
       )}
     </div>
   )
+}
+
+function ArmorPlanPanel({
+  design,
+  stats,
+  onChange,
+}: {
+  design: HLGDesign
+  stats: ReturnType<typeof calcStats>
+  onChange: (field: 'belt' | 'deck', value: ArmorDefenseKey) => void
+}) {
+  return (
+    <div className="sd-armor-panel">
+      <div className="sd-section-title">防御設定</div>
+      <label className="sd-armor-field">
+        <span>舷側防御</span>
+        <select value={armorSelectValue(design.armorPlan.belt)} onChange={event => onChange('belt', event.target.value as ArmorDefenseKey)}>
+          {ARMOR_DEFENSE_OPTIONS.map(option => (
+            <option key={option.key} value={option.key}>{option.label}</option>
+          ))}
+        </select>
+      </label>
+      <label className="sd-armor-field">
+        <span>甲板防御</span>
+        <select value={armorSelectValue(design.armorPlan.deck)} onChange={event => onChange('deck', event.target.value as ArmorDefenseKey)}>
+          {ARMOR_DEFENSE_OPTIONS.map(option => (
+            <option key={option.key} value={option.key}>{option.label}</option>
+          ))}
+        </select>
+      </label>
+      <div className="sd-armor-summary">
+        <div><span>VP</span><strong>{stats.vitalPartRatio.toFixed(1)}%</strong></div>
+        <div><span>形式</span><strong>{stats.defenseScheme}</strong></div>
+        <div><span>装甲重量</span><strong>{stats.armorWeight.toLocaleString()}t</strong></div>
+        <div><span>甲板</span><strong>{stats.deckDefense}%</strong></div>
+      </div>
+      <div className="sd-armor-note">
+        VPは重要部品の最前端から最後端まで。54%未満なら集中防御になります。
+      </div>
+    </div>
+  )
+}
+
+function armorSelectValue(value: HLGDesign['armorPlan']['belt']): ArmorDefenseKey {
+  if (typeof value === 'string') return value
+  if (value <= 0) return 'none'
+  if (value <= 3) return '10cm'
+  if (value <= 6) return '12cm'
+  if (value <= 8) return '14cm'
+  if (value <= 10) return '15cm'
+  if (value <= 15) return '20cm'
+  if (value <= 20) return '25cm'
+  if (value <= 25) return '31cm'
+  if (value <= 30) return '36cm'
+  if (value <= 38) return '38cm'
+  if (value <= 47) return '41cm'
+  if (value <= 58) return '43cm'
+  if (value <= 70) return '46cm'
+  if (value <= 77) return '51cm'
+  if (value <= 83) return '56cm'
+  return '61cm'
 }
 
 function EngineBalancePanel({ stats }: { stats: ReturnType<typeof calcStats> }) {
@@ -1228,31 +1324,33 @@ function GroupedLoadoutColumn({
               {group.part.weight ? ` / ${group.part.weight}t` : ''}
             </span>
           </div>
-          <div className="sd-loadout-group-count">S{group.slot + 1} / {group.count}基</div>
-          <div className="sd-loadout-group-actions">
-            <button
-              className="sd-loadout-group-btn"
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation()
-                onRemove(group.slot)
-              }}
-              aria-label={`${group.part.name}を減らす`}
-            >
-              -
-            </button>
-            <button
-              className="sd-loadout-group-btn"
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation()
-                onAdd(group.slot)
-              }}
-              aria-label={`${group.part.name}を増やす`}
-            >
-              +
-            </button>
-          </div>
+          <div className="sd-loadout-group-count">{group.kind === 'aux' ? `${group.count}基` : `S${group.slot + 1} / ${group.count}基`}</div>
+          {group.kind === 'armament' ? (
+            <div className="sd-loadout-group-actions">
+              <button
+                className="sd-loadout-group-btn"
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onRemove(group.slot)
+                }}
+                aria-label={`${group.part.name}を減らす`}
+              >
+                -
+              </button>
+              <button
+                className="sd-loadout-group-btn"
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onAdd(group.slot)
+                }}
+                aria-label={`${group.part.name}を増やす`}
+              >
+                +
+              </button>
+            </div>
+          ) : <div className="sd-loadout-group-actions" />}
         </div>
       ))}
     </div>
@@ -1266,6 +1364,12 @@ function StatRow({ label, value, color }: { label: string; value: string; color:
       <span className="sd-stat-value" style={{ color }}>{value}</span>
     </div>
   )
+}
+
+interface PalettePartGroup {
+  label: string
+  order: number
+  parts: HLGPartDefinition[]
 }
 
 interface LoadoutGroup {
@@ -1282,11 +1386,62 @@ interface WeaponSlotItem {
   components: HLGComponentInstance[]
 }
 
+function groupPaletteParts(parts: HLGPartDefinition[]): PalettePartGroup[] {
+  const groups = new Map<string, PalettePartGroup>()
+  for (const part of parts) {
+    const label = paletteGroupLabel(part)
+    const order = paletteGroupOrder(part)
+    const group = groups.get(label)
+    if (group) group.parts.push(part)
+    else groups.set(label, { label, order, parts: [part] })
+  }
+  return [...groups.values()]
+    .map(group => ({ ...group, parts: group.parts.sort((a, b) => palettePartSort(a) - palettePartSort(b) || a.weight - b.weight || a.name.localeCompare(b.name)) }))
+    .sort((a, b) => a.order - b.order || a.label.localeCompare(b.label))
+}
+
+function paletteGroupLabel(part: HLGPartDefinition): string {
+  if (part.type) return WEAPON_TYPE_LABEL[part.type]
+  return CATEGORY_LABEL[part.category]
+}
+
+function paletteGroupOrder(part: HLGPartDefinition): number {
+  if (part.type === 'gun') return 10
+  if (part.type === 'secondary') return 20
+  if (part.type === 'torpedo') return 30
+  if (part.type === 'aa') return 40
+  if (part.type === 'missile') return 50
+  if (part.category === 'bridge') return 60
+  if (part.category === 'funnel') return 70
+  if (part.category === 'boiler') return 80
+  if (part.category === 'turbine') return 90
+  if (part.category === 'aux') return 100
+  if (part.category === 'armor') return 110
+  return 999
+}
+
+function palettePartSort(part: HLGPartDefinition): number {
+  if (part.type) return part.cost
+  return part.weight
+}
+
 function groupedLoadout(design: HLGDesign): LoadoutGroup[] {
-  return weaponSlotItems(design)
+  const armaments = weaponSlotItems(design)
     .filter((slot): slot is WeaponSlotItem & { part: HLGPartDefinition } => !!slot.part)
     .map(slot => ({ slot: slot.slot, part: slot.part, count: slot.count, kind: loadoutGroupKind(slot.part) }))
-    .sort((a, b) => loadoutGroupSort(a.part) - loadoutGroupSort(b.part) || a.slot - b.slot)
+  const auxGroups = [...design.components
+    .filter(component => HLG_PART_BY_ID[component.partId]?.category === 'aux')
+    .reduce((groups, component) => {
+      const part = HLG_PART_BY_ID[component.partId]
+      if (!part) return groups
+      const group = groups.get(component.partId)
+      if (group) group.count += 1
+      else groups.set(component.partId, { slot: -1, part, count: 1, kind: 'aux' as const })
+      return groups
+    }, new Map<string, LoadoutGroup>())
+    .values()]
+  return [...armaments, ...auxGroups]
+    .sort((a, b) => loadoutGroupSort(a.part) - loadoutGroupSort(b.part) || a.slot - b.slot || a.part.name.localeCompare(b.part.name))
 }
 
 function weaponSlotItems(design: HLGDesign): WeaponSlotItem[] {

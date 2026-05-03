@@ -5,6 +5,7 @@ import {
   HLG_PART_BY_ID,
   canPlaceHLGPart,
   calculateHLGStats,
+  calculateVitalPartRatio,
   componentRect,
   defaultHLGDesign,
   hlgCellIsInsideHull,
@@ -89,6 +90,19 @@ describe('freeform ship design system', () => {
     expect(stats.canDeploy).toBe(true)
   })
 
+  it('calculates armor weight from defense grade and vital part length', () => {
+    const design = {
+      ...defaultHLGDesign(battleship),
+      armorPlan: { belt: '43cm' as const, deck: '25cm' as const, bulkhead: 0 },
+    }
+    const stats = calculateHLGStats(battleship, design)
+    expect(calculateVitalPartRatio(battleship, design)).toBeGreaterThan(0)
+    expect(stats.armorDefense).toBe(58)
+    expect(stats.deckDefense).toBe(20)
+    expect(stats.armorWeight).toBeGreaterThan(0)
+    expect(['集中防御', '完全防御']).toContain(stats.defenseScheme)
+  })
+
   it('converts each occupied weapon slot to a combat template', () => {
     const design = defaultHLGDesign(battleship)
     const loadout = hlgDesignToLoadout(battleship, design)
@@ -110,7 +124,7 @@ describe('freeform ship design system', () => {
     expect(hlgDesignToLoadout(battleship, design)[0]!.mounts).toHaveLength(3)
   })
 
-  it('migrates legacy slot assignments into HLG components', () => {
+  it('migrates legacy slot assignments into freeform components', () => {
     const migrated = migrateLegacyDesignerState(battleship, {
       design: {
         s0: { weaponId: 'weapon.gun.406mm.twin', barrels: 2 },

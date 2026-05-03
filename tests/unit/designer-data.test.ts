@@ -25,7 +25,7 @@ describe('designer save slots', () => {
     }
     saveDesign(slotTwoDesign, 2)
 
-    expect(loadDesignerState(battleship, 2).design.armorPlan).toEqual(slotTwoDesign.armorPlan)
+    expect(loadDesignerState(battleship, 2).design.armorPlan).toEqual({ belt: '14cm', deck: '10cm', bulkhead: 2 })
     expect(loadDesignerState(battleship, 1).design.armorPlan).not.toEqual(slotTwoDesign.armorPlan)
   })
 
@@ -36,7 +36,7 @@ describe('designer save slots', () => {
     }
     localStorage.setItem(PREVIOUS_STORAGE_KEY, JSON.stringify({ design: previousDesign }))
 
-    expect(loadDesignerState(battleship, 1).design.armorPlan).toEqual(previousDesign.armorPlan)
+    expect(loadDesignerState(battleship, 1).design.armorPlan).toEqual({ belt: '12cm', deck: '12cm', bulkhead: 1 })
     expect(localStorage.getItem(STORAGE_KEY)).toBeNull()
     expect(localStorage.getItem(LEGACY_STORAGE_KEY)).toBeNull()
   })

@@ -9,6 +9,7 @@ export type HLGZone = 'fore' | 'mid' | 'aft' | 'side' | 'deck' | 'internal'
 export type HLGRotation = 0 | 90 | 180 | 270
 export type HLGCell = { c: number; r: number }
 export type HLGFootprint = { w: number; h: number }
+export type ArmorDefenseKey = 'none' | '10cm' | '12cm' | '14cm' | '15cm' | '20cm' | '25cm' | '31cm' | '36cm' | '38cm' | '41cm' | '43cm' | '46cm' | '51cm' | '56cm' | '61cm'
 
 export interface HLGPartDefinition {
   partId: string
@@ -44,7 +45,7 @@ export interface HLGDesign {
   hullTemplateId: string
   shipClass: PlayerShipType
   gridVersion: number
-  armorPlan: { belt: number; deck: number; bulkhead: number }
+  armorPlan: { belt: number | ArmorDefenseKey; deck: number | ArmorDefenseKey; bulkhead: number }
   components: HLGComponentInstance[]
 }
 
@@ -76,8 +77,24 @@ export interface HLGStats {
   smokeRequired: number
   smokeProvided: number
   command: number
+  armorDefense: number
+  deckDefense: number
+  underwaterDefense: number
+  armorWeight: number
+  vitalPartRatio: number
+  defenseScheme: '集中防御' | '完全防御'
+  beltArmorLabel: string
+  deckArmorLabel: string
   warnings: string[]
   canDeploy: boolean
+}
+
+export interface ArmorDefenseOption {
+  key: ArmorDefenseKey
+  label: string
+  armorDefense: number
+  underwaterDefense: number
+  weightAtFullVp: number
 }
 
 const GRID_CELL_METERS = 1.25
@@ -89,6 +106,27 @@ const MAX_WEIGHT: Record<PlayerShipType, number> = {
   cruiser: 10000,
   battleship: 30000,
 }
+
+export const ARMOR_DEFENSE_OPTIONS: ArmorDefenseOption[] = [
+  { key: '61cm', label: '対61cm', armorDefense: 90, underwaterDefense: 65, weightAtFullVp: 30000 },
+  { key: '56cm', label: '対56cm', armorDefense: 83, underwaterDefense: 50, weightAtFullVp: 24000 },
+  { key: '51cm', label: '対51cm', armorDefense: 77, underwaterDefense: 40, weightAtFullVp: 18000 },
+  { key: '46cm', label: '対46cm', armorDefense: 70, underwaterDefense: 30, weightAtFullVp: 13000 },
+  { key: '43cm', label: '対43cm', armorDefense: 58, underwaterDefense: 28, weightAtFullVp: 9000 },
+  { key: '41cm', label: '対41cm', armorDefense: 47, underwaterDefense: 26, weightAtFullVp: 7000 },
+  { key: '38cm', label: '対38cm', armorDefense: 38, underwaterDefense: 25, weightAtFullVp: 5000 },
+  { key: '36cm', label: '対36cm', armorDefense: 30, underwaterDefense: 24, weightAtFullVp: 3500 },
+  { key: '31cm', label: '対31cm', armorDefense: 25, underwaterDefense: 23, weightAtFullVp: 2000 },
+  { key: '25cm', label: '対25cm', armorDefense: 20, underwaterDefense: 22, weightAtFullVp: 1000 },
+  { key: '20cm', label: '対20cm', armorDefense: 15, underwaterDefense: 21, weightAtFullVp: 500 },
+  { key: '15cm', label: '対15cm', armorDefense: 10, underwaterDefense: 20, weightAtFullVp: 250 },
+  { key: '14cm', label: '対14cm', armorDefense: 8, underwaterDefense: 20, weightAtFullVp: 100 },
+  { key: '12cm', label: '対12cm', armorDefense: 6, underwaterDefense: 20, weightAtFullVp: 80 },
+  { key: '10cm', label: '対10cm', armorDefense: 3, underwaterDefense: 20, weightAtFullVp: 40 },
+  { key: 'none', label: '無防御', armorDefense: 1, underwaterDefense: 10, weightAtFullVp: 0 },
+]
+
+const ARMOR_OPTION_BY_KEY: Record<ArmorDefenseKey, ArmorDefenseOption> = Object.fromEntries(ARMOR_DEFENSE_OPTIONS.map(option => [option.key, option])) as Record<ArmorDefenseKey, ArmorDefenseOption>
 
 const WEAPON_META: Record<string, { weight: number; firepower?: number; antiAir?: number; reload: number; accuracy: number; barrels: number }> = {
   'weapon.gun.127mm.twin': { weight: 300, firepower: 20, reload: 7, accuracy: 0.80, barrels: 2 },
@@ -232,6 +270,7 @@ export function cloneHLGDesign(design: HLGDesign): HLGDesign {
 
 export function normalizeHLGDesign(hull: HullCatalogEntry, design: HLGDesign): HLGDesign {
   const cloned = cloneHLGDesign(design)
+  cloned.armorPlan = normalizeArmorPlan(cloned.armorPlan)
   if (cloned.gridVersion === HLG_GRID_VERSION) return { ...cloned, components: normalizeWeaponSlots(cloned.components) }
   const spec = hlgGridSpec(hull)
   const coordinateScale = cloned.gridVersion < 2 ? FOOTPRINT_SCALE : 1
@@ -250,7 +289,8 @@ export function normalizeHLGDesign(hull: HullCatalogEntry, design: HLGDesign): H
 
 export function calculateHLGStats(hull: HullCatalogEntry, design: HLGDesign): HLGStats {
   const warnings = validateHLGDesign(hull, design)
-  let totalWeight = armorWeight(design)
+  const armor = calculateArmorStats(hull, design)
+  let totalWeight = armor.weight
   let totalFirepower = 0
   let totalAntiAir = 0
   let accuracySum = 0
@@ -322,6 +362,14 @@ export function calculateHLGStats(hull: HullCatalogEntry, design: HLGDesign): HL
     smokeRequired,
     smokeProvided,
     command,
+    armorDefense: armor.belt.armorDefense,
+    deckDefense: armor.deck.armorDefense,
+    underwaterDefense: armor.belt.underwaterDefense,
+    armorWeight: armor.weight,
+    vitalPartRatio: armor.vitalPartRatio,
+    defenseScheme: armor.defenseScheme,
+    beltArmorLabel: armor.belt.label,
+    deckArmorLabel: armor.deck.label,
     warnings: [...systemWarnings, ...warnings],
     canDeploy: systemWarnings.length === 0 && warnings.length === 0,
   }
@@ -366,7 +414,7 @@ export function validateHLGDesign(hull: HullCatalogEntry, design: HLGDesign): st
 export function canPlaceHLGPart(hull: HullCatalogEntry, design: HLGDesign, part: HLGPartDefinition, cell: HLGCell, rotation: HLGRotation, weaponSlot?: number): boolean {
   const component = makeComponent(part, cell, rotation, weaponSlot)
   const temp = { ...design, components: [...design.components, component] }
-  return validateHLGDesign(hull, temp).length === 0 && calculateWeight(temp) <= MAX_WEIGHT[hull.shipType]
+  return validateHLGDesign(hull, temp).length === 0 && calculateWeight(hull, temp) <= MAX_WEIGHT[hull.shipType]
 }
 
 export function hlgDesignToLoadout(hull: HullCatalogEntry, design: HLGDesign): WeaponTemplate[] {
@@ -702,12 +750,79 @@ function isZoneAllowed(hull: HullCatalogEntry, component: HLGComponentInstance, 
   return true
 }
 
-function calculateWeight(design: HLGDesign): number {
-  return armorWeight(design) + design.components.reduce((sum, component) => sum + (HLG_PART_BY_ID[component.partId]?.weight ?? 0), 0)
+function calculateWeight(hull: HullCatalogEntry, design: HLGDesign): number {
+  return calculateArmorStats(hull, design).weight + design.components.reduce((sum, component) => sum + (HLG_PART_BY_ID[component.partId]?.weight ?? 0), 0)
 }
 
-function armorWeight(design: HLGDesign): number {
-  return (design.armorPlan.belt + design.armorPlan.deck + design.armorPlan.bulkhead) * 18
+function calculateArmorStats(hull: HullCatalogEntry | null, design: HLGDesign): {
+  belt: ArmorDefenseOption
+  deck: ArmorDefenseOption
+  vitalPartRatio: number
+  defenseScheme: HLGStats['defenseScheme']
+  weight: number
+} {
+  const belt = armorOptionFor(design.armorPlan.belt)
+  const deck = armorOptionFor(design.armorPlan.deck)
+  const vitalPartRatio = hull ? calculateVitalPartRatio(hull, design) : 54
+  const defenseScheme: HLGStats['defenseScheme'] = vitalPartRatio < 54 ? '集中防御' : '完全防御'
+  const vpWeightRatio = Math.max(0, Math.min(1, vitalPartRatio / 100))
+  const beltWeight = belt.weightAtFullVp * vpWeightRatio * 0.72
+  const deckWeight = deck.weightAtFullVp * vpWeightRatio * 0.46
+  const bulkheadWeight = Math.max(0, design.armorPlan.bulkhead || 0) * 80 * vpWeightRatio
+  return {
+    belt,
+    deck,
+    vitalPartRatio,
+    defenseScheme,
+    weight: Math.round(beltWeight + deckWeight + bulkheadWeight),
+  }
+}
+
+export function calculateVitalPartRatio(hull: HullCatalogEntry, design: HLGDesign): number {
+  const spec = hlgGridSpec(hull)
+  const vitalRects = design.components.flatMap(component => {
+    const part = HLG_PART_BY_ID[component.partId]
+    if (!part || !isVitalPart(part)) return []
+    return [componentRect(component, part)]
+  })
+  if (vitalRects.length === 0) return 0
+  const fore = Math.min(...vitalRects.map(rect => rect.top))
+  const aft = Math.max(...vitalRects.map(rect => rect.top + rect.h))
+  return Math.max(0, Math.min(100, ((aft - fore) / Math.max(1, spec.lengthCells)) * 100))
+}
+
+function isVitalPart(part: HLGPartDefinition): boolean {
+  if (part.type === 'aa') return false
+  if (part.type) return true
+  return part.category === 'bridge' || part.category === 'funnel' || part.category === 'boiler' || part.category === 'turbine' || part.category === 'aux'
+}
+
+function armorOptionFor(value: number | ArmorDefenseKey): ArmorDefenseOption {
+  if (typeof value === 'string') return ARMOR_OPTION_BY_KEY[value] ?? ARMOR_OPTION_BY_KEY.none
+  if (value <= 0) return ARMOR_OPTION_BY_KEY.none
+  if (value <= 3) return ARMOR_OPTION_BY_KEY['10cm']
+  if (value <= 6) return ARMOR_OPTION_BY_KEY['12cm']
+  if (value <= 8) return ARMOR_OPTION_BY_KEY['14cm']
+  if (value <= 10) return ARMOR_OPTION_BY_KEY['15cm']
+  if (value <= 15) return ARMOR_OPTION_BY_KEY['20cm']
+  if (value <= 20) return ARMOR_OPTION_BY_KEY['25cm']
+  if (value <= 25) return ARMOR_OPTION_BY_KEY['31cm']
+  if (value <= 30) return ARMOR_OPTION_BY_KEY['36cm']
+  if (value <= 38) return ARMOR_OPTION_BY_KEY['38cm']
+  if (value <= 47) return ARMOR_OPTION_BY_KEY['41cm']
+  if (value <= 58) return ARMOR_OPTION_BY_KEY['43cm']
+  if (value <= 70) return ARMOR_OPTION_BY_KEY['46cm']
+  if (value <= 77) return ARMOR_OPTION_BY_KEY['51cm']
+  if (value <= 83) return ARMOR_OPTION_BY_KEY['56cm']
+  return ARMOR_OPTION_BY_KEY['61cm']
+}
+
+function normalizeArmorPlan(armorPlan: HLGDesign['armorPlan']): HLGDesign['armorPlan'] {
+  return {
+    belt: armorOptionFor(armorPlan.belt).key,
+    deck: armorOptionFor(armorPlan.deck).key,
+    bulkhead: armorPlan.bulkhead ?? 0,
+  }
 }
 
 function hlgHullHalfWidth(ny: number, shipClass: PlayerShipType): number {

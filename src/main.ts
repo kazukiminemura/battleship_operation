@@ -75,7 +75,7 @@ function main(): void {
   let selectedLoadout: WeaponTemplate[] = getDefaultLoadout('destroyer')
   let selectedArmorBonus = 0
   let selectedTowerMount: { x: number; y: number } | undefined
-  let selectedHLGDesign: HLGDesign | undefined
+  let selectedFreeformDesign: HLGDesign | undefined
   let currentStage     = 1
   let normalShip: PlayerShipType = selectedShip
   let normalStage      = currentStage
@@ -176,7 +176,7 @@ function main(): void {
     selectedLoadout = result.loadout
     selectedArmorBonus = result.armorBonus
     selectedTowerMount = result.towerMount
-    selectedHLGDesign = result.hlgDesign
+    selectedFreeformDesign = result.hlgDesign
   }
 
   const currentPrepResult = (): PrepResult | null => {
@@ -187,7 +187,7 @@ function main(): void {
       loadout: selectedLoadout,
       armorBonus: selectedArmorBonus,
       towerMount: selectedTowerMount,
-      hlgDesign: selectedHLGDesign,
+      hlgDesign: selectedFreeformDesign,
     }
   }
 
