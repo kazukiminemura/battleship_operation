@@ -27,6 +27,12 @@ export interface WeaponState {
   mount?: { x: number; y: number }
   firingArc?: { center: number; width: number }
   barrels?: number
+  mounts?: Array<{
+    instanceId?: string
+    mount?: { x: number; y: number }
+    firingArc?: { center: number; width: number }
+    barrels?: number
+  }>
   cooldownTick: number
   ammo: number
   maxAmmo: number

@@ -11,7 +11,6 @@ import { SoundSystem } from './game/audio/sounds'
 import { NavigatorVoice } from './game/audio/navigator-voice'
 import { StageBriefingVoice } from './game/audio/stage-briefing-voice'
 import { StartScreen } from './game/ui/startscreen'
-import { PrepScreen, type PrepResult } from './game/ui/prepscreen'
 import { StageIntroScreen } from './game/ui/stageintroscreen'
 import { ResultsScreen } from './game/ui/resultsscreen'
 import { ScreenManager } from './game/ui/screen-manager'
@@ -19,6 +18,7 @@ import type { WeaponTemplate } from './game/data/masterdata'
 import { getDefaultLoadout } from './game/data/weapon-catalog'
 import { isAccessKey } from './game/ui/accesskeys'
 import type { HLGDesign } from './designer/hlg-system'
+import type { PrepResult } from './designer/types'
 import {
   renderPauseOverlay,
   hitPauseRegion,
@@ -47,7 +47,6 @@ function main(): void {
   const renderer     = new CanvasRenderer(canvas)
   const hud          = new HUD(canvas)
   const start        = new StartScreen(canvas)
-  const prep         = new PrepScreen(canvas)
   const stageIntro   = new StageIntroScreen(canvas)
   const results      = new ResultsScreen(canvas)
   const sound        = new SoundSystem()
@@ -75,8 +74,6 @@ function main(): void {
   let selectedTemplateId: string | undefined = undefined
   let selectedLoadout: WeaponTemplate[] = getDefaultLoadout('destroyer')
   let selectedArmorBonus = 0
-  let selectedSlotCells: PrepResult['slotCells'] | undefined
-  let selectedTowerCell: PrepResult['towerCell'] | undefined
   let selectedTowerMount: { x: number; y: number } | undefined
   let selectedHLGDesign: HLGDesign | undefined
   let currentStage     = 1
@@ -92,7 +89,7 @@ function main(): void {
 
   // ── Screen manager (owns mode state machine + screen lifecycle) ───────────
   const screens = new ScreenManager(
-    { start, prep, stageIntro, results, sound, input, briefingVoice, navigator },
+    { start, stageIntro, results, sound, input, briefingVoice, navigator },
     debugMode ? 'combat' : 'start',
   )
 
@@ -178,8 +175,6 @@ function main(): void {
     selectedTemplateId = result.templateId
     selectedLoadout = result.loadout
     selectedArmorBonus = result.armorBonus
-    selectedSlotCells = result.slotCells
-    selectedTowerCell = result.towerCell
     selectedTowerMount = result.towerMount
     selectedHLGDesign = result.hlgDesign
   }
@@ -191,8 +186,6 @@ function main(): void {
       shipType: selectedShip,
       loadout: selectedLoadout,
       armorBonus: selectedArmorBonus,
-      slotCells: selectedSlotCells,
-      towerCell: selectedTowerCell,
       towerMount: selectedTowerMount,
       hlgDesign: selectedHLGDesign,
     }
@@ -378,7 +371,6 @@ function main(): void {
       const mode = screens.mode
       if (mode === 'start')   { start.render(accessKeysVisible); return }
       if (mode === 'designer') return
-      if (mode === 'prep')    { prep.render(accessKeysVisible); return }
       if (mode === 'stage-intro') {
         stageIntro.render(STATIC_DATA.stages[currentStage - 1]!, selectedShip, accessKeysVisible)
         return

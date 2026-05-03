@@ -1,8 +1,7 @@
 import type { HullCatalogEntry } from '../game/data/hull-catalog'
 import type { PlayerShipType, WeaponTemplate } from '../game/data/masterdata'
-import type { WeaponType } from '../game/simulation/types'
+import { MAX_WEAPON_SLOTS, type WeaponType } from '../game/simulation/types'
 import { WEAPON_SHOP } from '../game/data/weapon-shop'
-import { cellToMount, hullDimensions } from '../game/ui/prep-layout'
 import { firingArcForWeapon } from '../game/simulation/firing-arcs'
 
 export type HLGComponentCategory = 'weapon' | 'bridge' | 'funnel' | 'boiler' | 'turbine' | 'aux' | 'armor'
@@ -38,6 +37,7 @@ export interface HLGComponentInstance {
   cell: HLGCell
   rotation: HLGRotation
   barrels?: number
+  weaponSlot?: number
 }
 
 export interface HLGDesign {
@@ -151,7 +151,7 @@ export function defaultHLGDesign(hull: HullCatalogEntry): HLGDesign {
     const preferred = { ...item.preferred, c: spec.centerC }
     const cell = findNearestValidCell(hull, { ...blankDesign(hull), components }, part, preferred)
     if (!cell) continue
-    components.push(makeComponent(part, cell, item.rotation ?? 0))
+    components.push(makeComponent(part, cell, item.rotation ?? 0, nextAvailableWeaponSlot(components)))
   }
   return { ...blankDesign(hull), components }
 }
@@ -166,19 +166,19 @@ export function cloneHLGDesign(design: HLGDesign): HLGDesign {
 
 export function normalizeHLGDesign(hull: HullCatalogEntry, design: HLGDesign): HLGDesign {
   const cloned = cloneHLGDesign(design)
-  if (cloned.gridVersion === HLG_GRID_VERSION) return cloned
+  if (cloned.gridVersion === HLG_GRID_VERSION) return { ...cloned, components: normalizeWeaponSlots(cloned.components) }
   const spec = hlgGridSpec(hull)
   const coordinateScale = cloned.gridVersion < 2 ? FOOTPRINT_SCALE : 1
   return {
     ...cloned,
     gridVersion: HLG_GRID_VERSION,
-    components: cloned.components.map(component => ({
+    components: normalizeWeaponSlots(cloned.components.map(component => ({
       ...component,
       cell: {
         c: clamp(Math.round(component.cell.c * coordinateScale), 0, spec.cols - 1),
         r: clamp(Math.round(component.cell.r * coordinateScale), 0, spec.rows - 1),
       },
-    })),
+    }))),
   }
 }
 
@@ -249,6 +249,19 @@ export function validateHLGDesign(hull: HullCatalogEntry, design: HLGDesign): st
   const placements = design.components
     .map(component => ({ component, part: HLG_PART_BY_ID[component.partId] }))
     .filter((item): item is { component: HLGComponentInstance; part: HLGPartDefinition } => !!item.part)
+  const weaponCount = placements.filter(({ part }) => !!part.type).length
+  const weaponSlots = new Map<number, string>()
+  for (const { component, part } of placements) {
+    if (!part.type) continue
+    const slot = component.weaponSlot
+    if (slot == null || slot < 0 || slot >= MAX_WEAPON_SLOTS) {
+      warnings.push(`${part.name}の兵装スロットが不正です`)
+      continue
+    }
+    const slotPart = weaponSlots.get(slot)
+    if (slotPart && slotPart !== part.partId) warnings.push(`兵装スロット${slot + 1}に複数種類の兵装があります`)
+    weaponSlots.set(slot, part.partId)
+  }
   for (const { component, part } of placements) {
     if (!part.allowedShipClasses.includes(hull.shipType)) warnings.push(`${part.name}はこの艦種に搭載できません`)
     if (!isPlacementInsideHull(hull, component, part)) warnings.push(`${part.name}が船体外にはみ出しています`)
@@ -267,27 +280,38 @@ export function validateHLGDesign(hull: HullCatalogEntry, design: HLGDesign): st
   return [...new Set(warnings)]
 }
 
-export function canPlaceHLGPart(hull: HullCatalogEntry, design: HLGDesign, part: HLGPartDefinition, cell: HLGCell, rotation: HLGRotation): boolean {
-  const component = makeComponent(part, cell, rotation)
+export function canPlaceHLGPart(hull: HullCatalogEntry, design: HLGDesign, part: HLGPartDefinition, cell: HLGCell, rotation: HLGRotation, weaponSlot?: number): boolean {
+  const component = makeComponent(part, cell, rotation, weaponSlot)
   const temp = { ...design, components: [...design.components, component] }
   return validateHLGDesign(hull, temp).length === 0 && calculateWeight(temp) <= MAX_WEIGHT[hull.shipType]
 }
 
 export function hlgDesignToLoadout(hull: HullCatalogEntry, design: HLGDesign): WeaponTemplate[] {
   const spec = hlgGridSpec(hull)
-  return design.components.flatMap(component => {
-    const part = HLG_PART_BY_ID[component.partId]
-    if (!part?.type) return []
-    const mount = cellToMount(component.cell.c, component.cell.r, spec)
+  const slots = weaponSlotGroups(design)
+  return slots.flatMap(group => {
+    const first = group.components[0]
+    const part = HLG_PART_BY_ID[group.partId]
+    if (!first || !part?.type) return []
+    const mounts = group.components.map(component => {
+      const mount = cellToMount(component.cell.c, component.cell.r, spec)
+      return {
+        instanceId: component.instanceId,
+        mount,
+        firingArc: firingArcForWeapon(part.type!, mount),
+        barrels: component.barrels ?? part.barrels,
+      }
+    })
     return [{
       id: part.partId.replace('part.weapon.', ''),
-      name: part.name,
+      name: `S${group.slot + 1} ${part.name}`,
       type: part.type,
-      ammo: part.ammo ?? 100,
-      barrels: component.barrels ?? part.barrels,
-      mount,
-      firingArc: firingArcForWeapon(part.type, mount),
-      instanceId: component.instanceId,
+      ammo: (part.ammo ?? 100) * Math.max(1, mounts.length),
+      barrels: first.barrels ?? part.barrels,
+      mount: mounts[0]?.mount,
+      firingArc: mounts[0]?.firingArc,
+      mounts,
+      instanceId: `slot.${group.slot}`,
     }]
   })
 }
@@ -345,7 +369,7 @@ export function componentRect(component: HLGComponentInstance, part: HLGPartDefi
   }
 }
 
-export function makeComponent(part: HLGPartDefinition, cell: HLGCell, rotation: HLGRotation): HLGComponentInstance {
+export function makeComponent(part: HLGPartDefinition, cell: HLGCell, rotation: HLGRotation, weaponSlot?: number): HLGComponentInstance {
   return {
     instanceId: `${part.partId}.${Date.now().toString(36)}.${Math.random().toString(36).slice(2, 7)}`,
     partId: part.partId,
@@ -353,6 +377,7 @@ export function makeComponent(part: HLGPartDefinition, cell: HLGCell, rotation: 
     cell,
     rotation,
     barrels: part.barrels,
+    weaponSlot: part.type ? clamp(Math.round(weaponSlot ?? 0), 0, MAX_WEAPON_SLOTS - 1) : undefined,
   }
 }
 
@@ -474,6 +499,86 @@ function blankDesign(hull: HullCatalogEntry): HLGDesign {
     gridVersion: HLG_GRID_VERSION,
     armorPlan: { belt: 0, deck: 0, bulkhead: 0 },
     components: [],
+  }
+}
+
+function normalizeWeaponSlots(components: HLGComponentInstance[]): HLGComponentInstance[] {
+  const slotParts = new Map<number, string>()
+  const next = components.map(component => {
+    const part = HLG_PART_BY_ID[component.partId]
+    if (!part?.type) return { ...component, weaponSlot: undefined }
+    const requested = Number.isInteger(component.weaponSlot) ? component.weaponSlot! : undefined
+    const canKeep = requested != null
+      && requested >= 0
+      && requested < MAX_WEAPON_SLOTS
+      && (!slotParts.has(requested) || slotParts.get(requested) === part.partId)
+    const slot = canKeep ? requested : firstCompatibleWeaponSlot(slotParts, part.partId)
+    slotParts.set(slot, part.partId)
+    return { ...component, weaponSlot: slot }
+  })
+  return next
+}
+
+function firstCompatibleWeaponSlot(slotParts: Map<number, string>, partId: string): number {
+  for (let slot = 0; slot < MAX_WEAPON_SLOTS; slot++) {
+    const slotPart = slotParts.get(slot)
+    if (!slotPart || slotPart === partId) return slot
+  }
+  return MAX_WEAPON_SLOTS - 1
+}
+
+function nextAvailableWeaponSlot(components: HLGComponentInstance[]): number | undefined {
+  const used = new Set(components.flatMap(component => component.weaponSlot == null ? [] : [component.weaponSlot]))
+  for (let slot = 0; slot < MAX_WEAPON_SLOTS; slot++) {
+    if (!used.has(slot)) return slot
+  }
+  return undefined
+}
+
+function weaponSlotGroups(design: HLGDesign): Array<{ slot: number; partId: string; components: HLGComponentInstance[] }> {
+  const groups = new Map<number, { slot: number; partId: string; components: HLGComponentInstance[] }>()
+  for (const component of normalizeWeaponSlots(design.components)) {
+    const part = HLG_PART_BY_ID[component.partId]
+    if (!part?.type || component.weaponSlot == null) continue
+    const existing = groups.get(component.weaponSlot)
+    if (existing) {
+      if (existing.partId === part.partId) existing.components.push(component)
+      continue
+    }
+    groups.set(component.weaponSlot, { slot: component.weaponSlot, partId: part.partId, components: [component] })
+  }
+  return [...groups.values()].sort((a, b) => a.slot - b.slot).slice(0, MAX_WEAPON_SLOTS)
+}
+
+function cellToMount(c: number, r: number, spec: HLGGridSpec): { x: number; y: number } {
+  const x = (cellCenter(c) - cellCenter(spec.centerC)) / (spec.beamCells / 2)
+  const y = ((cellCenter(r) - spec.topR) / Math.max(1, spec.lengthCells - 1)) * 2 - 1
+  return {
+    x: clamp(x, -1, 1),
+    y: clamp(y, -1, 1),
+  }
+}
+
+function cellCenter(index: number): number {
+  return index + 0.5
+}
+
+function hullDimensions(hull: HullCatalogEntry): { lengthM: number; beamM: number } {
+  switch (hull.templateId) {
+    case 'hull.destroyer.basic': return { lengthM: 118, beamM: 10.8 }
+    case 'hull.dd.improved': return { lengthM: 126, beamM: 11.4 }
+    case 'hull.dd.elite': return { lengthM: 134, beamM: 12.0 }
+    case 'hull.cruiser.player': return { lengthM: 174, beamM: 16.5 }
+    case 'hull.cl.heavy': return { lengthM: 203, beamM: 20.5 }
+    case 'hull.ca.elite': return { lengthM: 214, beamM: 21.8 }
+    case 'hull.bb.fast': return { lengthM: 247, beamM: 33.0 }
+    case 'hull.bb.super': return { lengthM: 263, beamM: 38.9 }
+    case 'hull.bb.yukimura': return { lengthM: 238, beamM: 34.5 }
+    case 'hull.battleship.basic':
+    default:
+      return hull.shipType === 'battleship' ? { lengthM: 242, beamM: 32.0 }
+        : hull.shipType === 'cruiser' ? { lengthM: 190, beamM: 19.0 }
+        : { lengthM: 120, beamM: 11.0 }
   }
 }
 

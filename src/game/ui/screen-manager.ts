@@ -1,8 +1,8 @@
 import { createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { ShipDesigner } from '../../designer/ShipDesigner'
+import type { PrepResult } from '../../designer/types'
 import type { StartScreen } from './startscreen'
-import type { PrepScreen, PrepResult } from './prepscreen'
 import type { StageIntroScreen } from './stageintroscreen'
 import type { ResultsScreen } from './resultsscreen'
 import type { SoundSystem } from '../audio/sounds'
@@ -10,11 +10,10 @@ import type { InputAdapter } from '../input/adapter'
 import type { StageBriefingVoice } from '../audio/stage-briefing-voice'
 import type { NavigatorVoice } from '../audio/navigator-voice'
 
-export type GameMode = 'start' | 'designer' | 'prep' | 'stage-intro' | 'combat' | 'results'
+export type GameMode = 'start' | 'designer' | 'stage-intro' | 'combat' | 'results'
 
 interface Deps {
   start: StartScreen
-  prep: PrepScreen
   stageIntro: StageIntroScreen
   results: ResultsScreen
   sound: SoundSystem
@@ -49,21 +48,10 @@ export class ScreenManager {
     this.d.sound.reset()
   }
 
-  toPrep(stage: number, design: PrepResult | null, bgmEnabled: boolean): void {
-    this._mode = 'prep'
-    this.d.input.setSuspended(false)
-    this.d.start.detach()
-    this.d.results.detach()
-    this.d.briefingVoice.stop()
-    this.d.prep.attach(stage, design)
-    this.d.sound.setBgmEnabled(bgmEnabled, 'prep')
-  }
-
   toStageIntro(stage: number, bgmEnabled: boolean): void {
     this._mode = 'stage-intro'
     this.d.input.setSuspended(false)
     this.d.start.detach()
-    this.d.prep.detach()
     this.d.results.detach()
     this.d.stageIntro.attach()
     this.d.briefingVoice.play(stage)
@@ -74,7 +62,6 @@ export class ScreenManager {
     this._mode = 'combat'
     this.d.input.setSuspended(false)
     this.d.start.detach()
-    this.d.prep.detach()
     this.d.stageIntro.detach()
     this.d.results.detach()
     this.d.briefingVoice.stop()
@@ -103,7 +90,6 @@ export class ScreenManager {
     this._mode = 'designer'
     this.d.start.detach()
     this.d.results.detach()
-    this.d.prep.detach()
     this.d.stageIntro.detach()
     if (!this.designerRoot) this.designerRoot = createRoot(el)
     this.designerRoot.render(createElement(ShipDesigner, { onClose, onConfirm, initialResult }))

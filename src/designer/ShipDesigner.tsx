@@ -36,7 +36,8 @@ import {
   type HLGRotation,
 } from './hlg-system'
 import type { PlayerShipType } from '../game/data/masterdata'
-import type { PrepResult } from '../game/ui/prepscreen'
+import { MAX_WEAPON_SLOTS } from '../game/simulation/types'
+import type { PrepResult } from './types'
 import { firingArcForWeapon, firingArcLabel, type FiringArc } from '../game/simulation/firing-arcs'
 import './ShipDesigner.css'
 
@@ -75,8 +76,9 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
   const [shipType, setShipType] = useState<PlayerShipType>(initialShipType)
   const [hullIdx, setHullIdx] = useState(() => hullIndexForTemplate(initialShipType, initialHull.templateId))
   const [design, setDesign] = useState<HLGDesign>(() => createDesignForHull(initialHull, initialDesign))
-  const [selectedPartId, setSelectedPartId] = useState<string>(() => defaultSelectedPart(initialHull.shipType))
+  const [selectedPartId, setSelectedPartId] = useState<string | null>(() => defaultSelectedPart(initialHull.shipType))
   const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null)
+  const [selectedWeaponSlot, setSelectedWeaponSlot] = useState<number | null>(null)
   const [partFilter, setPartFilter] = useState<HLGComponentCategory | 'all'>('all')
   const [draggingPartId, setDraggingPartId] = useState<string | null>(null)
   const [saveSlot, setSaveSlot] = useState<DesignSaveSlot>(1)
@@ -89,13 +91,23 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
     () => HLG_PARTS.filter(part => part.allowedShipClasses.includes(shipType) && (partFilter === 'all' || part.category === partFilter)),
     [partFilter, shipType],
   )
-  const selectedPart = HLG_PART_BY_ID[selectedPartId] ?? visibleParts[0]
+  const selectedPart = selectedPartId ? HLG_PART_BY_ID[selectedPartId] : undefined
   const placementPart = draggingPartId ? HLG_PART_BY_ID[draggingPartId] ?? selectedPart : selectedPart
   const selectedComponent = design.components.find(component => component.instanceId === selectedComponentId) ?? null
+  const selectedPlacementSlot = selectedPart?.type ? selectedWeaponSlot : null
+
+  const selectComponent = (instanceId: string | null) => {
+    setSelectedComponentId(instanceId)
+    const component = instanceId ? design.components.find(item => item.instanceId === instanceId) : null
+    if (!component) return
+    const part = HLG_PART_BY_ID[component.partId]
+    if (part?.type && component.weaponSlot != null) setSelectedWeaponSlot(component.weaponSlot)
+  }
 
   const replaceDesign = useCallback((next: HLGDesign) => {
     setDesign(cloneHLGDesign(next))
     setSelectedComponentId(null)
+    setSelectedWeaponSlot(null)
   }, [])
 
   const handleSelectShip = (type: PlayerShipType) => {
@@ -117,19 +129,24 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
   const handleGridClick = (cell: HLGCell) => {
     const existing = componentAtCell(design, cell)
     if (existing) {
-      setSelectedComponentId(existing.instanceId)
+      selectComponent(existing.instanceId)
       return
     }
     if (!selectedPart) return
     const rotation: HLGRotation = 0
-    if (!canPlaceHLGPart(hull, design, selectedPart, cell, rotation)) {
+    const weaponSlot = resolveWeaponSlotForPart(selectedPart)
+    if (weaponSlot === null) return
+    if (!canPlaceHLGPart(hull, design, selectedPart, cell, rotation, weaponSlot)) {
       showToast('この位置には配置できません')
       return
     }
+    const component = makeComponent(selectedPart, cell, rotation, weaponSlot)
     setDesign(prev => ({
       ...prev,
-      components: [...prev.components, makeComponent(selectedPart, cell, rotation)],
+      components: [...prev.components, component],
     }))
+    setSelectedComponentId(component.instanceId)
+    if (weaponSlot != null) setSelectedWeaponSlot(weaponSlot)
   }
 
   const handlePlacePart = (partId: string, cell: HLGCell): boolean => {
@@ -137,17 +154,42 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
     if (!part) return false
     setSelectedPartId(part.partId)
     const rotation: HLGRotation = 0
-    if (!canPlaceHLGPart(hull, design, part, cell, rotation)) {
+    const weaponSlot = resolveWeaponSlotForPart(part)
+    if (weaponSlot === null) return false
+    if (!canPlaceHLGPart(hull, design, part, cell, rotation, weaponSlot)) {
       showToast('この位置には配置できません')
       return false
     }
-    const component = makeComponent(part, cell, rotation)
+    const component = makeComponent(part, cell, rotation, weaponSlot)
     setDesign(prev => ({
       ...prev,
       components: [...prev.components, component],
     }))
     setSelectedComponentId(component.instanceId)
+    if (weaponSlot != null) setSelectedWeaponSlot(weaponSlot)
     return true
+  }
+
+  const resolveWeaponSlotForPart = (part: HLGPartDefinition): number | undefined | null => {
+    if (!part.type) return undefined
+    const slots = weaponSlotItems(design)
+    if (selectedWeaponSlot != null) {
+      const slot = slots[selectedWeaponSlot]
+      if (!slot) return null
+      if (slot.part && slot.part.partId !== part.partId) {
+        showToast(`スロット${selectedWeaponSlot + 1}は${slot.part.name}用です`)
+        return null
+      }
+      return selectedWeaponSlot
+    }
+    const sameSlot = slots.find(slot => slot.part?.partId === part.partId)
+    if (sameSlot) return sameSlot.slot
+    const emptySlot = slots.find(slot => !slot.part)
+    if (!emptySlot) {
+      showToast(`兵装スロットは${MAX_WEAPON_SLOTS}枠までです`)
+      return null
+    }
+    return emptySlot.slot
   }
 
   const handlePartDragStart = (event: ReactDragEvent<HTMLButtonElement>, part: HLGPartDefinition) => {
@@ -180,7 +222,7 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
   const handleDelete = () => {
     if (!selectedComponent) return
     setDesign(prev => ({ ...prev, components: prev.components.filter(component => component.instanceId !== selectedComponent.instanceId) }))
-    setSelectedComponentId(null)
+    selectComponent(null)
   }
 
   const handleDeleteComponent = (instanceId: string) => {
@@ -218,7 +260,7 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
       ...prev,
       components: prev.components.map(item => item.instanceId === instanceId ? { ...item, cell } : item),
     }))
-    setSelectedComponentId(instanceId)
+    selectComponent(instanceId)
     return true
   }
 
@@ -226,8 +268,8 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
     const component = design.components.find(item => item.instanceId === instanceId)
     const part = component ? HLG_PART_BY_ID[component.partId] : undefined
     if (!component || !part) return false
-    if (!canPlaceHLGPart(hull, design, part, cell, component.rotation)) return false
-    const copied = { ...makeComponent(part, cell, component.rotation), barrels: component.barrels }
+    if (!canPlaceHLGPart(hull, design, part, cell, component.rotation, component.weaponSlot)) return false
+    const copied = { ...makeComponent(part, cell, component.rotation, component.weaponSlot), barrels: component.barrels }
     setDesign(prev => ({
       ...prev,
       components: [...prev.components, copied],
@@ -236,33 +278,46 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
     return true
   }
 
-  const handleAddGroupedPart = (partId: string) => {
+  const handleAddGroupedPart = (slotIndex: number) => {
+    const slot = weaponSlotItems(design)[slotIndex]
+    const partId = slot?.part?.partId
+    if (!partId) return
     const part = HLG_PART_BY_ID[partId]
     if (!part) return
-    const existing = design.components.filter(component => component.partId === partId)
+    const existing = design.components.filter(component => component.weaponSlot === slotIndex)
     const preferred = preferredCellForGroupedPart(hull, part, existing.at(-1))
     const cell = findNearestValidCell(hull, design, part, preferred)
     if (!cell) {
       showToast('追加できる空き位置がありません')
       return
     }
-    const component = makeComponent(part, cell, existing.at(-1)?.rotation ?? 0)
+    const component = makeComponent(part, cell, existing.at(-1)?.rotation ?? 0, slotIndex)
     setDesign(prev => ({ ...prev, components: [...prev.components, component] }))
     setSelectedPartId(part.partId)
+    setSelectedWeaponSlot(slotIndex)
     setSelectedComponentId(component.instanceId)
   }
 
-  const handleRemoveGroupedPart = (partId: string) => {
-    const target = [...design.components].reverse().find(component => component.partId === partId)
+  const handleRemoveGroupedPart = (slotIndex: number) => {
+    const target = [...design.components].reverse().find(component => component.weaponSlot === slotIndex)
     if (!target) return
     setDesign(prev => ({ ...prev, components: prev.components.filter(component => component.instanceId !== target.instanceId) }))
     setSelectedComponentId(current => current === target.instanceId ? null : current)
   }
 
-  const handleSelectGroupedPart = (partId: string) => {
-    const target = [...design.components].reverse().find(component => component.partId === partId)
-    setSelectedPartId(partId)
+  const handleSelectGroupedPart = (slotIndex: number) => {
+    const target = [...design.components].reverse().find(component => component.weaponSlot === slotIndex)
+    const part = target ? HLG_PART_BY_ID[target.partId] : null
+    setSelectedWeaponSlot(slotIndex)
+    setSelectedPartId(part?.partId ?? null)
     setSelectedComponentId(target?.instanceId ?? null)
+  }
+
+  const handleSelectWeaponSlot = (slotIndex: number) => {
+    const slot = weaponSlotItems(design)[slotIndex]
+    setSelectedWeaponSlot(slotIndex)
+    setSelectedPartId(slot?.part?.partId ?? null)
+    setSelectedComponentId(slot?.components.at(-1)?.instanceId ?? null)
   }
 
   const handleReset = () => replaceDesign(defaultHLGDesign(hull))
@@ -288,9 +343,16 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
   }, [design, hull, onConfirm])
 
   useEffect(() => {
-    if (step !== 'design' || !onConfirm) return
+    if (step !== 'design') return
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.code !== 'Space' || event.repeat || isTextEntryTarget(event.target)) return
+      if (event.repeat || isTextEntryTarget(event.target)) return
+      if (event.code === 'Escape') {
+        event.preventDefault()
+        setSelectedComponentId(null)
+        setSelectedPartId(null)
+        return
+      }
+      if (!onConfirm || event.code !== 'Space') return
       event.preventDefault()
       handleDeploy()
     }
@@ -394,10 +456,11 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
               hull={hull}
               design={design}
               selectedPart={placementPart}
+              selectedWeaponSlot={selectedPlacementSlot}
               selectedComponentId={selectedComponentId}
               onCellClick={handleGridClick}
               onPartDrop={handlePlacePart}
-              onSelectComponent={setSelectedComponentId}
+              onSelectComponent={selectComponent}
               onMoveComponent={handleMoveComponent}
               onCopyComponent={handleCopyComponent}
               onDeleteComponent={handleDeleteComponent}
@@ -405,7 +468,9 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
             <GroupedLoadoutPanel
               design={design}
               selectedPartId={selectedComponent?.partId ?? selectedPart?.partId ?? null}
+              selectedWeaponSlot={selectedWeaponSlot}
               onSelect={handleSelectGroupedPart}
+              onSelectSlot={handleSelectWeaponSlot}
               onAdd={handleAddGroupedPart}
               onRemove={handleRemoveGroupedPart}
             />
@@ -435,6 +500,7 @@ function HLGGrid({
   hull,
   design,
   selectedPart,
+  selectedWeaponSlot,
   selectedComponentId,
   onCellClick,
   onPartDrop,
@@ -446,6 +512,7 @@ function HLGGrid({
   hull: ReturnType<typeof getHullsByClass>[number]
   design: HLGDesign
   selectedPart?: HLGPartDefinition
+  selectedWeaponSlot: number | null
   selectedComponentId: string | null
   onCellClick: (cell: HLGCell) => void
   onPartDrop: (partId: string, cell: HLGCell) => boolean
@@ -588,7 +655,7 @@ function HLGGrid({
       const cell = { c, r }
       const inside = hlgCellIsInsideHull(hull, cell)
       const zones = hlgCellZones(hull, cell)
-      const canPlace = inside && selectedPart ? canPlaceHLGPart(hull, design, selectedPart, cell, 0) : false
+      const canPlace = inside && selectedPart ? canPlaceHLGPart(hull, design, selectedPart, cell, 0, selectedWeaponSlot ?? undefined) : false
       const edgeClass = inside ? [
         !hlgCellIsInsideHull(hull, { c, r: r - 1 }) ? ' sd-hlg-cell--edge-fore' : '',
         !hlgCellIsInsideHull(hull, { c, r: r + 1 }) ? ' sd-hlg-cell--edge-aft' : '',
@@ -650,7 +717,7 @@ function HLGGrid({
             barrels: selectedPart.barrels,
           }
           const rect = componentRect(previewComponent, selectedPart)
-          const valid = canPlaceHLGPart(hull, design, selectedPart, placementPreviewCell, rotation)
+          const valid = canPlaceHLGPart(hull, design, selectedPart, placementPreviewCell, rotation, selectedWeaponSlot ?? undefined)
           return (
             <div
               className={`sd-hlg-placement-ghost sd-hlg-component--${selectedPart.category}${valid ? ' sd-hlg-placement-ghost--valid' : ' sd-hlg-placement-ghost--invalid'}`}
@@ -848,24 +915,68 @@ function HLGStatsPanel({
 function GroupedLoadoutPanel({
   design,
   selectedPartId,
+  selectedWeaponSlot,
   onSelect,
+  onSelectSlot,
   onAdd,
   onRemove,
 }: {
   design: HLGDesign
   selectedPartId: string | null
-  onSelect: (partId: string) => void
-  onAdd: (partId: string) => void
-  onRemove: (partId: string) => void
+  selectedWeaponSlot: number | null
+  onSelect: (slotIndex: number) => void
+  onSelectSlot: (slotIndex: number) => void
+  onAdd: (slotIndex: number) => void
+  onRemove: (slotIndex: number) => void
 }) {
   const groups = useMemo(() => groupedLoadout(design), [design])
+  const weaponSlots = useMemo(() => weaponSlotItems(design), [design])
   const armaments = groups.filter(group => group.kind === 'armament')
   const auxArmaments = groups.filter(group => group.kind === 'aux')
   return (
-    <section className="sd-loadout-groups">
-      <GroupedLoadoutColumn title="兵装" groups={armaments} selectedPartId={selectedPartId} onSelect={onSelect} onAdd={onAdd} onRemove={onRemove} />
-      <GroupedLoadoutColumn title="補助兵装" groups={auxArmaments} selectedPartId={selectedPartId} onSelect={onSelect} onAdd={onAdd} onRemove={onRemove} />
+    <section className="sd-loadout-panel">
+      <WeaponSlotStrip slots={weaponSlots} selectedPartId={selectedPartId} selectedWeaponSlot={selectedWeaponSlot} onSelect={onSelectSlot} />
+      <div className="sd-loadout-groups">
+        <GroupedLoadoutColumn title="兵装" groups={armaments} selectedPartId={selectedPartId} onSelect={onSelect} onAdd={onAdd} onRemove={onRemove} />
+        <GroupedLoadoutColumn title="補助兵装" groups={auxArmaments} selectedPartId={selectedPartId} onSelect={onSelect} onAdd={onAdd} onRemove={onRemove} />
+      </div>
     </section>
+  )
+}
+
+function WeaponSlotStrip({
+  slots,
+  selectedPartId,
+  selectedWeaponSlot,
+  onSelect,
+}: {
+  slots: WeaponSlotItem[]
+  selectedPartId: string | null
+  selectedWeaponSlot: number | null
+  onSelect: (slotIndex: number) => void
+}) {
+  const used = slots.filter(slot => !!slot.part).length
+  return (
+    <div className="sd-loadout-slots">
+      <div className="sd-loadout-slots-title">兵装スロット {used}/{MAX_WEAPON_SLOTS}</div>
+      <div className="sd-loadout-slot-grid">
+        {slots.map((part, index) => {
+          const selected = selectedWeaponSlot === index || part.part?.partId === selectedPartId && part.slot === selectedWeaponSlot
+          return (
+            <button
+              key={index}
+              className={`sd-loadout-slot-cell${part.part ? ' sd-loadout-slot-cell--filled' : ''}${selected ? ' sd-loadout-slot-cell--selected' : ''}`}
+              type="button"
+              onClick={() => onSelect(index)}
+              aria-label={`兵装スロット${index + 1}${part.part ? ` ${part.part.name}` : ' 空'}`}
+            >
+              <span className="sd-loadout-slot-index">{index + 1}</span>
+              <span className="sd-loadout-slot-name">{part.part ? `${shortSlotPartName(part.part)} x${part.count}` : '空'}</span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
   )
 }
 
@@ -880,9 +991,9 @@ function GroupedLoadoutColumn({
   title: string
   groups: LoadoutGroup[]
   selectedPartId: string | null
-  onSelect: (partId: string) => void
-  onAdd: (partId: string) => void
-  onRemove: (partId: string) => void
+  onSelect: (slotIndex: number) => void
+  onAdd: (slotIndex: number) => void
+  onRemove: (slotIndex: number) => void
 }) {
   return (
     <div className="sd-loadout-group-column">
@@ -891,15 +1002,15 @@ function GroupedLoadoutColumn({
         <div className="sd-loadout-group-empty">未配置</div>
       ) : groups.map(group => (
         <div
-          key={group.part.partId}
+          key={`${group.slot}:${group.part.partId}`}
           className={`sd-loadout-group-row${group.part.partId === selectedPartId ? ' sd-loadout-group-row--selected' : ''}`}
           role="button"
           tabIndex={0}
-          onClick={() => onSelect(group.part.partId)}
+          onClick={() => onSelect(group.slot)}
           onKeyDown={(event) => {
             if (event.key === 'Enter' || event.key === ' ') {
               event.preventDefault()
-              onSelect(group.part.partId)
+              onSelect(group.slot)
             }
           }}
         >
@@ -910,14 +1021,14 @@ function GroupedLoadoutColumn({
               {group.part.weight ? ` / ${group.part.weight}t` : ''}
             </span>
           </div>
-          <div className="sd-loadout-group-count">{group.count}基</div>
+          <div className="sd-loadout-group-count">S{group.slot + 1} / {group.count}基</div>
           <div className="sd-loadout-group-actions">
             <button
               className="sd-loadout-group-btn"
               type="button"
               onClick={(event) => {
                 event.stopPropagation()
-                onRemove(group.part.partId)
+                onRemove(group.slot)
               }}
               aria-label={`${group.part.name}を減らす`}
             >
@@ -928,7 +1039,7 @@ function GroupedLoadoutColumn({
               type="button"
               onClick={(event) => {
                 event.stopPropagation()
-                onAdd(group.part.partId)
+                onAdd(group.slot)
               }}
               aria-label={`${group.part.name}を増やす`}
             >
@@ -951,21 +1062,32 @@ function StatRow({ label, value, color }: { label: string; value: string; color:
 }
 
 interface LoadoutGroup {
+  slot: number
   part: HLGPartDefinition
   count: number
   kind: 'armament' | 'aux'
 }
 
+interface WeaponSlotItem {
+  slot: number
+  part: HLGPartDefinition | null
+  count: number
+  components: HLGComponentInstance[]
+}
+
 function groupedLoadout(design: HLGDesign): LoadoutGroup[] {
-  const counts = new Map<string, number>()
-  for (const component of design.components) {
-    const part = HLG_PART_BY_ID[component.partId]
-    if (!part || !isGroupedLoadoutPart(part)) continue
-    counts.set(part.partId, (counts.get(part.partId) ?? 0) + 1)
-  }
-  return [...counts.entries()]
-    .map(([partId, count]) => ({ part: HLG_PART_BY_ID[partId]!, count, kind: loadoutGroupKind(HLG_PART_BY_ID[partId]!) }))
-    .sort((a, b) => loadoutGroupSort(a.part) - loadoutGroupSort(b.part) || a.part.name.localeCompare(b.part.name, 'ja'))
+  return weaponSlotItems(design)
+    .filter((slot): slot is WeaponSlotItem & { part: HLGPartDefinition } => !!slot.part)
+    .map(slot => ({ slot: slot.slot, part: slot.part, count: slot.count, kind: loadoutGroupKind(slot.part) }))
+    .sort((a, b) => loadoutGroupSort(a.part) - loadoutGroupSort(b.part) || a.slot - b.slot)
+}
+
+function weaponSlotItems(design: HLGDesign): WeaponSlotItem[] {
+  return Array.from({ length: MAX_WEAPON_SLOTS }, (_, slot) => {
+    const components = design.components.filter(component => component.weaponSlot === slot && !!HLG_PART_BY_ID[component.partId]?.type)
+    const part = components[0] ? HLG_PART_BY_ID[components[0].partId] ?? null : null
+    return { slot, part, count: components.length, components }
+  })
 }
 
 function isGroupedLoadoutPart(part: HLGPartDefinition): boolean {
@@ -1015,6 +1137,16 @@ function shortPartName(part: HLGPartDefinition): string {
   if (part.type === 'aa') return '対'
   if (part.type === 'missile') return '誘'
   return '兵'
+}
+
+function shortSlotPartName(part: HLGPartDefinition): string {
+  return part.name
+    .replace('連装砲', '連砲')
+    .replace('重砲', '重')
+    .replace('速射副砲', '速副')
+    .replace('対空砲', '対空')
+    .replace('ミサイル', 'MSL')
+    .slice(0, 6)
 }
 
 function preferredCellForGroupedPart(

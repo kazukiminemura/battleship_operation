@@ -23,6 +23,12 @@ export interface WeaponTemplate {
   barrels?: number
   mount?: { x: number; y: number }
   firingArc?: { center: number; width: number }
+  mounts?: Array<{
+    instanceId?: string
+    mount?: { x: number; y: number }
+    firingArc?: { center: number; width: number }
+    barrels?: number
+  }>
 }
 
 export interface StaticData {
@@ -357,6 +363,11 @@ function makeWeaponState(template: WeaponTemplate): WeaponState {
     type: template.type,
     mount: template.mount ? { ...template.mount } : undefined,
     firingArc: template.firingArc ? { ...template.firingArc } : undefined,
+    mounts: template.mounts?.map(mount => ({
+      ...mount,
+      mount: mount.mount ? { ...mount.mount } : undefined,
+      firingArc: mount.firingArc ? { ...mount.firingArc } : undefined,
+    })),
     barrels: template.barrels,
     cooldownTick: 0,
     ammo: template.ammo,

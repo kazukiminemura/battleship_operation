@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { HULL_CATALOG } from '../../src/game/data/hull-catalog'
+import { MAX_WEAPON_SLOTS } from '../../src/game/simulation/types'
 import {
   HLG_PART_BY_ID,
   canPlaceHLGPart,
@@ -88,12 +89,25 @@ describe('freeform ship design system', () => {
     expect(stats.canDeploy).toBe(true)
   })
 
-  it('converts each placed weapon to an individual combat template', () => {
+  it('converts each occupied weapon slot to a combat template', () => {
     const design = defaultHLGDesign(battleship)
     const loadout = hlgDesignToLoadout(battleship, design)
-    const weaponComponents = design.components.filter(component => HLG_PART_BY_ID[component.partId]?.type)
-    expect(loadout).toHaveLength(weaponComponents.length)
+    const occupiedSlots = new Set(design.components.flatMap(component => HLG_PART_BY_ID[component.partId]?.type && component.weaponSlot != null ? [component.weaponSlot] : []))
+    expect(loadout).toHaveLength(occupiedSlots.size)
     expect(loadout.every(weapon => weapon.instanceId && weapon.mount)).toBe(true)
+  })
+
+  it('groups multiple mounts under one fixed weapon slot', () => {
+    const base = defaultHLGDesign(battleship)
+    const gun = HLG_PART_BY_ID['part.weapon.weapon.gun.406mm.twin']!
+    const extraWeapons = Array.from({ length: 3 }, (_, index) => ({
+      ...makeComponent(gun, { c: hlgGridSpec(battleship).centerC, r: hlgGridSpec(battleship).topR + index * 8 }, 0, 0),
+      instanceId: `test.weapon.${index}`,
+    }))
+    const design = { ...base, components: [...base.components.filter(component => !HLG_PART_BY_ID[component.partId]?.type), ...extraWeapons] }
+    expect(validateHLGDesign(battleship, design)).not.toContain(`兵装スロットは${MAX_WEAPON_SLOTS}枠までです`)
+    expect(hlgDesignToLoadout(battleship, design)).toHaveLength(1)
+    expect(hlgDesignToLoadout(battleship, design)[0]!.mounts).toHaveLength(3)
   })
 
   it('migrates legacy slot assignments into HLG components', () => {

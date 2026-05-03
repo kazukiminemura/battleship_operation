@@ -1,22 +1,15 @@
-import type { HLGDesign, HLGStats } from './hlg-system'
-
-export type WeaponSlotType = 'gun' | 'secondary' | 'torpedo' | 'aa' | 'missile'
-
-export interface Weapon {
-  id: string
-  name: string
-  type: WeaponSlotType
-  weight: number
-  firepower?: number
-  antiAir?: number
-  reload: number
-  accuracy: number
-}
+import type { PlayerShipType, WeaponTemplate } from '../game/data/masterdata'
+import type { HLGDesign } from './hlg-system'
 
 export interface SavedDesignerState {
   design: HLGDesign
 }
 
-export type Design = HLGDesign
-export type DesignLayout = Record<string, never>
-export type ShipStats = HLGStats
+export interface PrepResult {
+  templateId?: string
+  shipType: PlayerShipType
+  loadout: WeaponTemplate[]
+  armorBonus: number
+  towerMount?: { x: number; y: number }
+  hlgDesign?: HLGDesign
+}
