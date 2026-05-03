@@ -3,9 +3,9 @@ import { firingArcForWeapon, isDirectionWithinFiringArc } from '../../src/game/s
 
 describe('firing arcs', () => {
   it('limits torpedoes to the side where they are mounted', () => {
-    const portTorpedo = firingArcForWeapon('torpedo', { x: -0.65, y: 0 })
-    expect(isDirectionWithinFiringArc(-Math.PI / 2, portTorpedo)).toBe(true)
-    expect(isDirectionWithinFiringArc(Math.PI / 2, portTorpedo)).toBe(false)
+    const starboardTorpedo = firingArcForWeapon('torpedo', { x: -0.65, y: 0 })
+    expect(isDirectionWithinFiringArc(Math.PI / 2, starboardTorpedo)).toBe(true)
+    expect(isDirectionWithinFiringArc(-Math.PI / 2, starboardTorpedo)).toBe(false)
   })
 
   it('changes large gun arcs by fore and aft placement', () => {
@@ -21,5 +21,13 @@ describe('firing arcs', () => {
     const aa = firingArcForWeapon('aa', { x: 0.8, y: 0.8 })
     expect(isDirectionWithinFiringArc(0, aa)).toBe(true)
     expect(isDirectionWithinFiringArc(Math.PI, aa)).toBe(true)
+  })
+
+  it('keeps rapid secondary guns all-around near the centerline', () => {
+    const rapidGun = firingArcForWeapon('secondary', { x: 0.3, y: 0 })
+    expect(isDirectionWithinFiringArc(0, rapidGun)).toBe(true)
+    expect(isDirectionWithinFiringArc(Math.PI, rapidGun)).toBe(true)
+    expect(isDirectionWithinFiringArc(Math.PI / 2, rapidGun)).toBe(true)
+    expect(isDirectionWithinFiringArc(-Math.PI / 2, rapidGun)).toBe(true)
   })
 })

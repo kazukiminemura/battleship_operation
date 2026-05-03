@@ -8,7 +8,7 @@ export interface FiringArc {
 export function firingArcForWeapon(type: WeaponType, mount?: { x: number; y: number }): FiringArc {
   const x = mount?.x ?? 0
   const y = mount?.y ?? 0
-  const side = x < -0.18 ? -1 : x > 0.18 ? 1 : 0
+  const side = sideFromMount(x, type)
 
   if (type === 'aa' || type === 'missile') return fullArc()
 
@@ -19,9 +19,9 @@ export function firingArcForWeapon(type: WeaponType, mount?: { x: number; y: num
   }
 
   if (type === 'secondary') {
-    if (side < 0) return degreesArc(-90, 190)
-    if (side > 0) return degreesArc(90, 190)
-    return y > 0.50 ? degreesArc(180, 280) : degreesArc(0, 280)
+    if (side < 0) return degreesArc(-90, 220)
+    if (side > 0) return degreesArc(90, 220)
+    return y > 0.56 ? degreesArc(180, 300) : y < -0.56 ? degreesArc(0, 300) : fullArc()
   }
 
   if (y < -0.48) return degreesArc(0, 270)
@@ -29,6 +29,13 @@ export function firingArcForWeapon(type: WeaponType, mount?: { x: number; y: num
   if (side < 0) return degreesArc(-65, 250)
   if (side > 0) return degreesArc(65, 250)
   return degreesArc(0, 320)
+}
+
+function sideFromMount(x: number, type: WeaponType): -1 | 0 | 1 {
+  const threshold = type === 'secondary' || type === 'aa' ? 0.48 : 0.18
+  if (x < -threshold) return 1
+  if (x > threshold) return -1
+  return 0
 }
 
 export function isDirectionWithinFiringArc(relativeAngle: number, arc: FiringArc): boolean {

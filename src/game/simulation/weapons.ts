@@ -202,8 +202,8 @@ function isWithinFiringArc(ship: ShipEntity, weapon: ShipEntity['weapons'][numbe
 }
 
 function legacyMountFromWeaponId(weaponId: string): { x: number; y: number } | undefined {
-  if (weaponId.includes('.port')) return { x: -0.7, y: 0 }
-  if (weaponId.includes('.starboard')) return { x: 0.7, y: 0 }
+  if (weaponId.includes('.port')) return { x: 0.7, y: 0 }
+  if (weaponId.includes('.starboard')) return { x: -0.7, y: 0 }
   if (weaponId.includes('.aft')) return { x: 0, y: 0.7 }
   if (weaponId.includes('.forward')) return { x: 0, y: -0.7 }
   return undefined

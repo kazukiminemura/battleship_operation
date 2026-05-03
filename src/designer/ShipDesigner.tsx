@@ -460,6 +460,7 @@ function HLGGrid({
   const dragRef = useRef<DragState | null>(null)
   const [drag, setDrag] = useState<DragState | null>(null)
   const [ctrlCopyMode, setCtrlCopyMode] = useState(false)
+  const [placementPreviewCell, setPlacementPreviewCell] = useState<HLGCell | null>(null)
 
   const setDragState = (next: typeof drag) => {
     dragRef.current = next
@@ -577,6 +578,7 @@ function HLGGrid({
     if (!partId) return
     event.preventDefault()
     event.stopPropagation()
+    setPlacementPreviewCell(null)
     onPartDrop(partId, cell)
   }
 
@@ -598,11 +600,17 @@ function HLGGrid({
           key={`${c},${r}`}
           className={`sd-hlg-cell${inside ? ' sd-hlg-cell--inside' : ''}${zones.includes('side') ? ' sd-hlg-cell--side' : ''}${canPlace ? ' sd-hlg-cell--valid' : ''}${edgeClass}`}
           style={{ gridColumn: r + 1, gridRow: c + 1 }}
-          onClick={() => onCellClick(cell)}
+          onMouseEnter={() => setPlacementPreviewCell(cell)}
+          onFocus={() => setPlacementPreviewCell(cell)}
+          onClick={() => {
+            setPlacementPreviewCell(cell)
+            onCellClick(cell)
+          }}
           onDragOver={(event) => {
             if (inside) {
               event.preventDefault()
               event.dataTransfer.dropEffect = 'copy'
+              setPlacementPreviewCell(cell)
             }
           }}
           onDrop={(event) => dropPartOnCell(event, cell)}
@@ -623,12 +631,38 @@ function HLGGrid({
           gridTemplateRows: `repeat(${spec.cols}, minmax(0, 1fr))`,
           aspectRatio: `${spec.rows} / ${spec.cols}`,
         }}
+        onMouseLeave={() => setPlacementPreviewCell(null)}
       >
         {cells}
         <div
           className="sd-hlg-centerline"
           style={{ gridColumn: `1 / span ${spec.rows}`, gridRow: `${spec.centerC + 1}` }}
         />
+        {selectedPart && placementPreviewCell && !componentAtCell(design, placementPreviewCell) && (() => {
+          const rotation: HLGRotation = 0
+          const footprint = rotateFootprint(selectedPart.footprint, rotation)
+          const previewComponent: HLGComponentInstance = {
+            instanceId: 'placement-preview',
+            partId: selectedPart.partId,
+            category: selectedPart.category,
+            cell: placementPreviewCell,
+            rotation,
+            barrels: selectedPart.barrels,
+          }
+          const rect = componentRect(previewComponent, selectedPart)
+          const valid = canPlaceHLGPart(hull, design, selectedPart, placementPreviewCell, rotation)
+          return (
+            <div
+              className={`sd-hlg-placement-ghost sd-hlg-component--${selectedPart.category}${valid ? ' sd-hlg-placement-ghost--valid' : ' sd-hlg-placement-ghost--invalid'}`}
+              style={{
+                gridColumn: `${Math.floor(rect.top) + 1} / span ${Math.ceil(footprint.h)}`,
+                gridRow: `${Math.floor(rect.left) + 1} / span ${Math.ceil(footprint.w)}`,
+              }}
+            >
+              <span>{shortPartName(selectedPart)}</span>
+            </div>
+          )
+        })()}
         {design.components.map(component => {
           const part = HLG_PART_BY_ID[component.partId]
           if (!part) return null
@@ -682,6 +716,8 @@ function HLGGrid({
             ? <FiringArcOverlay component={component} part={part} spec={spec} />
             : null
         })()}
+        <div className="sd-hlg-bow-marker">艦首</div>
+        <div className="sd-hlg-stern-marker">艦尾</div>
         {(ctrlCopyMode || drag?.copying) && <div className="sd-hlg-copy-mode">COPY MODE</div>}
       </div>
     </div>
@@ -702,13 +738,17 @@ function FiringArcOverlay({
     y: Math.max(-1, Math.min(1, ((component.cell.r + 0.5 - spec.topR) / Math.max(1, spec.lengthCells - 1)) * 2 - 1)),
   }
   const arc = firingArcForWeapon(part.type!, mount)
+  const displayArc = { ...arc, center: arc.center + Math.PI }
   const cx = ((component.cell.r + 0.5) / spec.rows) * 100
   const cy = ((component.cell.c + 0.5) / spec.cols) * 100
-  const path = arcPath(cx, cy, 38, arc)
+  const arcRadius = 38
+  const safePath = arcPath(cx, cy, arcRadius, displayArc)
+  const dangerPath = circlePath(cx, cy, arcRadius)
   return (
     <svg className="sd-hlg-arc-overlay" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-      <path d={path} className="sd-hlg-arc-fill" />
-      <path d={path} className="sd-hlg-arc-line" />
+      <path d={dangerPath} className="sd-hlg-arc-danger" />
+      <path d={safePath} className="sd-hlg-arc-safe" />
+      <path d={safePath} className="sd-hlg-arc-line" />
       <circle cx={cx} cy={cy} r="0.55" className="sd-hlg-arc-origin" />
       <text x={Math.min(96, cx + 1.4)} y={Math.max(4, cy - 1.8)} className="sd-hlg-arc-label">{firingArcLabel(arc)}</text>
     </svg>
@@ -717,13 +757,7 @@ function FiringArcOverlay({
 
 function arcPath(cx: number, cy: number, radius: number, arc: FiringArc): string {
   if (arc.width >= Math.PI * 2 - 0.001) {
-    return [
-      `M ${cx} ${cy}`,
-      `m ${-radius} 0`,
-      `a ${radius} ${radius} 0 1 0 ${radius * 2} 0`,
-      `a ${radius} ${radius} 0 1 0 ${-radius * 2} 0`,
-      'Z',
-    ].join(' ')
+    return circlePath(cx, cy, radius)
   }
   const start = arc.center - arc.width / 2
   const end = arc.center + arc.width / 2
@@ -731,6 +765,16 @@ function arcPath(cx: number, cy: number, radius: number, arc: FiringArc): string
   const p2 = arcPoint(cx, cy, radius, end)
   const large = arc.width > Math.PI ? 1 : 0
   return `M ${cx} ${cy} L ${p1.x} ${p1.y} A ${radius} ${radius} 0 ${large} 1 ${p2.x} ${p2.y} Z`
+}
+
+function circlePath(cx: number, cy: number, radius: number): string {
+  return [
+    `M ${cx} ${cy}`,
+    `m ${-radius} 0`,
+    `a ${radius} ${radius} 0 1 0 ${radius * 2} 0`,
+    `a ${radius} ${radius} 0 1 0 ${-radius * 2} 0`,
+    'Z',
+  ].join(' ')
 }
 
 function arcPoint(cx: number, cy: number, radius: number, angle: number): { x: number; y: number } {
