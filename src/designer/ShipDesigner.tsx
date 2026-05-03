@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { PointerEvent as ReactPointerEvent } from 'react'
+import type { DragEvent as ReactDragEvent, PointerEvent as ReactPointerEvent } from 'react'
 import { Ship3DPreview } from './Ship3DPreview'
 import { WeightGauge } from './WeightGauge'
 import {
@@ -74,6 +74,7 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
   const [selectedPartId, setSelectedPartId] = useState<string>(() => defaultSelectedPart(initialHull.shipType))
   const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null)
   const [partFilter, setPartFilter] = useState<HLGComponentCategory | 'all'>('all')
+  const [draggingPartId, setDraggingPartId] = useState<string | null>(null)
 
   const hulls = getHullsByClass(shipType)
   const hull = hulls[hullIdx] ?? hulls[0]!
@@ -84,6 +85,7 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
     [partFilter, shipType],
   )
   const selectedPart = HLG_PART_BY_ID[selectedPartId] ?? visibleParts[0]
+  const placementPart = draggingPartId ? HLG_PART_BY_ID[draggingPartId] ?? selectedPart : selectedPart
   const selectedComponent = design.components.find(component => component.instanceId === selectedComponentId) ?? null
 
   const replaceDesign = useCallback((next: HLGDesign) => {
@@ -123,6 +125,32 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
       ...prev,
       components: [...prev.components, makeComponent(selectedPart, cell, rotation)],
     }))
+  }
+
+  const handlePlacePart = (partId: string, cell: HLGCell): boolean => {
+    const part = HLG_PART_BY_ID[partId]
+    if (!part) return false
+    setSelectedPartId(part.partId)
+    const rotation: HLGRotation = 0
+    if (!canPlaceHLGPart(hull, design, part, cell, rotation)) {
+      showToast('この位置には配置できません')
+      return false
+    }
+    const component = makeComponent(part, cell, rotation)
+    setDesign(prev => ({
+      ...prev,
+      components: [...prev.components, component],
+    }))
+    setSelectedComponentId(component.instanceId)
+    return true
+  }
+
+  const handlePartDragStart = (event: ReactDragEvent<HTMLButtonElement>, part: HLGPartDefinition) => {
+    setSelectedPartId(part.partId)
+    setDraggingPartId(part.partId)
+    event.dataTransfer.effectAllowed = 'copy'
+    event.dataTransfer.setData('application/x-battleship-part', part.partId)
+    event.dataTransfer.setData('text/plain', part.partId)
   }
 
   const handleRotate = () => {
@@ -278,7 +306,10 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
             {visibleParts.map(part => (
               <button
                 key={part.partId}
-                className={`sd-hlg-part${selectedPartId === part.partId ? ' sd-hlg-part--active' : ''}`}
+                className={`sd-hlg-part${selectedPartId === part.partId ? ' sd-hlg-part--active' : ''}${draggingPartId === part.partId ? ' sd-hlg-part--dragging' : ''}`}
+                draggable
+                onDragStart={(event) => handlePartDragStart(event, part)}
+                onDragEnd={() => setDraggingPartId(null)}
                 onClick={() => setSelectedPartId(part.partId)}
               >
                 <span className="sd-hlg-part-kind">{CATEGORY_LABEL[part.category]}</span>
@@ -305,16 +336,17 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
             <HLGGrid
               hull={hull}
               design={design}
-              selectedPart={selectedPart}
+              selectedPart={placementPart}
               selectedComponentId={selectedComponentId}
               onCellClick={handleGridClick}
+              onPartDrop={handlePlacePart}
               onSelectComponent={setSelectedComponentId}
               onMoveComponent={handleMoveComponent}
               onCopyComponent={handleCopyComponent}
               onDeleteComponent={handleDeleteComponent}
             />
           </div>
-          <div className="sd-hull-hint">パーツを選び配置。ドラッグで移動、Ctrl+ドラッグでコピー、船体外へドロップで削除。</div>
+          <div className="sd-hull-hint">配置パーツからドラッグで配置。配置済みはドラッグで移動、Ctrl+ドラッグでコピー、船体外へドロップで削除。</div>
         </main>
 
         <aside className="sd-panel sd-panel-right">
@@ -341,6 +373,7 @@ function HLGGrid({
   selectedPart,
   selectedComponentId,
   onCellClick,
+  onPartDrop,
   onSelectComponent,
   onMoveComponent,
   onCopyComponent,
@@ -351,6 +384,7 @@ function HLGGrid({
   selectedPart?: HLGPartDefinition
   selectedComponentId: string | null
   onCellClick: (cell: HLGCell) => void
+  onPartDrop: (partId: string, cell: HLGCell) => boolean
   onSelectComponent: (id: string) => void
   onMoveComponent: (id: string, cell: HLGCell) => boolean
   onCopyComponent: (id: string, cell: HLGCell) => boolean
@@ -474,6 +508,14 @@ function HLGGrid({
     setDragState(null)
   }
 
+  const dropPartOnCell = (event: ReactDragEvent<HTMLButtonElement>, cell: HLGCell) => {
+    const partId = event.dataTransfer.getData('application/x-battleship-part') || event.dataTransfer.getData('text/plain')
+    if (!partId) return
+    event.preventDefault()
+    event.stopPropagation()
+    onPartDrop(partId, cell)
+  }
+
   const cells = []
   for (let r = 0; r < spec.rows; r++) {
     for (let c = 0; c < spec.cols; c++) {
@@ -493,6 +535,13 @@ function HLGGrid({
           className={`sd-hlg-cell${inside ? ' sd-hlg-cell--inside' : ''}${zones.includes('side') ? ' sd-hlg-cell--side' : ''}${canPlace ? ' sd-hlg-cell--valid' : ''}${edgeClass}`}
           style={{ gridColumn: r + 1, gridRow: c + 1 }}
           onClick={() => onCellClick(cell)}
+          onDragOver={(event) => {
+            if (inside) {
+              event.preventDefault()
+              event.dataTransfer.dropEffect = 'copy'
+            }
+          }}
+          onDrop={(event) => dropPartOnCell(event, cell)}
           type="button"
           aria-label={`${c},${r}`}
         />,

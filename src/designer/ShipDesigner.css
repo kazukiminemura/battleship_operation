@@ -271,13 +271,25 @@
   border: 1px solid #17351f;
   border-radius: 5px;
   color: var(--sd-text);
-  cursor: pointer;
+  cursor: grab;
+  user-select: none;
 }
 
 .sd-hlg-part:hover,
 .sd-hlg-part--active {
   border-color: var(--sd-accent);
   background: #102616;
+}
+
+.sd-hlg-part:active,
+.sd-hlg-part--dragging {
+  cursor: grabbing;
+}
+
+.sd-hlg-part--dragging {
+  border-color: #38bdf8;
+  background: #0b2633;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.32);
 }
 
 .sd-hlg-part-kind {
