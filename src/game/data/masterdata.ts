@@ -16,6 +16,7 @@ export interface ShipTemplate {
 
 export interface WeaponTemplate {
   id: string
+  instanceId?: string
   name?: string
   type: WeaponType
   ammo: number
@@ -326,7 +327,7 @@ function makeShipFromTemplate(spawn: ShipSpawn): ShipEntity {
     speed: 0,
     targetSpeed: 0,
     speedLevel: 'stop',
-    maxSpeed: template.maxSpeed / (1 + (template.armor ?? 0) * ARMOR_WEIGHT_K),
+    maxSpeed: template.maxSpeed,
     turnRate: template.turnRate,
     detectionRange: template.detectionRange,
     weapons: template.weapons.slice(0, MAX_WEAPON_SLOTS).map(makeWeaponState),
@@ -343,13 +344,14 @@ function applyArmorBonus(ship: ShipEntity, bonus: number): ShipEntity {
     ...ship,
     armor: totalArmor,
     armorBonus: bonus,
-    maxSpeed: template.maxSpeed / (1 + totalArmor * ARMOR_WEIGHT_K),
+    maxSpeed: template.maxSpeed / (1 + bonus * ARMOR_WEIGHT_K),
   }
 }
 
 function makeWeaponState(template: WeaponTemplate): WeaponState {
   return {
     id: template.id,
+    instanceId: template.instanceId,
     name: template.name ?? template.id,
     type: template.type,
     mount: template.mount ? { ...template.mount } : undefined,
@@ -388,7 +390,7 @@ export function createInitialState(
   const playerShip = makePlayerShip(playerType, customTemplateId)
   const armoredShip = armorBonus > 0 ? applyArmorBonus(playerShip, armorBonus) : playerShip
   const finalPlayer = customLoadout
-    ? { ...armoredShip, weapons: customLoadout.slice(0, MAX_WEAPON_SLOTS).map(makeWeaponState), towerMount }
+    ? { ...armoredShip, weapons: customLoadout.map(makeWeaponState), towerMount }
     : armoredShip
   entities.set('ship.player', finalPlayer)
 

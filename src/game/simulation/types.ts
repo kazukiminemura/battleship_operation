@@ -21,6 +21,7 @@ export type WeatherCondition = 'clear' | 'rain' | 'night'
 
 export interface WeaponState {
   id: string
+  instanceId?: string
   name: string
   type: WeaponType
   mount?: { x: number; y: number }

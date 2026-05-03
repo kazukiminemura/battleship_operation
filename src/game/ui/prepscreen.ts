@@ -1,4 +1,5 @@
 import type { WeaponTemplate, PlayerShipType } from '../data/masterdata'
+import type { HLGDesign } from '../../designer/hlg-system'
 import { ARMOR_WEIGHT_K } from '../data/masterdata'
 import { getHullsByClass, type HullCatalogEntry, type HullSlot } from '../data/hull-catalog'
 import { WEAPON_SHOP, TYPE_COLOR, TYPE_JP, type ShopWeapon } from '../data/weapon-shop'
@@ -38,6 +39,7 @@ export interface PrepResult {
   shipType: PlayerShipType
   loadout: WeaponTemplate[]
   armorBonus: number
+  hlgDesign?: HLGDesign
   slotCells?: Record<string, GridCell>
   towerCell?: GridCell | null
   towerMount?: { x: number; y: number }

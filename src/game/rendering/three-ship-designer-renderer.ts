@@ -266,7 +266,7 @@ function addHull(parent: THREE.Group, shape: ShipShapeClass, length: number, bea
   lower.position.y = -height * 0.32
   parent.add(lower)
 
-  const deck = mesh(deckGeometry(length * 0.95, beam * 0.82, bowType), MATERIALS.deck)
+  const deck = mesh(deckGeometry(length * 0.92, beam * 0.72, bowType), MATERIALS.deck)
   deck.rotation.x = -Math.PI / 2
   deck.position.y = height * 0.44
   parent.add(deck)
@@ -392,18 +392,40 @@ function hullGeometry(length: number, beam: number, height: number, bowType: 'sh
 
 function deckGeometry(length: number, beam: number, bowType: 'sharp' | 'round' | 'flat'): THREE.ShapeGeometry {
   const shape = new THREE.Shape()
-  const stern = -length / 2
-  const bow = length / 2
-  const nose = bowType === 'flat' ? bow - length * 0.05 : bow
-  shape.moveTo(stern + length * 0.04, -beam * 0.28)
-  shape.lineTo(stern + length * 0.12, -beam * 0.48)
-  shape.lineTo(bow - length * 0.12, -beam * 0.48)
-  shape.quadraticCurveTo(nose, -beam * 0.26, bow, 0)
-  shape.quadraticCurveTo(nose, beam * 0.26, bow - length * 0.12, beam * 0.48)
-  shape.lineTo(stern + length * 0.12, beam * 0.48)
-  shape.lineTo(stern + length * 0.04, beam * 0.28)
-  shape.quadraticCurveTo(stern, 0, stern + length * 0.04, -beam * 0.28)
+  const points = deckOutlinePoints(length, beam, bowType)
+  const first = points[0]!
+  shape.moveTo(first.x, first.z)
+  for (const point of points.slice(1)) shape.lineTo(point.x, point.z)
+  shape.closePath()
   return new THREE.ShapeGeometry(shape)
+}
+
+function deckOutlinePoints(
+  length: number,
+  beam: number,
+  bowType: 'sharp' | 'round' | 'flat',
+): Array<{ x: number; z: number }> {
+  const halfBeam = beam * 0.5
+  const stations = 34
+  const maxHalf = halfBeam * (bowType === 'sharp' ? 0.58 : bowType === 'round' ? 0.64 : 0.70)
+  const bowExponent = bowType === 'sharp' ? 0.38 : bowType === 'round' ? 0.52 : 0.72
+  const sternExponent = bowType === 'flat' ? 0.55 : 0.42
+  const starboard: Array<{ x: number; z: number }> = []
+  const port: Array<{ x: number; z: number }> = []
+
+  for (let i = 0; i <= stations; i++) {
+    const u = i / stations
+    const x = (u - 0.5) * length
+    const bowTaper = Math.pow(Math.sin(Math.PI * Math.min(1, u / 0.23) * 0.5), bowExponent)
+    const sternTaper = Math.pow(Math.sin(Math.PI * Math.min(1, (1 - u) / 0.18) * 0.5), sternExponent)
+    const midshipShoulder = 0.92 + Math.sin(Math.PI * u) * 0.08
+    const flatStern = bowType === 'flat' && u > 0.92 ? 0.78 + (1 - u) * 1.22 : 1
+    const half = maxHalf * bowTaper * sternTaper * midshipShoulder * flatStern
+    starboard.push({ x, z: -half })
+    port.unshift({ x, z: half })
+  }
+
+  return [...starboard, ...port]
 }
 
 function gunTurret(scale: number, barrels: number): THREE.Group {

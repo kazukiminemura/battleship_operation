@@ -77,7 +77,7 @@ export const WEAPON_STRATEGIES: Record<WeaponType, WeaponStrategy> = {
     speed: 25, damageMin: 15, damageMax: 25, lifetime: 40, cooldown: 8, hitRadius: 15, maxRange: 1000, maxHeight: 130,
   }),
   missile: new MissileWeaponStrategy({
-    speed: 12, damageMin: 60, damageMax: 90, lifetime: 200, cooldown: 90, hitRadius: 38, maxRange: 2400, maxHeight: 450,
+    speed: 12, damageMin: 60, damageMax: 90, lifetime: 200, cooldown: 90, hitRadius: 25, maxRange: 2400, maxHeight: 450,
   }),
 }
 
