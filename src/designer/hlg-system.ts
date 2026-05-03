@@ -450,7 +450,7 @@ function defaultPartsForClass(shipClass: PlayerShipType): Array<{ partId: string
   ]
 }
 
-function findNearestValidCell(hull: HullCatalogEntry, design: HLGDesign, part: HLGPartDefinition, preferred: HLGCell): HLGCell | null {
+export function findNearestValidCell(hull: HullCatalogEntry, design: HLGDesign, part: HLGPartDefinition, preferred: HLGCell): HLGCell | null {
   const spec = hlgGridSpec(hull)
   const clamped = { c: clamp(preferred.c, 0, spec.cols - 1), r: clamp(preferred.r, 0, spec.rows - 1) }
   const candidates: HLGCell[] = [clamped]

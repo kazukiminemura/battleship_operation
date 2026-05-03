@@ -18,6 +18,7 @@ import { ScreenManager } from './game/ui/screen-manager'
 import type { WeaponTemplate } from './game/data/masterdata'
 import { getDefaultLoadout } from './game/data/weapon-catalog'
 import { isAccessKey } from './game/ui/accesskeys'
+import type { HLGDesign } from './designer/hlg-system'
 import {
   renderPauseOverlay,
   hitPauseRegion,
@@ -77,6 +78,7 @@ function main(): void {
   let selectedSlotCells: PrepResult['slotCells'] | undefined
   let selectedTowerCell: PrepResult['towerCell'] | undefined
   let selectedTowerMount: { x: number; y: number } | undefined
+  let selectedHLGDesign: HLGDesign | undefined
   let currentStage     = 1
   let normalShip: PlayerShipType = selectedShip
   let normalStage      = currentStage
@@ -179,6 +181,7 @@ function main(): void {
     selectedSlotCells = result.slotCells
     selectedTowerCell = result.towerCell
     selectedTowerMount = result.towerMount
+    selectedHLGDesign = result.hlgDesign
   }
 
   const currentPrepResult = (): PrepResult | null => {
@@ -191,6 +194,7 @@ function main(): void {
       slotCells: selectedSlotCells,
       towerCell: selectedTowerCell,
       towerMount: selectedTowerMount,
+      hlgDesign: selectedHLGDesign,
     }
   }
 

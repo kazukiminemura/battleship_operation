@@ -20,6 +20,8 @@ export { getHullsByClass }
 export const STORAGE_KEY = 'battleship-freeform-designer-v1'
 export const PREVIOUS_STORAGE_KEY = 'battleship-hlg-designer-v1'
 export const LEGACY_STORAGE_KEY = 'battleship-designer-v1'
+export const DESIGN_SAVE_SLOTS = [1, 2, 3, 4] as const
+export type DesignSaveSlot = typeof DESIGN_SAVE_SLOTS[number]
 
 export const WEAPONS: Weapon[] = WEAPON_SHOP.map(weapon => ({
   id: weapon.id,
@@ -60,13 +62,13 @@ export function designTowerMount(hull: HullCatalogEntry, design: HLGDesign): { x
   return towerMountFromHLG(hull, design)
 }
 
-export function saveDesign(design: HLGDesign): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({ design }))
+export function saveDesign(design: HLGDesign, slot: DesignSaveSlot = 1): void {
+  localStorage.setItem(storageKeyForSlot(slot), JSON.stringify({ design }))
 }
 
-export function loadDesignerState(hull: HullCatalogEntry): SavedDesignerState {
+export function loadDesignerState(hull: HullCatalogEntry, slot: DesignSaveSlot = 1): SavedDesignerState {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(PREVIOUS_STORAGE_KEY)
+    const raw = readRawDesignSlot(slot)
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<SavedDesignerState>
       if (parsed.design?.hullTemplateId === hull.templateId) return { design: normalizeHLGDesign(hull, parsed.design) }
@@ -78,6 +80,16 @@ export function loadDesignerState(hull: HullCatalogEntry): SavedDesignerState {
     // Fall back below.
   }
   return { design: defaultHLGDesign(hull) }
+}
+
+function storageKeyForSlot(slot: DesignSaveSlot): string {
+  return slot === 1 ? STORAGE_KEY : `${STORAGE_KEY}:slot-${slot}`
+}
+
+function readRawDesignSlot(slot: DesignSaveSlot): string | null {
+  const current = localStorage.getItem(storageKeyForSlot(slot))
+  if (current || slot !== 1) return current
+  return localStorage.getItem(PREVIOUS_STORAGE_KEY)
 }
 
 export function hullIndexForTemplate(shipType: PlayerShipType, templateId: string): number {
