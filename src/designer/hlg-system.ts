@@ -69,6 +69,10 @@ export interface HLGStats {
   turnRate: number
   powerRequired: number
   powerProvided: number
+  boilerPowerProvided: number
+  turbinePowerRequired: number
+  turbinePowerProvided: number
+  auxPowerRequired: number
   smokeRequired: number
   smokeProvided: number
   command: number
@@ -200,6 +204,10 @@ export function calculateHLGStats(hull: HullCatalogEntry, design: HLGDesign): HL
   let weaponCount = 0
   let powerProvided = 0
   let powerRequired = 0
+  let boilerPowerProvided = 0
+  let turbinePowerRequired = 0
+  let turbinePowerProvided = 0
+  let auxPowerRequired = 0
   let smokeProvided = 0
   let smokeRequired = 0
   let command = 0
@@ -221,6 +229,13 @@ export function calculateHLGStats(hull: HullCatalogEntry, design: HLGDesign): HL
     accuracyAssist = Math.max(accuracyAssist, part.provides?.accuracyAssist ?? 0)
     powerRequired += part.requires?.power ?? 0
     smokeRequired += part.requires?.funnelCapacity ?? 0
+    if (part.category === 'boiler') boilerPowerProvided += part.provides?.power ?? 0
+    if (part.category === 'turbine') {
+      turbinePowerRequired += part.requires?.power ?? 0
+      turbinePowerProvided += part.provides?.power ?? 0
+    } else {
+      auxPowerRequired += part.requires?.power ?? 0
+    }
   }
 
   const maxWeight = MAX_WEIGHT[hull.shipType]
@@ -247,6 +262,10 @@ export function calculateHLGStats(hull: HullCatalogEntry, design: HLGDesign): HL
     turnRate,
     powerRequired,
     powerProvided,
+    boilerPowerProvided,
+    turbinePowerRequired,
+    turbinePowerProvided,
+    auxPowerRequired,
     smokeRequired,
     smokeProvided,
     command,

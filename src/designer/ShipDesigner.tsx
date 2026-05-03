@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { DragEvent as ReactDragEvent, PointerEvent as ReactPointerEvent } from 'react'
+import type { DragEvent as ReactDragEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react'
 import { Ship3DPreview } from './Ship3DPreview'
 import { WeightGauge } from './WeightGauge'
 import {
@@ -48,6 +48,8 @@ interface Props {
 }
 
 type Step = 'ship-select' | 'design'
+type PaletteDragState = { partId: string; x: number; y: number }
+type PaletteDropState = PaletteDragState & { id: number }
 
 const SHIP_OPTIONS: { type: PlayerShipType; name: string; desc: string; hpLabel: string; speedLabel: string }[] = [
   { type: 'destroyer', name: '駆逐艦', desc: '高速・小型船体\n軽兵装と魚雷を密に配置', hpLabel: '低', speedLabel: '高速' },
@@ -66,6 +68,17 @@ const CATEGORY_LABEL: Record<HLGComponentCategory | 'all', string> = {
   armor: '装甲',
 }
 
+function partSystemMeta(part: HLGPartDefinition): string {
+  const notes: string[] = []
+  if (part.provides?.power) {
+    notes.push(part.category === 'turbine' ? `推進 +${part.provides.power}` : `出力 +${part.provides.power}`)
+  }
+  if (part.requires?.power) notes.push(`出力要求 ${part.requires.power}`)
+  if (part.provides?.smokeExhaust) notes.push(`排煙 +${part.provides.smokeExhaust}`)
+  if (part.requires?.funnelCapacity) notes.push(`排煙要求 ${part.requires.funnelCapacity}`)
+  return notes.length ? ` / ${notes.join(' / ')}` : ''
+}
+
 export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props) {
   const initialShipType = initialResult?.shipType ?? 'battleship'
   const initialHulls = getHullsByClass(initialShipType)
@@ -81,6 +94,10 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
   const [selectedWeaponSlot, setSelectedWeaponSlot] = useState<number | null>(null)
   const [partFilter, setPartFilter] = useState<HLGComponentCategory | 'all'>('all')
   const [draggingPartId, setDraggingPartId] = useState<string | null>(null)
+  const [paletteDrag, setPaletteDrag] = useState<PaletteDragState | null>(null)
+  const [paletteDrop, setPaletteDrop] = useState<PaletteDropState | null>(null)
+  const paletteDragRef = useRef<PaletteDragState | null>(null)
+  const paletteDropIdRef = useRef(0)
   const [saveSlot, setSaveSlot] = useState<DesignSaveSlot>(1)
 
   const hulls = getHullsByClass(shipType)
@@ -95,6 +112,33 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
   const placementPart = draggingPartId ? HLG_PART_BY_ID[draggingPartId] ?? selectedPart : selectedPart
   const selectedComponent = design.components.find(component => component.instanceId === selectedComponentId) ?? null
   const selectedPlacementSlot = selectedPart?.type ? selectedWeaponSlot : null
+
+  useEffect(() => {
+    paletteDragRef.current = paletteDrag
+  }, [paletteDrag])
+
+  useEffect(() => {
+    if (!paletteDrag) return
+    const handlePointerMove = (event: PointerEvent) => {
+      setPaletteDrag(current => current ? { ...current, x: event.clientX, y: event.clientY } : null)
+    }
+    const finishPaletteDrag = (event: PointerEvent) => {
+      const current = paletteDragRef.current
+      if (current) {
+        setPaletteDrop({ partId: current.partId, x: event.clientX, y: event.clientY, id: ++paletteDropIdRef.current })
+      }
+      setPaletteDrag(null)
+      setDraggingPartId(null)
+    }
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', finishPaletteDrag, { once: true })
+    window.addEventListener('pointercancel', finishPaletteDrag, { once: true })
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup', finishPaletteDrag)
+      window.removeEventListener('pointercancel', finishPaletteDrag)
+    }
+  }, [paletteDrag])
 
   const selectComponent = (instanceId: string | null) => {
     setSelectedComponentId(instanceId)
@@ -127,16 +171,19 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
   }
 
   const handleGridClick = (cell: HLGCell) => {
-    const existing = componentAtCell(design, cell)
-    if (existing) {
-      selectComponent(existing.instanceId)
+    if (!selectedPart) {
+      selectComponent(componentAtCell(design, cell)?.instanceId ?? null)
       return
     }
-    if (!selectedPart) return
     const rotation: HLGRotation = 0
     const weaponSlot = resolveWeaponSlotForPart(selectedPart)
     if (weaponSlot === null) return
     if (!canPlaceHLGPart(hull, design, selectedPart, cell, rotation, weaponSlot)) {
+      const existing = componentAtCell(design, cell)
+      if (existing) {
+        selectComponent(existing.instanceId)
+        return
+      }
       showToast('この位置には配置できません')
       return
     }
@@ -192,12 +239,13 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
     return emptySlot.slot
   }
 
-  const handlePartDragStart = (event: ReactDragEvent<HTMLButtonElement>, part: HLGPartDefinition) => {
+  const handlePartPointerDown = (event: ReactPointerEvent<HTMLButtonElement>, part: HLGPartDefinition) => {
+    if (event.button !== 0) return
+    event.preventDefault()
     setSelectedPartId(part.partId)
     setDraggingPartId(part.partId)
-    event.dataTransfer.effectAllowed = 'copy'
-    event.dataTransfer.setData('application/x-battleship-part', part.partId)
-    event.dataTransfer.setData('text/plain', part.partId)
+    setPaletteDrop(null)
+    setPaletteDrag({ partId: part.partId, x: event.clientX, y: event.clientY })
   }
 
   const handleRotate = () => {
@@ -321,6 +369,17 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
   }
 
   const handleReset = () => replaceDesign(defaultHLGDesign(hull))
+  const handleResetWeapons = () => {
+    const weaponIds = new Set(HLG_PARTS.filter(part => part.type).map(part => part.partId))
+    setDesign(prev => ({
+      ...prev,
+      components: prev.components.filter(component => !weaponIds.has(component.partId)),
+    }))
+    setSelectedComponentId(null)
+    setSelectedPartId(null)
+    setSelectedWeaponSlot(null)
+    showToast('兵装をすべてリセットしました')
+  }
   const handleSave = () => { saveDesign(design, saveSlot); showToast(`自由配置設計を保存しました: ${saveSlot}`) }
   const handleLoad = () => { replaceDesign(loadDesignerState(hull, saveSlot).design); showToast(`自由配置設計を読み込みました: ${saveSlot}`) }
 
@@ -405,6 +464,7 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
           </div>
           <button className="sd-btn" onClick={handleSave}>保存</button>
           <button className="sd-btn" onClick={handleLoad}>読込</button>
+          <button className="sd-btn sd-btn-danger" onClick={handleResetWeapons}>兵装リセット</button>
           <button className="sd-btn sd-btn-auto" onClick={handleReset}>標準配置</button>
           <button className="sd-btn sd-btn-back" onClick={() => setStep('ship-select')}>艦種変更</button>
           {onConfirm && <button className="sd-btn sd-btn-deploy" onClick={handleDeploy}>出撃</button>}
@@ -426,14 +486,12 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
               <button
                 key={part.partId}
                 className={`sd-hlg-part${selectedPartId === part.partId ? ' sd-hlg-part--active' : ''}${draggingPartId === part.partId ? ' sd-hlg-part--dragging' : ''}`}
-                draggable
-                onDragStart={(event) => handlePartDragStart(event, part)}
-                onDragEnd={() => setDraggingPartId(null)}
+                onPointerDown={(event) => handlePartPointerDown(event, part)}
                 onClick={() => setSelectedPartId(part.partId)}
               >
                 <span className="sd-hlg-part-kind">{CATEGORY_LABEL[part.category]}</span>
                 <span className="sd-hlg-part-name">{part.name}</span>
-                <span className="sd-hlg-part-meta">{part.footprint.w}x{part.footprint.h} / {part.weight}t</span>
+                <span className="sd-hlg-part-meta">{part.footprint.w}x{part.footprint.h} / {part.weight}t{partSystemMeta(part)}</span>
               </button>
             ))}
           </div>
@@ -456,6 +514,8 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
               hull={hull}
               design={design}
               selectedPart={placementPart}
+              paletteDrag={paletteDrag}
+              paletteDrop={paletteDrop}
               selectedWeaponSlot={selectedPlacementSlot}
               selectedComponentId={selectedComponentId}
               onCellClick={handleGridClick}
@@ -464,6 +524,7 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
               onMoveComponent={handleMoveComponent}
               onCopyComponent={handleCopyComponent}
               onDeleteComponent={handleDeleteComponent}
+              onPaletteDropHandled={() => setPaletteDrop(null)}
             />
             <GroupedLoadoutPanel
               design={design}
@@ -500,6 +561,8 @@ function HLGGrid({
   hull,
   design,
   selectedPart,
+  paletteDrag,
+  paletteDrop,
   selectedWeaponSlot,
   selectedComponentId,
   onCellClick,
@@ -508,10 +571,13 @@ function HLGGrid({
   onMoveComponent,
   onCopyComponent,
   onDeleteComponent,
+  onPaletteDropHandled,
 }: {
   hull: ReturnType<typeof getHullsByClass>[number]
   design: HLGDesign
   selectedPart?: HLGPartDefinition
+  paletteDrag: PaletteDragState | null
+  paletteDrop: PaletteDropState | null
   selectedWeaponSlot: number | null
   selectedComponentId: string | null
   onCellClick: (cell: HLGCell) => void
@@ -520,6 +586,7 @@ function HLGGrid({
   onMoveComponent: (id: string, cell: HLGCell) => boolean
   onCopyComponent: (id: string, cell: HLGCell) => boolean
   onDeleteComponent: (id: string) => void
+  onPaletteDropHandled: () => void
 }) {
   const spec = hlgGridSpec(hull)
   const gridRef = useRef<HTMLDivElement | null>(null)
@@ -528,6 +595,7 @@ function HLGGrid({
   const [drag, setDrag] = useState<DragState | null>(null)
   const [ctrlCopyMode, setCtrlCopyMode] = useState(false)
   const [placementPreviewCell, setPlacementPreviewCell] = useState<HLGCell | null>(null)
+  const handledPaletteDropRef = useRef<number | null>(null)
 
   const setDragState = (next: typeof drag) => {
     dragRef.current = next
@@ -561,12 +629,12 @@ function HLGGrid({
     }
   }, [])
 
-  const cellFromPointer = (event: ReactPointerEvent): { cell: HLGCell; outOfBounds: boolean } | null => {
+  const cellFromClient = (clientX: number, clientY: number): { cell: HLGCell; outOfBounds: boolean } | null => {
     const grid = gridRef.current
     if (!grid) return null
     const rect = grid.getBoundingClientRect()
-    const r = Math.floor(((event.clientX - rect.left) / rect.width) * spec.rows)
-    const c = Math.floor(((event.clientY - rect.top) / rect.height) * spec.cols)
+    const r = Math.floor(((clientX - rect.left) / rect.width) * spec.rows)
+    const c = Math.floor(((clientY - rect.top) / rect.height) * spec.cols)
     if (!Number.isFinite(c) || !Number.isFinite(r)) return null
     const outOfBounds = c < 0 || c >= spec.cols || r < 0 || r >= spec.rows
     return {
@@ -577,6 +645,29 @@ function HLGGrid({
       outOfBounds,
     }
   }
+
+  const cellFromPointer = (event: ReactPointerEvent): { cell: HLGCell; outOfBounds: boolean } | null => cellFromClient(event.clientX, event.clientY)
+
+  useEffect(() => {
+    if (!paletteDrag || !selectedPart) return
+    const pointerCell = cellFromClient(paletteDrag.x, paletteDrag.y)
+    if (!pointerCell || pointerCell.outOfBounds || !hlgCellIsInsideHull(hull, pointerCell.cell)) {
+      setPlacementPreviewCell(null)
+      return
+    }
+    setPlacementPreviewCell(pointerCell.cell)
+  }, [paletteDrag?.x, paletteDrag?.y, paletteDrag?.partId, selectedPart?.partId, hull, spec.cols, spec.rows])
+
+  useEffect(() => {
+    if (!paletteDrop || handledPaletteDropRef.current === paletteDrop.id) return
+    handledPaletteDropRef.current = paletteDrop.id
+    const pointerCell = cellFromClient(paletteDrop.x, paletteDrop.y)
+    if (pointerCell && !pointerCell.outOfBounds && hlgCellIsInsideHull(hull, pointerCell.cell)) {
+      onPartDrop(paletteDrop.partId, pointerCell.cell)
+    }
+    setPlacementPreviewCell(null)
+    onPaletteDropHandled()
+  }, [paletteDrop, hull, onPartDrop, onPaletteDropHandled, spec.cols, spec.rows])
 
   const dragCellIsValid = (instanceId: string, cell: HLGCell): boolean => {
     const component = design.components.find(item => item.instanceId === instanceId)
@@ -640,13 +731,62 @@ function HLGGrid({
     setDragState(null)
   }
 
-  const dropPartOnCell = (event: ReactDragEvent<HTMLButtonElement>, cell: HLGCell) => {
+  const dropPartOnCell = (event: ReactDragEvent<HTMLElement>, cell: HLGCell) => {
     const partId = event.dataTransfer.getData('application/x-battleship-part') || event.dataTransfer.getData('text/plain')
     if (!partId) return
     event.preventDefault()
     event.stopPropagation()
     setPlacementPreviewCell(null)
     onPartDrop(partId, cell)
+  }
+
+  const dragPartOverCell = (event: ReactDragEvent<HTMLElement>, cell: HLGCell) => {
+    if (!hlgCellIsInsideHull(hull, cell)) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'copy'
+    setPlacementPreviewCell(cell)
+  }
+
+  const dragPartOverPointer = (event: ReactDragEvent<HTMLElement>) => {
+    const pointerCell = cellFromClient(event.clientX, event.clientY)
+    if (!pointerCell) return
+    dragPartOverCell(event, pointerCell.cell)
+  }
+
+  const dragPartOverPointerCapture = (event: ReactDragEvent<HTMLElement>) => {
+    if (!isPalettePartDrag(event)) return
+    dragPartOverPointer(event)
+    event.stopPropagation()
+  }
+
+  const dropPartAtPointer = (event: ReactDragEvent<HTMLElement>) => {
+    const pointerCell = cellFromClient(event.clientX, event.clientY)
+    if (!pointerCell) return
+    dropPartOnCell(event, pointerCell.cell)
+  }
+
+  const dropPartAtPointerCapture = (event: ReactDragEvent<HTMLElement>) => {
+    if (!isPalettePartDrag(event)) return
+    dropPartAtPointer(event)
+  }
+
+  const updatePlacementPreviewFromPointer = (event: ReactPointerEvent<HTMLElement>) => {
+    if (!selectedPart || dragRef.current || paletteDrag) return
+    const pointerCell = cellFromClient(event.clientX, event.clientY)
+    if (!pointerCell || pointerCell.outOfBounds || !hlgCellIsInsideHull(hull, pointerCell.cell)) {
+      setPlacementPreviewCell(null)
+      return
+    }
+    setPlacementPreviewCell(pointerCell.cell)
+  }
+
+  const placeSelectedPartAtPointer = (event: ReactPointerEvent<HTMLElement> | ReactMouseEvent<HTMLElement>): boolean => {
+    if (!selectedPart) return false
+    const pointerCell = cellFromClient(event.clientX, event.clientY)
+    if (!pointerCell || pointerCell.outOfBounds || !hlgCellIsInsideHull(hull, pointerCell.cell)) return false
+    if (componentAtCell(design, pointerCell.cell, selectedPart)) return false
+    onCellClick(pointerCell.cell)
+    return true
   }
 
   const cells = []
@@ -699,13 +839,18 @@ function HLGGrid({
           aspectRatio: `${spec.rows} / ${spec.cols}`,
         }}
         onMouseLeave={() => setPlacementPreviewCell(null)}
+        onDragOverCapture={dragPartOverPointerCapture}
+        onDropCapture={dropPartAtPointerCapture}
+        onDragOver={dragPartOverPointer}
+        onDrop={dropPartAtPointer}
+        onPointerMove={updatePlacementPreviewFromPointer}
       >
         {cells}
         <div
           className="sd-hlg-centerline"
           style={{ gridColumn: `1 / span ${spec.rows}`, gridRow: `${spec.centerC + 1}` }}
         />
-        {selectedPart && placementPreviewCell && !componentAtCell(design, placementPreviewCell) && (() => {
+        {selectedPart && placementPreviewCell && !componentAtCell(design, placementPreviewCell, selectedPart) && (() => {
           const rotation: HLGRotation = 0
           const footprint = rotateFootprint(selectedPart.footprint, rotation)
           const previewComponent: HLGComponentInstance = {
@@ -750,6 +895,7 @@ function HLGGrid({
               onPointerCancel={finishDrag}
               onClick={(event) => {
                 event.stopPropagation()
+                if (placeSelectedPartAtPointer(event)) return
                 onSelectComponent(component.instanceId)
               }}
               type="button"
@@ -878,6 +1024,8 @@ function HLGStatsPanel({
         <StatRow label="排煙能力" value={`${stats.smokeProvided}/${stats.smokeRequired}`} color="#eab308" />
       </div>
 
+      <EngineBalancePanel stats={stats} />
+
       <div className="sd-section-title" style={{ marginTop: 16 }}>選択パーツ</div>
       {selectedPart ? (
         <div className="sd-hlg-selected">
@@ -908,6 +1056,65 @@ function HLGStatsPanel({
           {stats.warnings.slice(0, 8).map(warning => <li key={warning}>{warning}</li>)}
         </ul>
       )}
+    </div>
+  )
+}
+
+function EngineBalancePanel({ stats }: { stats: ReturnType<typeof calcStats> }) {
+  const boilerBalance = stats.boilerPowerProvided - stats.turbinePowerRequired - stats.auxPowerRequired
+  const smokeBalance = stats.smokeProvided - stats.smokeRequired
+  const boilerDemand = Math.max(1, stats.turbinePowerRequired + stats.auxPowerRequired)
+  const smokeDemand = Math.max(1, stats.smokeRequired)
+  return (
+    <div className="sd-engine-balance">
+      <div className="sd-section-title">機関バランス</div>
+      <EngineBalanceRow
+        label="主缶出力"
+        value={`${stats.boilerPowerProvided} / 要求 ${stats.turbinePowerRequired + stats.auxPowerRequired}`}
+        balance={boilerBalance}
+        ratio={stats.boilerPowerProvided / boilerDemand}
+      />
+      <EngineBalanceRow
+        label="主機"
+        value={`要求 ${stats.turbinePowerRequired} / 推進 +${stats.turbinePowerProvided}`}
+        balance={stats.boilerPowerProvided - stats.turbinePowerRequired}
+        ratio={stats.turbinePowerRequired ? stats.boilerPowerProvided / stats.turbinePowerRequired : 1}
+      />
+      <EngineBalanceRow
+        label="煙突排煙"
+        value={`${stats.smokeProvided} / 要求 ${stats.smokeRequired}`}
+        balance={smokeBalance}
+        ratio={stats.smokeProvided / smokeDemand}
+      />
+      <div className="sd-engine-note">
+        主缶は出力を作り排煙を要求、主機は出力を使って推進力を出します。
+      </div>
+    </div>
+  )
+}
+
+function EngineBalanceRow({
+  label,
+  value,
+  balance,
+  ratio,
+}: {
+  label: string
+  value: string
+  balance: number
+  ratio: number
+}) {
+  const ok = balance >= 0
+  return (
+    <div className={`sd-engine-row${ok ? ' sd-engine-row--ok' : ' sd-engine-row--bad'}`}>
+      <div className="sd-engine-head">
+        <span className="sd-engine-label">{label}</span>
+        <span className="sd-engine-value">{value}</span>
+      </div>
+      <div className="sd-engine-bar" aria-hidden="true">
+        <div className="sd-engine-fill" style={{ width: `${Math.min(100, Math.max(0, ratio * 100))}%` }} />
+      </div>
+      <div className="sd-engine-balance-text">{ok ? `余裕 +${balance}` : `不足 ${Math.abs(balance)}`}</div>
     </div>
   )
 }
@@ -1108,13 +1315,26 @@ function loadoutGroupSort(part: HLGPartDefinition): number {
   return 60
 }
 
-function componentAtCell(design: HLGDesign, cell: HLGCell): HLGComponentInstance | null {
+function componentAtCell(design: HLGDesign, cell: HLGCell, placingPart?: HLGPartDefinition): HLGComponentInstance | null {
   return design.components.find(component => {
     const part = HLG_PART_BY_ID[component.partId]
     if (!part) return false
+    if (placingPart && !componentsShareDesignerLayer(part, placingPart)) return false
     const rect = componentRect(component, part)
     return cell.c >= Math.floor(rect.left) && cell.c < Math.ceil(rect.left + rect.w) && cell.r >= Math.floor(rect.top) && cell.r < Math.ceil(rect.top + rect.h)
   }) ?? null
+}
+
+function componentsShareDesignerLayer(a: HLGPartDefinition, b: HLGPartDefinition): boolean {
+  return designerLayerForPart(a) === designerLayerForPart(b)
+}
+
+function designerLayerForPart(part: HLGPartDefinition): 'internal' | 'deck' {
+  return part.category === 'boiler' || part.category === 'turbine' ? 'internal' : 'deck'
+}
+
+function isPalettePartDrag(event: ReactDragEvent<HTMLElement>): boolean {
+  return Array.from(event.dataTransfer.types).some(type => type === 'application/x-battleship-part' || type === 'text/plain')
 }
 
 function nextRotation(rotation: HLGRotation): HLGRotation {
