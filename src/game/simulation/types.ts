@@ -25,6 +25,7 @@ export interface WeaponState {
   name: string
   type: WeaponType
   mount?: { x: number; y: number }
+  firingArc?: { center: number; width: number }
   barrels?: number
   cooldownTick: number
   ammo: number

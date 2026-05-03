@@ -2,6 +2,7 @@ import type { BuildingEntity, CombatState, Command, Entity, ShipEntity, Vec3, Pr
 import { isInterceptableProjectile } from './interception'
 import { getWeaponConfig } from './weapon-strategies'
 import { effectiveDetectionRange } from './detection'
+import { firingArcForWeapon, isDirectionWithinFiringArc } from './firing-arcs'
 
 /**
  * Generates fire commands for all player weapons that have autoFire enabled.
@@ -52,6 +53,7 @@ export function generateAutoFireCommands(state: CombatState): Command[] {
       const dx = target.pos.x - player.pos.x
       const dy = target.pos.y - player.pos.y
       const d = Math.sqrt(dx * dx + dy * dy)
+      if (!isDirectionWithinFiringArc(Math.atan2(dy, dx) - playerShip.angle, weapon.firingArc ?? firingArcForWeapon(weapon.type, weapon.mount))) continue
       if (d < minDist) { minDist = d; nearest = target }
     }
 

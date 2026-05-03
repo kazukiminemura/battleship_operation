@@ -2,6 +2,7 @@ import type { CombatState, ShipEntity, ProjectileEntity, WeaponType, CombatEvent
 import type { SeededRandom } from './random'
 import { getWeaponConfig } from './weapon-strategies'
 import { GUN_PROFILES, calcDispersionHalfAngle } from './gun-profiles'
+import { firingArcForWeapon, isDirectionWithinFiringArc } from './firing-arcs'
 export { WEAPON_CONFIGS } from './weapon-strategies'
 
 let projectileCounter = 0
@@ -195,19 +196,17 @@ function defaultBarrelsForWeapon(weaponId: string, weaponType: WeaponType): numb
 }
 
 function isWithinFiringArc(ship: ShipEntity, weapon: ShipEntity['weapons'][number], dx: number, dy: number): boolean {
-  // Prefer mount.x for port/starboard detection (player weapons from prep screen).
-  // Fall back to ID suffix for legacy enemy ships that have no mount.
-  const mountX = weapon.mount?.x
-  const isPort = mountX !== undefined ? mountX < -0.15 : weapon.id.includes('.port')
-  const isStarboard = mountX !== undefined ? mountX > 0.15 : weapon.id.includes('.starboard')
-  if (!isPort && !isStarboard) return true
+  const relative = Math.atan2(dy, dx) - ship.angle
+  const arc = weapon.firingArc ?? firingArcForWeapon(weapon.type, weapon.mount ?? legacyMountFromWeaponId(weapon.id))
+  return isDirectionWithinFiringArc(relative, arc)
+}
 
-  const portX = Math.sin(ship.angle)
-  const portY = -Math.cos(ship.angle)
-  const sideDot = dx * portX + dy * portY
-
-  if (isPort) return sideDot >= 0
-  return sideDot <= 0
+function legacyMountFromWeaponId(weaponId: string): { x: number; y: number } | undefined {
+  if (weaponId.includes('.port')) return { x: -0.7, y: 0 }
+  if (weaponId.includes('.starboard')) return { x: 0.7, y: 0 }
+  if (weaponId.includes('.aft')) return { x: 0, y: 0.7 }
+  if (weaponId.includes('.forward')) return { x: 0, y: -0.7 }
+  return undefined
 }
 
 function weaponMuzzlePosition(

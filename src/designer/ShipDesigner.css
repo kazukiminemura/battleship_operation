@@ -639,6 +639,45 @@
   box-shadow: 0 0 14px rgba(56, 189, 248, 0.32);
 }
 
+.sd-hlg-arc-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.sd-hlg-arc-fill {
+  fill: rgba(56, 189, 248, 0.18);
+  stroke: none;
+}
+
+.sd-hlg-arc-line {
+  fill: none;
+  stroke: rgba(125, 211, 252, 0.82);
+  stroke-width: 0.18;
+  stroke-dasharray: 1.2 0.8;
+  vector-effect: non-scaling-stroke;
+}
+
+.sd-hlg-arc-origin {
+  fill: #e0f2fe;
+  stroke: #075985;
+  stroke-width: 0.18;
+  vector-effect: non-scaling-stroke;
+}
+
+.sd-hlg-arc-label {
+  fill: #e0f2fe;
+  font-size: 2.2px;
+  font-weight: bold;
+  paint-order: stroke;
+  stroke: rgba(0, 0, 0, 0.72);
+  stroke-width: 0.45px;
+  vector-effect: non-scaling-stroke;
+}
+
 .sd-hlg-component--delete {
   border-color: #f97316;
   background: #7c2d12;

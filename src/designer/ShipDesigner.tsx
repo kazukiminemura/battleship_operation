@@ -37,6 +37,7 @@ import {
 } from './hlg-system'
 import type { PlayerShipType } from '../game/data/masterdata'
 import type { PrepResult } from '../game/ui/prepscreen'
+import { firingArcForWeapon, firingArcLabel, type FiringArc } from '../game/simulation/firing-arcs'
 import './ShipDesigner.css'
 
 interface Props {
@@ -674,10 +675,69 @@ function HLGGrid({
             </div>
           )
         })()}
+        {selectedComponentId && (() => {
+          const component = design.components.find(item => item.instanceId === selectedComponentId)
+          const part = component ? HLG_PART_BY_ID[component.partId] : undefined
+          return component && part?.type
+            ? <FiringArcOverlay component={component} part={part} spec={spec} />
+            : null
+        })()}
         {(ctrlCopyMode || drag?.copying) && <div className="sd-hlg-copy-mode">COPY MODE</div>}
       </div>
     </div>
   )
+}
+
+function FiringArcOverlay({
+  component,
+  part,
+  spec,
+}: {
+  component: HLGComponentInstance
+  part: HLGPartDefinition
+  spec: ReturnType<typeof hlgGridSpec>
+}) {
+  const mount = {
+    x: Math.max(-1, Math.min(1, (component.cell.c + 0.5 - (spec.centerC + 0.5)) / (spec.beamCells / 2))),
+    y: Math.max(-1, Math.min(1, ((component.cell.r + 0.5 - spec.topR) / Math.max(1, spec.lengthCells - 1)) * 2 - 1)),
+  }
+  const arc = firingArcForWeapon(part.type!, mount)
+  const cx = ((component.cell.r + 0.5) / spec.rows) * 100
+  const cy = ((component.cell.c + 0.5) / spec.cols) * 100
+  const path = arcPath(cx, cy, 38, arc)
+  return (
+    <svg className="sd-hlg-arc-overlay" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+      <path d={path} className="sd-hlg-arc-fill" />
+      <path d={path} className="sd-hlg-arc-line" />
+      <circle cx={cx} cy={cy} r="0.55" className="sd-hlg-arc-origin" />
+      <text x={Math.min(96, cx + 1.4)} y={Math.max(4, cy - 1.8)} className="sd-hlg-arc-label">{firingArcLabel(arc)}</text>
+    </svg>
+  )
+}
+
+function arcPath(cx: number, cy: number, radius: number, arc: FiringArc): string {
+  if (arc.width >= Math.PI * 2 - 0.001) {
+    return [
+      `M ${cx} ${cy}`,
+      `m ${-radius} 0`,
+      `a ${radius} ${radius} 0 1 0 ${radius * 2} 0`,
+      `a ${radius} ${radius} 0 1 0 ${-radius * 2} 0`,
+      'Z',
+    ].join(' ')
+  }
+  const start = arc.center - arc.width / 2
+  const end = arc.center + arc.width / 2
+  const p1 = arcPoint(cx, cy, radius, start)
+  const p2 = arcPoint(cx, cy, radius, end)
+  const large = arc.width > Math.PI ? 1 : 0
+  return `M ${cx} ${cy} L ${p1.x} ${p1.y} A ${radius} ${radius} 0 ${large} 1 ${p2.x} ${p2.y} Z`
+}
+
+function arcPoint(cx: number, cy: number, radius: number, angle: number): { x: number; y: number } {
+  return {
+    x: cx + Math.cos(angle) * radius,
+    y: cy + Math.sin(angle) * radius,
+  }
 }
 
 function HLGStatsPanel({

@@ -22,6 +22,7 @@ export interface WeaponTemplate {
   ammo: number
   barrels?: number
   mount?: { x: number; y: number }
+  firingArc?: { center: number; width: number }
 }
 
 export interface StaticData {
@@ -355,6 +356,7 @@ function makeWeaponState(template: WeaponTemplate): WeaponState {
     name: template.name ?? template.id,
     type: template.type,
     mount: template.mount ? { ...template.mount } : undefined,
+    firingArc: template.firingArc ? { ...template.firingArc } : undefined,
     barrels: template.barrels,
     cooldownTick: 0,
     ammo: template.ammo,

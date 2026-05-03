@@ -3,6 +3,7 @@ import type { PlayerShipType, WeaponTemplate } from '../game/data/masterdata'
 import type { WeaponType } from '../game/simulation/types'
 import { WEAPON_SHOP } from '../game/data/weapon-shop'
 import { cellToMount, hullDimensions } from '../game/ui/prep-layout'
+import { firingArcForWeapon } from '../game/simulation/firing-arcs'
 
 export type HLGComponentCategory = 'weapon' | 'bridge' | 'funnel' | 'boiler' | 'turbine' | 'aux' | 'armor'
 export type HLGZone = 'fore' | 'mid' | 'aft' | 'side' | 'deck' | 'internal'
@@ -285,6 +286,7 @@ export function hlgDesignToLoadout(hull: HullCatalogEntry, design: HLGDesign): W
       ammo: part.ammo ?? 100,
       barrels: component.barrels ?? part.barrels,
       mount,
+      firingArc: firingArcForWeapon(part.type, mount),
       instanceId: component.instanceId,
     }]
   })
