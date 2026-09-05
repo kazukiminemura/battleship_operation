@@ -12,19 +12,38 @@ async function holdUntil(key, predicate, argument, timeout = 25000) {
   finally { await page.keyboard.up(key) }
 }
 async function travel(target) {
-  let ship = await telemetry()
-  if (Math.abs(target.y - ship.y) > 1) await holdUntil(target.y > ship.y ? 'KeyQ' : 'KeyE', ({y}) => Math.abs(+document.querySelector('#abyss').dataset.y - y) < 0.8, target)
-  ship = await telemetry()
-  const yaw = Math.atan2(target.x - ship.x, -(target.z - ship.z))
-  const delta = Math.atan2(Math.sin(yaw - ship.yaw), Math.cos(yaw - ship.yaw))
-  if (Math.abs(delta) > 0.06) await holdUntil(delta > 0 ? 'KeyD' : 'KeyA', desired => {
-    const actual = +document.querySelector('#abyss').dataset.yaw
-    return Math.abs(Math.atan2(Math.sin(desired - actual), Math.cos(desired - actual))) < 0.055
-  }, yaw)
-  await holdUntil('KeyW', target => {
-    const d = document.querySelector('#abyss').dataset
-    return Math.hypot(+d.x - target.x, +d.z - target.z) < 8
-  }, target)
+  // Steer from current telemetry, like a player, instead of assuming a fixed
+  // heading stays accurate across rendering and input latency.
+  const held = new Set()
+  async function input(wanted) {
+    for (const key of held) if (!wanted.includes(key)) { await page.keyboard.up(key); held.delete(key) }
+    for (const key of wanted) if (!held.has(key)) { await page.keyboard.down(key); held.add(key) }
+  }
+  async function navigate(destination, horizontal) {
+    const deadline = Date.now() + 90000
+    while (Date.now() < deadline) {
+      const ship = await telemetry()
+      const gap = Math.hypot(destination.x - ship.x, destination.z - ship.z)
+      const dy = destination.y - ship.y
+      if ((!horizontal || gap < 6) && Math.abs(dy) < 1.5) { await input([]); return }
+      const desired = Math.atan2(destination.x - ship.x, -(destination.z - ship.z))
+      const delta = Math.atan2(Math.sin(desired - ship.yaw), Math.cos(desired - ship.yaw))
+      const wanted = []
+      if (Math.abs(dy) > 1) wanted.push(dy > 0 ? 'KeyQ' : 'KeyE')
+      if (horizontal && gap >= 6) {
+        if (Math.abs(delta) > 0.12) wanted.push(delta > 0 ? 'KeyD' : 'KeyA')
+        if (Math.abs(delta) < 0.3) wanted.push('KeyW')
+      }
+      await input(wanted)
+      await page.waitForTimeout(100)
+    }
+    throw new Error('Navigation timed out')
+  }
+  try {
+    await navigate({ ...target, y: -25 }, true)
+    await page.waitForTimeout(1600)
+    await navigate(target, false)
+  } finally { await input([]) }
   console.log('arrived', await telemetry())
 }
 try {
