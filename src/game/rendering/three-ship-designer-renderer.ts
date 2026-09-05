@@ -1,5 +1,10 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import { bowSheer, hullHalfWidth, navalHull, navalDeck, timberTexture } from './naval-geometry'
+import { historicalProfile } from './historical-ship-profiles'
+import { addHistoricalSuperstructure } from './historical-superstructure'
+import { addDesignedStructures } from './designed-structures'
+import type { DesignedStructure } from '../data/ship-design-layout'
 import type { HullCatalogEntry } from '../data/hull-catalog'
 import type { WeaponType } from '../simulation/types'
 import { SHIP_DIMS, SHIP_SHAPES, scaledShipDims, type ShipShapeClass } from './ship-rendering-data'
@@ -11,6 +16,8 @@ export interface ShipDesignerPreviewWeapon {
   mount: { x: number; y: number }
   barrels?: number
   selected: boolean
+  instanceId?: string
+  rotation?: number
 }
 
 export interface ShipDesignerPreviewConfig {
@@ -18,21 +25,23 @@ export interface ShipDesignerPreviewConfig {
   weapons: ShipDesignerPreviewWeapon[]
   towerMount: { x: number; y: number }
   armorBonus: number
+  structures?: DesignedStructure[]
 }
 
 const MATERIALS = {
-  hull: new THREE.MeshStandardMaterial({ color: 0x46545a, roughness: 0.64, metalness: 0.32 }),
-  lowerHull: new THREE.MeshStandardMaterial({ color: 0x6f2326, roughness: 0.78, metalness: 0.15 }),
-  deck: new THREE.MeshStandardMaterial({ color: 0x9b7447, roughness: 0.86, metalness: 0.04 }),
-  armor: new THREE.MeshStandardMaterial({ color: 0x273036, roughness: 0.58, metalness: 0.4 }),
+  hull: new THREE.MeshStandardMaterial({ color: 0x59666a, roughness: 0.76, metalness: 0.18 }),
+  lowerHull: new THREE.MeshStandardMaterial({ color: 0x65272a, roughness: 0.72, metalness: 0.22 }),
+  deck: new THREE.MeshStandardMaterial({ color: 0xffffff, map: timberTexture(), roughness: 0.92, metalness: 0 }),
+  steelDeck: new THREE.MeshStandardMaterial({ color: 0x555956, roughness: 0.88, metalness: 0.12 }),
+  armor: new THREE.MeshStandardMaterial({ color: 0x303a3e, roughness: 0.48, metalness: 0.52 }),
   metal: new THREE.MeshStandardMaterial({ color: 0x56636a, roughness: 0.5, metalness: 0.48 }),
   dark: new THREE.MeshStandardMaterial({ color: 0x12181c, roughness: 0.48, metalness: 0.55 }),
-  glass: new THREE.MeshBasicMaterial({ color: 0x87d8ff }),
+  glass: new THREE.MeshStandardMaterial({ color: 0x223f49, roughness: 0.17, metalness: 0.65 }),
   brass: new THREE.MeshStandardMaterial({ color: 0xc7923c, roughness: 0.38, metalness: 0.65 }),
   selection: new THREE.MeshBasicMaterial({ color: 0xf4cf6a, transparent: true, opacity: 0.78 }),
-  torpedo: new THREE.MeshStandardMaterial({ color: 0x2f7687, roughness: 0.52, metalness: 0.38 }),
-  aa: new THREE.MeshStandardMaterial({ color: 0x3f8d5b, roughness: 0.55, metalness: 0.32 }),
-  missile: new THREE.MeshStandardMaterial({ color: 0x6a5bb5, roughness: 0.52, metalness: 0.38 }),
+  torpedo: new THREE.MeshStandardMaterial({ color: 0x4c5555, roughness: 0.72, metalness: 0.25 }),
+  aa: new THREE.MeshStandardMaterial({ color: 0x505a57, roughness: 0.72, metalness: 0.25 }),
+  missile: new THREE.MeshStandardMaterial({ color: 0x515b5c, roughness: 0.72, metalness: 0.25 }),
 }
 
 const MOUNT_LENGTH_SCALE = 0.42
@@ -49,6 +58,7 @@ export class ThreeShipDesignerRenderer {
   private readonly oceanGeometry = new THREE.PlaneGeometry(220, 220, 96, 96)
   private readonly onResizeRef = () => this.resize()
   private currentKey = ''
+  private framedHull = ''
   private visible = false
 
   constructor() {
@@ -126,6 +136,7 @@ export class ThreeShipDesignerRenderer {
     }
     this.visible = true
     this.container.style.display = 'block'
+    this.resize()
   }
 
   hide(): void {
@@ -140,7 +151,7 @@ export class ThreeShipDesignerRenderer {
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i)
       const y = pos.getY(i)
-      pos.setZ(i, Math.sin(x * 0.12 + elapsed) * 0.52 + Math.cos(y * 0.17 + elapsed * 0.8) * 0.36)
+      pos.setZ(i, Math.sin(x * 0.9 + elapsed) * 0.055 + Math.cos(y * 1.3 + elapsed * 0.8) * 0.035)
     }
     pos.needsUpdate = true
     this.oceanGeometry.computeVertexNormals()
@@ -167,6 +178,8 @@ export class ThreeShipDesignerRenderer {
     sun.shadow.camera.right = 18
     sun.shadow.camera.top = 18
     sun.shadow.camera.bottom = -18
+    sun.shadow.normalBias = 0.025
+    sun.shadow.bias = -0.0002
     this.scene.add(sun)
 
     const rim = new THREE.DirectionalLight(0x72b8ff, 1.15)
@@ -186,19 +199,27 @@ export class ThreeShipDesignerRenderer {
       }),
     )
     ocean.rotation.x = -Math.PI / 2
-    ocean.position.y = -0.42
+    ocean.position.y = -0.08
     ocean.receiveShadow = true
     this.scene.add(ocean)
 
-    const grid = new THREE.GridHelper(34, 34, 0x91d4df, 0x2b6672)
-    grid.position.y = -0.39
-    this.scene.add(grid)
   }
 
   private rebuildShip(config: ShipDesignerPreviewConfig): void {
     this.shipRoot.clear()
     const ship = buildShip(config)
     this.shipRoot.add(ship)
+    if (this.framedHull !== config.hull.templateId) {
+      this.framedHull = config.hull.templateId
+      const bounds = new THREE.Box3().setFromObject(ship)
+      const size = bounds.getSize(new THREE.Vector3())
+      const distance = size.x * 1.30
+      this.controls.target.set(0, size.y * 0.22, 0)
+      this.camera.position.copy(this.controls.target).add(new THREE.Vector3(0.85, 0.55, 1.2).normalize().multiplyScalar(distance))
+      this.controls.minDistance = size.x * 0.60
+      this.controls.maxDistance = size.x * 2.8
+      this.controls.update()
+    }
   }
 
   private resize(): void {
@@ -230,22 +251,43 @@ export function buildShip(config: ShipDesignerPreviewConfig): THREE.Group {
   const dims = scaledShipDims(config.hull.templateId ?? config.hull.shipType, config.armorBonus)
   const shape = SHIP_SHAPES[config.hull.templateId] ?? config.hull.shipType
   const l = dims.l * 0.045
-  const w = dims.w * 0.045
-  const h = Math.max(0.48, dims.h * 0.045)
+  const profile = historicalProfile(shape)
+  const w = l / profile.lengthToBeam
+  const h = l * profile.freeboard / 0.44
   const ship = new THREE.Group()
   ship.name = config.hull.name
 
   addHull(ship, shape, l, w, h, config.armorBonus)
-  addSuperstructure(ship, shape, l, w, h, config.towerMount)
+  ship.userData['historicalClass'] = profile.kind
+  ship.userData['designInspiration'] = profile.inspiration
+  if (config.structures !== undefined) {
+    addDesignedStructures(ship, config.structures, profile, l, w, h, MATERIALS)
+  } else addHistoricalSuperstructure(ship, profile, l, w, h * 0.44, config.towerMount, MATERIALS,
+    config.weapons.map(weapon => ({
+      x: -weapon.mount.y * l * MOUNT_LENGTH_SCALE,
+      z: weapon.mount.x * w * MOUNT_BEAM_SCALE,
+      radius: weapon.type === 'gun' ? profile.gunScale * 0.43 : 0.13,
+    })))
 
   for (const weapon of config.weapons) {
     const mount = createWeapon(weapon)
+    const weaponScale = weapon.type === 'gun' ? profile.gunScale : Math.min(0.85, profile.gunScale)
+    mount.scale.setScalar(weaponScale)
     mount.name = weapon.name
-    mount.position.set(-weapon.mount.y * l * MOUNT_LENGTH_SCALE, h * 0.54, weapon.mount.x * w * MOUNT_BEAM_SCALE)
-    mount.rotation.y = weapon.mount.y > 0.34 ? Math.PI : 0
+    const superfiring = weapon.type === 'gun' && Math.abs(weapon.mount.x) < 0.1 && weapon.mount.y < -0.2 && weapon.mount.y > -0.6
+    const barbetteHeight = superfiring ? profile.gunScale * 0.24 : 0
+    if (barbetteHeight > 0) {
+      const barbette = mesh(new THREE.CylinderGeometry(profile.gunScale * 0.35, profile.gunScale * 0.35, barbetteHeight, 24), MATERIALS.hull)
+      barbette.position.set(-weapon.mount.y * l * MOUNT_LENGTH_SCALE, h * 0.44 + bowSheer(0.5 - weapon.mount.y * MOUNT_LENGTH_SCALE, h) + barbetteHeight / 2, weapon.mount.x * w * MOUNT_BEAM_SCALE)
+      ship.add(barbette)
+    }
+    const seatY = h * 0.44 + bowSheer(0.5 - weapon.mount.y * MOUNT_LENGTH_SCALE, h)
+    mount.position.set(-weapon.mount.y * l * MOUNT_LENGTH_SCALE, seatY + 0.06 * weaponScale + barbetteHeight, weapon.mount.x * w * MOUNT_BEAM_SCALE)
+    mount.rotation.y = weapon.rotation !== undefined ? -Math.PI / 2 - weapon.rotation * Math.PI / 180 : weapon.mount.y > 0.34 ? Math.PI / 2 : -Math.PI / 2
     mount.userData = {
       ...mount.userData,
       weaponId: weapon.id,
+      designInstanceId: weapon.instanceId,
       weaponType: weapon.type,
       baseRotationY: mount.rotation.y,
       canTraverse: weapon.type === 'gun' || weapon.type === 'secondary' || weapon.type === 'aa' || weapon.type === 'missile',
@@ -259,72 +301,73 @@ export function buildShip(config: ShipDesignerPreviewConfig): THREE.Group {
 }
 
 function addHull(parent: THREE.Group, shape: ShipShapeClass, length: number, beam: number, height: number, armorBonus: number): void {
-  const bowType = shape === 'destroyer' ? 'sharp' : shape === 'cruiser' ? 'round' : 'flat'
-  parent.add(mesh(hullGeometry(length, beam, height, bowType), MATERIALS.hull))
+  parent.add(mesh(navalHull(length, beam, -height * 0.12, height * 0.44), MATERIALS.hull))
 
-  const lower = mesh(hullGeometry(length * 0.98, beam * 0.9, height * 0.48, bowType), MATERIALS.lowerHull)
-  lower.position.y = -height * 0.32
+  const lower = mesh(navalHull(length, beam * 0.91, -height * 0.48, -height * 0.12, true), MATERIALS.lowerHull)
   parent.add(lower)
 
-  const deck = mesh(deckGeometry(length * 0.92, beam * 0.72, bowType), MATERIALS.deck)
+  const deck = mesh(navalDeck(length, beam * 0.99, height), historicalProfile(shape).timberDeck ? MATERIALS.deck : MATERIALS.steelDeck)
   deck.rotation.x = -Math.PI / 2
-  deck.position.y = height * 0.44
+  deck.position.y = height * 0.44 + 0.005
   parent.add(deck)
 
   const beltThickness = 0.14 + Math.min(0.16, armorBonus / 900)
-  const belt = mesh(new THREE.BoxGeometry(length * 0.78, height * beltThickness, beam * 0.74), MATERIALS.armor)
-  belt.position.y = height * 0.05
+  const belt = mesh(navalHull(length, beam * 0.932, -height * 0.12, -height * 0.12 + height * beltThickness), MATERIALS.armor)
   parent.add(belt)
 
+
+  addHullDetails(parent, shape, length, beam, height)
+}
+
+/** Adds scale-readable naval construction features without changing collision geometry. */
+function addHullDetails(parent: THREE.Group, shape: ShipShapeClass, length: number, beam: number, height: number): void {
+  const deckY = height * 0.44 + 0.01
+  const isCapitalShip = shape === 'battleship' || shape === 'boss' || shape === 'yukimura'
+  const detail = new THREE.MeshStandardMaterial({ color: 0x263136, roughness: 0.48, metalness: 0.55 })
+  const railMaterial = new THREE.MeshStandardMaterial({ color: 0x9aa4a1, roughness: 0.34, metalness: 0.72 })
+
+  // Waterline, armor-belt seam and portholes give the hull its characteristic layered profile.
   for (const side of [-1, 1]) {
-    const rail = mesh(new THREE.BoxGeometry(length * 0.78, 0.025, 0.025), MATERIALS.dark)
-    rail.position.set(-length * 0.03, height * 0.58, side * beam * 0.43)
-    parent.add(rail)
+
+    const portholeCount = isCapitalShip ? 11 : 7
+    for (let i = 0; i < portholeCount; i++) {
+      const porthole = mesh(new THREE.CylinderGeometry(0.024, 0.024, 0.016, 10), MATERIALS.brass)
+      porthole.rotation.x = Math.PI / 2
+      porthole.position.set(
+        THREE.MathUtils.lerp(-length * 0.30, length * 0.27, i / Math.max(1, portholeCount - 1)),
+        height * 0.03,
+        side * hullHalfWidth(THREE.MathUtils.lerp(0.20, 0.77, i / Math.max(1, portholeCount - 1)), beam) * 0.952,
+      )
+      parent.add(porthole)
+    }
+
+    // Two rail runs with stanchions remain visible even at the tactical camera distance.
+    const railPoints: THREE.Vector3[] = []
+    for (let i = 0; i <= 28; i++) {
+      const u = 0.025 + i / 28 * 0.95
+      const x = (u - 0.5) * length, z = side * hullHalfWidth(u, beam) * 0.965
+      const railY = deckY + bowSheer(u, height)
+      railPoints.push(new THREE.Vector3(x, railY + 0.12, z))
+      const post = mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.12, 5), railMaterial)
+      post.position.set(x, railY + 0.06, z)
+      parent.add(post)
+    }
+    parent.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(railPoints), new THREE.LineBasicMaterial({ color: 0x899795 })))
+  }
+
+  // Anchor windlass and chain lockers distinguish the bow from a generic vehicle hull.
+  const windlass = mesh(new THREE.CylinderGeometry(0.065, 0.065, beam * 0.34, 12), detail)
+  windlass.rotation.x = Math.PI / 2
+  windlass.position.set(length * 0.34, deckY + bowSheer(0.84, height) + 0.06, 0)
+  parent.add(windlass)
+  for (const side of [-1, 1]) {
+    const anchor = mesh(new THREE.TorusGeometry(0.055, 0.012, 6, 12), detail)
+    anchor.rotation.x = Math.PI / 2
+    anchor.position.set(length * 0.40, deckY + bowSheer(0.90, height) + 0.015, side * hullHalfWidth(0.90, beam) * 0.5)
+    parent.add(anchor)
   }
 }
 
-function addSuperstructure(
-  parent: THREE.Group,
-  shape: ShipShapeClass,
-  length: number,
-  beam: number,
-  height: number,
-  towerMount: { x: number; y: number },
-): void {
-  const bridge = new THREE.Group()
-  bridge.position.set(-towerMount.y * length * 0.36, height * 0.54, towerMount.x * beam * 0.34)
-  parent.add(bridge)
-
-  const baseW = shape === 'destroyer' ? 0.82 : shape === 'cruiser' ? 1.10 : 1.38
-  const citadel = mesh(new THREE.BoxGeometry(baseW, 0.28, beam * 0.42), MATERIALS.armor)
-  citadel.position.set(0, 0.08, 0)
-  bridge.add(citadel)
-
-  const layers = shape === 'destroyer' ? 2 : shape === 'cruiser' ? 3 : 4
-  for (let i = 0; i < layers; i++) {
-    const layer = mesh(new THREE.BoxGeometry(baseW * (0.70 - i * 0.08), 0.22, beam * (0.28 - i * 0.025)), MATERIALS.metal)
-    layer.position.set(0.14, 0.32 + i * 0.23, 0)
-    bridge.add(layer)
-  }
-
-  const mast = mesh(new THREE.CylinderGeometry(0.025, 0.035, 1.12, 10), MATERIALS.dark)
-  mast.position.set(0.10, 1.16, 0)
-  bridge.add(mast)
-
-  const yard = mesh(new THREE.BoxGeometry(0.92, 0.025, 0.025), MATERIALS.dark)
-  yard.position.set(0.10, 1.46, 0)
-  bridge.add(yard)
-
-  const funnel = mesh(new THREE.CylinderGeometry(0.16, 0.22, 0.78, 24), MATERIALS.dark)
-  funnel.position.set(-length * 0.08, 0.35, beam * 0.08)
-  funnel.rotation.z = -0.12
-  parent.add(funnel)
-
-  const cap = mesh(new THREE.CylinderGeometry(0.20, 0.18, 0.10, 24), MATERIALS.dark)
-  cap.position.set(-length * 0.085, 0.74, beam * 0.08)
-  cap.rotation.z = -0.12
-  parent.add(cap)
-}
 
 function createWeapon(weapon: ShipDesignerPreviewWeapon): THREE.Group {
   const barrels = barrelsFor(weapon)
@@ -350,90 +393,20 @@ function selectionRing(radius: number): THREE.Mesh {
   return ring
 }
 
-function hullGeometry(length: number, beam: number, height: number, bowType: 'sharp' | 'round' | 'flat'): THREE.BufferGeometry {
-  const segments = 28
-  const vertices: number[] = []
-  const indices: number[] = []
-  const ringPoints = 7
-  const bowSharpness = bowType === 'sharp' ? 0.48 : bowType === 'round' ? 0.62 : 0.82
-
-  for (let i = 0; i <= segments; i++) {
-    const u = i / segments
-    const x = (u - 0.5) * length
-    const taper = Math.pow(Math.sin(Math.PI * u), bowSharpness)
-    const half = beam * 0.5 * taper
-    const lift = Math.max(0, Math.abs(u - 0.5) * 2 - 0.72) * height * 0.26
-    const ring: Array<[number, number, number]> = [
-      [x, height * 0.44 + lift, -half * 0.7],
-      [x, height * 0.08 + lift * 0.55, -half],
-      [x, -height * 0.34 + lift * 0.2, -half * 0.62],
-      [x, -height * 0.48 + lift * 0.1, 0],
-      [x, -height * 0.34 + lift * 0.2, half * 0.62],
-      [x, height * 0.08 + lift * 0.55, half],
-      [x, height * 0.44 + lift, half * 0.7],
-    ]
-    ring.forEach(point => vertices.push(...point))
-  }
-
-  for (let i = 0; i < segments; i++) {
-    const a = i * ringPoints
-    const b = (i + 1) * ringPoints
-    for (let j = 0; j < ringPoints - 1; j++) {
-      indices.push(a + j, b + j, a + j + 1, a + j + 1, b + j, b + j + 1)
-    }
-  }
-
-  const geo = new THREE.BufferGeometry()
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3))
-  geo.setIndex(indices)
-  geo.computeVertexNormals()
-  return geo
-}
-
-function deckGeometry(length: number, beam: number, bowType: 'sharp' | 'round' | 'flat'): THREE.ShapeGeometry {
-  const shape = new THREE.Shape()
-  const points = deckOutlinePoints(length, beam, bowType)
-  const first = points[0]!
-  shape.moveTo(first.x, first.z)
-  for (const point of points.slice(1)) shape.lineTo(point.x, point.z)
-  shape.closePath()
-  return new THREE.ShapeGeometry(shape)
-}
-
-function deckOutlinePoints(
-  length: number,
-  beam: number,
-  bowType: 'sharp' | 'round' | 'flat',
-): Array<{ x: number; z: number }> {
-  const halfBeam = beam * 0.5
-  const stations = 34
-  const maxHalf = halfBeam * (bowType === 'sharp' ? 0.58 : bowType === 'round' ? 0.64 : 0.70)
-  const bowExponent = bowType === 'sharp' ? 0.38 : bowType === 'round' ? 0.52 : 0.72
-  const sternExponent = bowType === 'flat' ? 0.55 : 0.42
-  const starboard: Array<{ x: number; z: number }> = []
-  const port: Array<{ x: number; z: number }> = []
-
-  for (let i = 0; i <= stations; i++) {
-    const u = i / stations
-    const x = (u - 0.5) * length
-    const bowTaper = Math.pow(Math.sin(Math.PI * Math.min(1, u / 0.23) * 0.5), bowExponent)
-    const sternTaper = Math.pow(Math.sin(Math.PI * Math.min(1, (1 - u) / 0.18) * 0.5), sternExponent)
-    const midshipShoulder = 0.92 + Math.sin(Math.PI * u) * 0.08
-    const flatStern = bowType === 'flat' && u > 0.92 ? 0.78 + (1 - u) * 1.22 : 1
-    const half = maxHalf * bowTaper * sternTaper * midshipShoulder * flatStern
-    starboard.push({ x, z: -half })
-    port.unshift({ x, z: half })
-  }
-
-  return [...starboard, ...port]
-}
 
 function gunTurret(scale: number, barrels: number): THREE.Group {
   const group = new THREE.Group()
   group.add(mesh(new THREE.CylinderGeometry(0.36 * scale, 0.42 * scale, 0.12 * scale, 32), MATERIALS.dark))
 
-  const body = mesh(new THREE.BoxGeometry(0.72 * scale, 0.28 * scale, 0.58 * scale), MATERIALS.metal)
-  body.position.y = 0.16 * scale
+  const armorShape = new THREE.Shape()
+  armorShape.moveTo(-0.35, 0.28); armorShape.lineTo(0.35, 0.28)
+  armorShape.lineTo(0.39, -0.12); armorShape.lineTo(0.24, -0.34)
+  armorShape.lineTo(-0.24, -0.34); armorShape.lineTo(-0.39, -0.12); armorShape.closePath()
+  const armorGeometry = new THREE.ExtrudeGeometry(armorShape, { depth: 0.20, bevelEnabled: true, bevelSize: 0.045, bevelThickness: 0.045, bevelSegments: 1, steps: 1 })
+  armorGeometry.rotateX(Math.PI / 2)
+  const body = mesh(armorGeometry, MATERIALS.metal)
+  body.scale.setScalar(scale)
+  body.position.y = 0.32 * scale
   group.add(body)
 
   const spacing = 0.18 * scale
@@ -443,6 +416,14 @@ function gunTurret(scale: number, barrels: number): THREE.Group {
     barrel.rotation.x = Math.PI / 2
     barrel.position.set(first + i * spacing, 0.23 * scale, -0.66 * scale)
     group.add(barrel)
+    const sleeve = mesh(new THREE.CylinderGeometry(0.049 * scale, 0.055 * scale, 0.30 * scale, 12), MATERIALS.hull)
+    sleeve.rotation.x = Math.PI / 2
+    sleeve.position.set(first + i * spacing, 0.23 * scale, -0.36 * scale)
+    group.add(sleeve)
+    const bore = mesh(new THREE.CircleGeometry(0.021 * scale, 12), MATERIALS.dark)
+    bore.rotation.y = Math.PI
+    bore.position.set(first + i * spacing, 0.23 * scale, -1.253 * scale)
+    group.add(bore)
   }
   return group
 }
@@ -502,6 +483,7 @@ function previewKey(config: ShipDesignerPreviewConfig): string {
     hull: config.hull.templateId,
     armor: config.armorBonus,
     tower: config.towerMount,
-    weapons: config.weapons.map(w => [w.id, w.type, w.mount.x, w.mount.y, w.barrels, w.selected]),
+    weapons: config.weapons.map(w => [w.id, w.instanceId, w.type, w.mount.x, w.mount.y, w.rotation, w.barrels, w.selected]),
+    structures: config.structures,
   })
 }

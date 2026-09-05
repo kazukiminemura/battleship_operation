@@ -3,6 +3,7 @@ import type { PlayerShipType, WeaponTemplate } from '../game/data/masterdata'
 import { MAX_WEAPON_SLOTS, type WeaponType } from '../game/simulation/types'
 import { WEAPON_SHOP } from '../game/data/weapon-shop'
 import { firingArcForWeapon } from '../game/simulation/firing-arcs'
+import type { DesignedWeapon, ShipDesignLayout } from '../game/data/ship-design-layout'
 
 export type HLGComponentCategory = 'weapon' | 'bridge' | 'funnel' | 'boiler' | 'turbine' | 'aux' | 'armor'
 export type HLGZone = 'fore' | 'mid' | 'aft' | 'side' | 'deck' | 'internal'
@@ -447,7 +448,7 @@ export function hlgDesignToLoadout(hull: HullCatalogEntry, design: HLGDesign): W
   })
 }
 
-export function previewWeaponsFromHLG(hull: HullCatalogEntry, design: HLGDesign): Array<{ id: string; name: string; type: WeaponType; mount: { x: number; y: number }; barrels?: number; selected: boolean }> {
+export function previewWeaponsFromHLG(hull: HullCatalogEntry, design: HLGDesign): DesignedWeapon[] {
   const spec = hlgGridSpec(hull)
   return design.components.flatMap(component => {
     const part = HLG_PART_BY_ID[component.partId]
@@ -457,10 +458,30 @@ export function previewWeaponsFromHLG(hull: HullCatalogEntry, design: HLGDesign)
       name: part.name,
       type: part.type,
       mount: cellToMount(component.cell.c, component.cell.r, spec),
+      instanceId: component.instanceId,
+      rotation: component.rotation,
       barrels: component.barrels ?? part.barrels,
       selected: false,
     }]
   })
+}
+
+export function designLayoutFromHLG(hull: HullCatalogEntry, design: HLGDesign): ShipDesignLayout {
+  const spec = hlgGridSpec(hull)
+  return {
+    weapons: previewWeaponsFromHLG(hull, design),
+    structures: design.components.flatMap(component => {
+      const part = HLG_PART_BY_ID[component.partId]
+      if (!part || component.category === 'weapon') return []
+      return [{
+        instanceId: component.instanceId, partId: part.partId, name: part.name,
+        category: component.category, mount: cellToMount(component.cell.c, component.cell.r, spec),
+        rotation: component.rotation,
+        footprint: { length: part.footprint.h / spec.lengthCells, beam: part.footprint.w / spec.beamCells },
+        internal: part.category === 'boiler' || part.category === 'turbine' || part.category === 'armor' || part.allowedZones.includes('internal'),
+      }]
+    }),
+  }
 }
 
 export function towerMountFromHLG(hull: HullCatalogEntry, design: HLGDesign): { x: number; y: number } {

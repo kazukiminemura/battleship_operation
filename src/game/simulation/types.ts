@@ -1,3 +1,4 @@
+import type { ShipDesignLayout } from '../data/ship-design-layout'
 export type Vec3 = { x: number; y: number; z: number }
 
 export const MAX_WEAPON_SLOTS = 8
@@ -57,6 +58,7 @@ export interface ShipEntity {
   armor: number
   armorBonus?: number
   towerMount?: { x: number; y: number }
+  designLayout?: ShipDesignLayout
   team: 'player' | 'enemy'
   destroyed: boolean
   templateId: string

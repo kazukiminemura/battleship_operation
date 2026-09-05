@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import { ThreeShipDesignerRenderer, type ShipDesignerPreviewConfig } from '../game/rendering/three-ship-designer-renderer'
 import type { HullCatalogEntry } from '../game/data/hull-catalog'
 import type { HLGDesign } from './hlg-system'
-import { previewWeaponsFromHLG, towerMountFromHLG } from './hlg-system'
+import { designLayoutFromHLG, towerMountFromHLG } from './hlg-system'
 
 interface Props {
   hull: HullCatalogEntry
@@ -16,7 +16,7 @@ export function Ship3DPreview({ hull, design, armorBonus }: Props) {
 
   const config = useMemo<ShipDesignerPreviewConfig>(() => ({
     hull,
-    weapons: previewWeaponsFromHLG(hull, design),
+    ...designLayoutFromHLG(hull, design),
     towerMount: towerMountFromHLG(hull, design),
     armorBonus,
   }), [armorBonus, design, hull])

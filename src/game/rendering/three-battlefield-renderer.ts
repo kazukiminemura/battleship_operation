@@ -19,6 +19,7 @@ interface ShipVisual {
   templateId: string
   scale: number
   team: string
+  designKey: string
 }
 
 interface ShipPalette {
@@ -307,7 +308,7 @@ export class ThreeBattlefieldRenderer {
     for (const ship of ships) {
       visibleIds.add(ship.id)
       let visual = this.shipVisuals.get(ship.id)
-      if (!visual || visual.templateId !== ship.templateId || visual.scale !== iso.scale || visual.team !== ship.team) {
+      if (!visual || visual.templateId !== ship.templateId || visual.scale !== iso.scale || visual.team !== ship.team || visual.designKey !== shipDesignKey(ship)) {
         if (visual) this.scene.remove(visual.group)
         visual = this.createShipVisual(ship, iso.scale)
         this.shipVisuals.set(ship.id, visual)
@@ -429,7 +430,7 @@ export class ThreeBattlefieldRenderer {
       wake.position.set(-l * 0.92, w * 0.12, -2)
       group.add(wake)
 
-      return { group, wake, weaponMounts: collectWeaponMounts(designerShip), templateId: ship.templateId, scale, team: ship.team }
+      return { group, wake, weaponMounts: collectWeaponMounts(designerShip), templateId: ship.templateId, scale, team: ship.team, designKey: shipDesignKey(ship) }
     }
 
     const h = Math.max(4, dim.h * modelScale * 0.55)
@@ -717,7 +718,7 @@ export class ThreeBattlefieldRenderer {
     wake.position.set(-l * 0.92, w * 0.12, -2)
     group.add(wake)
 
-    return { group, wake, weaponMounts: [], templateId: ship.templateId, scale, team: ship.team }
+    return { group, wake, weaponMounts: [], templateId: ship.templateId, scale, team: ship.team, designKey: shipDesignKey(ship) }
   }
 
   private updateShipVisual(
@@ -762,6 +763,11 @@ export class ThreeBattlefieldRenderer {
 
 function screenDepth(worldY: number): number {
   return Math.max(-30, Math.min(30, (worldY / WORLD_SIZE) * 60 - 30))
+}
+
+function shipDesignKey(ship: ShipEntity): string {
+  return JSON.stringify([ship.armorBonus, ship.towerMount, ship.designLayout,
+    ship.weapons.map(weapon => [weapon.id, weapon.instanceId, weapon.mount, weapon.mounts, weapon.barrels])])
 }
 
 function collectWeaponMounts(root: THREE.Object3D): THREE.Group[] {
@@ -818,20 +824,29 @@ function angularDelta(from: number, to: number): number {
   return delta
 }
 
-function combatShipPreviewConfig(ship: ShipEntity): ShipDesignerPreviewConfig {
+export function combatShipPreviewConfig(ship: ShipEntity): ShipDesignerPreviewConfig {
   const hull = hullEntryForShip(ship)
   return {
     hull,
     armorBonus: ship.armorBonus ?? 0,
     towerMount: ship.towerMount ?? bridgeMountForHull(hull),
-    weapons: ship.weapons.map((weapon, index) => ({
+    structures: ship.designLayout?.structures,
+    weapons: ship.designLayout ? ship.designLayout.weapons.map(weapon => ({ ...weapon, selected: false })) : ship.weapons.flatMap((weapon, index) => weapon.mounts?.length ? weapon.mounts.map(mount => ({
+      id: weapon.id,
+      instanceId: mount.instanceId,
+      name: weapon.name,
+      type: weapon.type,
+      mount: mount.mount ?? combatVisualMount(ship, weapon, index),
+      barrels: mount.barrels ?? weapon.barrels,
+      selected: false,
+    })) : [{
       id: weapon.id,
       name: weapon.name,
       type: weapon.type,
       mount: combatVisualMount(ship, weapon, index),
       barrels: weapon.barrels,
       selected: false,
-    })),
+    }]),
   }
 }
 
@@ -863,7 +878,7 @@ function hullEntryForShip(ship: ShipEntity): HullCatalogEntry {
 function bridgeMountForHull(hull: HullCatalogEntry): { x: number; y: number } {
   if (hull.shipType === 'destroyer') return { x: 0, y: -0.12 }
   if (hull.shipType === 'cruiser') return { x: 0, y: -0.04 }
-  return { x: 0, y: -0.18 }
+  return { x: 0, y: 0 }
 }
 
 function combatVisualMount(ship: ShipEntity, weapon: ShipEntity['weapons'][number], index: number): { x: number; y: number } {

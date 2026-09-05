@@ -17,7 +17,8 @@ import { ScreenManager } from './game/ui/screen-manager'
 import type { WeaponTemplate } from './game/data/masterdata'
 import { getDefaultLoadout } from './game/data/weapon-catalog'
 import { isAccessKey } from './game/ui/accesskeys'
-import type { HLGDesign } from './designer/hlg-system'
+import { designLayoutFromHLG, type HLGDesign } from './designer/hlg-system'
+import { HULL_CATALOG } from './game/data/hull-catalog'
 import type { PrepResult } from './designer/types'
 import {
   renderPauseOverlay,
@@ -124,7 +125,9 @@ function main(): void {
   const beginCombat = (): void => {
     paused = false
     debugMode = false
-    state = createInitialState(selectedShip, currentStage, selectedLoadout, selectedTemplateId, selectedArmorBonus, selectedTowerMount)
+    const designedHull = HULL_CATALOG.find(hull => hull.templateId === selectedTemplateId)
+    const layout = selectedFreeformDesign && designedHull ? designLayoutFromHLG(designedHull, selectedFreeformDesign) : undefined
+    state = createInitialState(selectedShip, currentStage, selectedLoadout, selectedTemplateId, selectedArmorBonus, selectedTowerMount, layout)
     rng = createRngStreams(BASE_SEED + currentStage * 1009)
     screens.toCombat(bgmEnabled, isBossStage(state))
   }

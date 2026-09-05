@@ -1,5 +1,6 @@
 import { MAX_WEAPON_SLOTS, type BuildingEntity, type ShipEntity, type CombatState, type Entity, type MapObstacle, type Metrics, type WeaponState, type WeaponType, type WeatherCondition } from '../simulation/types'
 import shipTemplates from './ships.json'
+import type { ShipDesignLayout } from './ship-design-layout'
 import { KNOTS_PER_UNIT, WORLD_SIZE } from '../simulation/movement'
 
 export type PlayerShipType = 'destroyer' | 'cruiser' | 'battleship'
@@ -397,13 +398,14 @@ export function createInitialState(
   customTemplateId?: string,
   armorBonus = 0,
   towerMount?: { x: number; y: number },
+  designLayout?: ShipDesignLayout,
 ): CombatState {
   const stage = getStageDefinition(stageNumber)
   const entities = new Map<string, Entity>()
   const playerShip = makePlayerShip(playerType, customTemplateId)
   const armoredShip = armorBonus > 0 ? applyArmorBonus(playerShip, armorBonus) : playerShip
   const finalPlayer = customLoadout
-    ? { ...armoredShip, weapons: customLoadout.map(makeWeaponState), towerMount }
+    ? { ...armoredShip, weapons: customLoadout.map(makeWeaponState), towerMount, designLayout: designLayout ? structuredClone(designLayout) : undefined }
     : armoredShip
   entities.set('ship.player', finalPlayer)
 
