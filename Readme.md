@@ -53,9 +53,6 @@ Vite の dev server が起動したら、表示された URL をブラウザで�
 
 ## Controls
 
-海中探索ゲーム **ABYSS** は、開発サーバーの `/underwater.html` で遊べます。
-艦船ゲームとは独立した3D潜水艇ゲームです。詳しい操作は [ABYSS の遊び方](docs/underwater-game.md) を参照してください。
-
 | Input | Action |
 | --- | --- |
 | `W` / `ArrowUp` | 速度を上げる |
