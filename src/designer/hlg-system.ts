@@ -3,6 +3,7 @@ import type { PlayerShipType, WeaponTemplate } from '../game/data/masterdata'
 import { MAX_WEAPON_SLOTS, type WeaponType } from '../game/simulation/types'
 import { WEAPON_SHOP } from '../game/data/weapon-shop'
 import { firingArcForWeapon } from '../game/simulation/firing-arcs'
+import { getDefaultLoadout } from '../game/data/weapon-catalog'
 import type { DesignedWeapon, ShipDesignLayout } from '../game/data/ship-design-layout'
 
 export type HLGComponentCategory = 'weapon' | 'bridge' | 'funnel' | 'boiler' | 'turbine' | 'aux' | 'armor'
@@ -253,11 +254,12 @@ export function defaultHLGDesign(hull: HullCatalogEntry): HLGDesign {
   for (const item of parts) {
     const part = HLG_PART_BY_ID[item.partId]
     if (!part) continue
-    const preferred = { ...item.preferred, c: spec.centerC }
-    const cell = findNearestValidCell(hull, { ...blankDesign(hull), components }, part, preferred)
+    const preferred = { c: spec.centerC, r: Math.round(spec.topR - .5 + (item.y + 1) * (spec.lengthCells - 1) / 2) }
+    const cell = findNearestValidCell(hull, { ...blankDesign(hull), components }, part, preferred, item.rotation ?? 0)
     if (!cell) continue
     components.push(makeComponent(part, cell, item.rotation ?? 0, nextAvailableWeaponSlot(components)))
   }
+  addStandardWeapons(hull, spec, components)
   return { ...blankDesign(hull), components }
 }
 
@@ -484,6 +486,21 @@ export function designLayoutFromHLG(hull: HullCatalogEntry, design: HLGDesign): 
   }
 }
 
+function addStandardWeapons(hull: HullCatalogEntry, spec: HLGGridSpec, components: HLGComponentInstance[]): void {
+  for (const [slot, weapon] of getDefaultLoadout(hull.shipType).entries()) {
+    const part = HLG_PART_BY_ID[`part.weapon.${weapon.id}`]
+    if (!part) throw new Error(`Unknown standard weapon: ${weapon.id}`)
+    for (const entry of weapon.mounts ?? []) {
+      const mount = entry.mount!
+      const preferred = { c: Math.round(spec.centerC + mount.x * spec.beamCells / 2), r: Math.round(spec.topR - .5 + (mount.y + 1) * (spec.lengthCells - 1) / 2) }
+      const rotation: HLGRotation = mount.x < -.2 ? 270 : mount.x > .2 ? 90 : mount.y > .5 ? 180 : 0
+      const cell = findNearestValidCell(hull, { ...blankDesign(hull), components }, part, preferred, rotation, slot)
+      if (!cell) throw new Error(`Standard armament does not fit ${hull.templateId}: ${part.name}`)
+      components.push({ ...makeComponent(part, cell, rotation, slot), barrels: entry.barrels })
+    }
+  }
+}
+
 export function towerMountFromHLG(hull: HullCatalogEntry, design: HLGDesign): { x: number; y: number } {
   const spec = hlgGridSpec(hull)
   const bridge = design.components.find(component => component.category === 'bridge')
@@ -605,37 +622,17 @@ function shipClassesForWeapon(id: string): PlayerShipType[] {
   return ['destroyer', 'cruiser', 'battleship']
 }
 
-function defaultPartsForClass(shipClass: PlayerShipType): Array<{ partId: string; preferred: HLGCell; rotation?: HLGRotation }> {
-  if (shipClass === 'destroyer') return [
-    { partId: 'part.bridge.dd', preferred: scaledCell(4, 20) },
-    { partId: 'part.funnel.small', preferred: scaledCell(4, 26) },
-    { partId: 'part.boiler.light', preferred: scaledCell(4, 31) },
-    { partId: 'part.turbine.light', preferred: scaledCell(4, 36), rotation: 90 },
-    { partId: 'part.weapon.weapon.gun.127mm.twin', preferred: scaledCell(4, 10) },
-    { partId: 'part.weapon.weapon.torpedo.533mm.basic', preferred: scaledCell(2, 34), rotation: 90 },
-    { partId: 'part.weapon.weapon.aa.20mm.dd', preferred: scaledCell(4, 44) },
-  ]
-  if (shipClass === 'cruiser') return [
-    { partId: 'part.bridge.ca', preferred: scaledCell(5, 28) },
-    { partId: 'part.funnel.large', preferred: scaledCell(5, 36) },
-    { partId: 'part.boiler.heavy', preferred: scaledCell(5, 44) },
-    { partId: 'part.turbine.light', preferred: scaledCell(5, 52), rotation: 90 },
-    { partId: 'part.weapon.weapon.gun.203mm', preferred: scaledCell(5, 12) },
-    { partId: 'part.weapon.weapon.gun.152mm.twin', preferred: scaledCell(5, 20) },
-    { partId: 'part.weapon.weapon.aa.cruiser', preferred: scaledCell(5, 62) },
-  ]
+function defaultPartsForClass(shipClass: PlayerShipType): Array<{ partId: string; y: number; rotation?: HLGRotation }> {
+  const dd = shipClass === 'destroyer'
   return [
-    { partId: 'part.bridge.bb', preferred: scaledCell(8, 40) },
-    { partId: 'part.funnel.large', preferred: scaledCell(8, 50) },
-    { partId: 'part.boiler.heavy', preferred: scaledCell(8, 60) },
-    { partId: 'part.turbine.heavy', preferred: scaledCell(8, 70), rotation: 90 },
-    { partId: 'part.weapon.weapon.gun.406mm.twin', preferred: scaledCell(8, 14) },
-    { partId: 'part.weapon.weapon.gun.406mm.he', preferred: scaledCell(8, 25) },
-    { partId: 'part.weapon.weapon.aa.heavy', preferred: scaledCell(8, 82) },
+    { partId: `part.bridge.${dd ? 'dd' : shipClass === 'cruiser' ? 'ca' : 'bb'}`, y: -.12 },
+    { partId: `part.funnel.${dd ? 'small' : 'large'}`, y: dd ? -.05 : .15 },
+    { partId: `part.boiler.${dd ? 'light' : 'heavy'}`, y: .13 },
+    { partId: `part.turbine.${shipClass === 'battleship' ? 'heavy' : 'light'}`, y: .30, rotation: 90 },
   ]
 }
 
-export function findNearestValidCell(hull: HullCatalogEntry, design: HLGDesign, part: HLGPartDefinition, preferred: HLGCell): HLGCell | null {
+export function findNearestValidCell(hull: HullCatalogEntry, design: HLGDesign, part: HLGPartDefinition, preferred: HLGCell, rotation: HLGRotation = 0, weaponSlot = nextAvailableWeaponSlot(design.components)): HLGCell | null {
   const spec = hlgGridSpec(hull)
   const clamped = { c: clamp(preferred.c, 0, spec.cols - 1), r: clamp(preferred.r, 0, spec.rows - 1) }
   const candidates: HLGCell[] = [clamped]
@@ -647,7 +644,7 @@ export function findNearestValidCell(hull: HullCatalogEntry, design: HLGDesign, 
       }
     }
   }
-  return candidates.find(cell => canPlaceHLGPart(hull, design, part, cell, 0)) ?? null
+  return candidates.find(cell => canPlaceHLGPart(hull, design, part, cell, rotation, weaponSlot)) ?? null
 }
 
 function blankDesign(hull: HullCatalogEntry): HLGDesign {

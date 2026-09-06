@@ -24,8 +24,17 @@ export function combatStep(
   // 1.5. update current visibility before command generation
   s = stepDetection(s)
 
-  // 2. apply player commands (auto-pilot overrides movement; fire commands always pass through)
-  const playerShip = s.entities.get('ship.player') as ShipEntity | undefined
+  // Manual helm commands take control regardless of their input source.
+  let playerShip = s.entities.get('ship.player') as ShipEntity | undefined
+  const manualHelm = commands.some(c => c.actorId === 'ship.player' &&
+    (c.type === 'rotate' || c.type === 'speed.up' || c.type === 'speed.down' || c.type === 'stop' || c.type === 'move'))
+  if (playerShip?.autoPilot && manualHelm) {
+    playerShip = { ...playerShip, autoPilot: false }
+    const entities = new Map(s.entities)
+    entities.set(playerShip.id, playerShip)
+    s = { ...s, entities }
+  }
+  // Fire alone does not interrupt automatic navigation.
   const effectiveCmds = playerShip?.autoPilot
     ? [...commands.filter(c => c.type === 'fire.slot' || c.type.startsWith('fire.')),
        ...generateAutoPilotCommands(s)]

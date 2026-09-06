@@ -4,9 +4,11 @@ import { chromium } from '@playwright/test'
 const browser = await chromium.launch()
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } })
 const errors = []
+const blenderOnly = process.argv.includes('--blender')
+const prefix = blenderOnly ? 'blender' : 'historical'
 page.on('pageerror', error => errors.push(error.message))
 try {
-  for (const variant of ['designer', 'combat']) for (const type of ['destroyer', 'cruiser', 'battleship']) {
+  for (const variant of ['designer', 'combat']) for (const type of (blenderOnly ? ['battleship'] : ['destroyer', 'cruiser', 'battleship'])) {
     await page.goto('http://127.0.0.1:5173/')
     const result = await page.evaluate(async ({type, variant}) => {
       const { ThreeShipDesignerRenderer } = await import('/src/game/rendering/three-ship-designer-renderer.ts')
@@ -31,18 +33,24 @@ try {
       return new Promise(resolve => {
         function draw() {
           renderer.update()
-          if (++frames < 8) requestAnimationFrame(draw)
-          else resolve({ type, variant, weapons: config.weapons.length, tower: config.towerMount })
+          requestAnimationFrame(draw)
+          if (++frames === 8) resolve({ type, variant, weapons: config.weapons.length, tower: config.towerMount })
         }
         draw()
       })
     }, {type, variant})
-    await page.screenshot({ path: `docs/screenshots/historical-${type}-${variant}.png` })
+    await page.screenshot({ path: `docs/screenshots/${prefix}-${type}-${variant}.png` })
     console.log(JSON.stringify(result))
+    if (blenderOnly && variant === 'combat') {
+      await page.mouse.move(720, 450)
+      await page.mouse.wheel(0, -250)
+      await page.waitForTimeout(500)
+      await page.screenshot({ path: 'docs/screenshots/blender-battleship-detail.png' })
+    }
   }
   await page.goto('http://127.0.0.1:5173/?debug=map')
   await page.waitForTimeout(1200)
-  await page.screenshot({ path: 'docs/screenshots/historical-combat.png' })
+  await page.screenshot({ path: `docs/screenshots/${prefix}-combat.png` })
   if (errors.length) throw new Error(errors.join('\n'))
 } finally {
   await browser.close()

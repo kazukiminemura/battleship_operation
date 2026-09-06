@@ -15,8 +15,9 @@ describe('createInitialState', () => {
 
     expect(player.templateId).toBe('hull.destroyer.basic')
     expect(player.maxSpeed).toBe(6.25)
-    expect(player.weapons.find(w => w.type === 'gun')?.ammo).toBe(220)
-    expect(player.weapons.find(w => w.type === 'gun')?.name).toBe('12.7cm連装砲')
+    expect(player.weapons.find(w => w.type === 'gun')?.ammo).toBe(660)
+    expect(player.weapons.find(w => w.type === 'gun')?.mounts).toHaveLength(3)
+    expect(player.weapons.find(w => w.type === 'gun')?.name).toBe('12.7cm HE 連装砲')
     expect(player.weapons.every(w => w.autoFire)).toBe(true)
     expect(player.autoPilot).toBe(true)
   })

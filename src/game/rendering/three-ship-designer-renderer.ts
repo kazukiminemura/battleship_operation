@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { bowSheer, hullHalfWidth, navalHull, navalDeck, timberTexture } from './naval-geometry'
 import { historicalProfile } from './historical-ship-profiles'
+import { blenderBattleshipPart, BLENDER_REFERENCE_LENGTH } from './blender-battleship'
 import { addHistoricalSuperstructure } from './historical-superstructure'
 import { addDesignedStructures } from './designed-structures'
 import type { DesignedStructure } from '../data/ship-design-layout'
@@ -270,7 +271,7 @@ export function buildShip(config: ShipDesignerPreviewConfig): THREE.Group {
     })))
 
   for (const weapon of config.weapons) {
-    const mount = createWeapon(weapon)
+    const mount = createWeapon(weapon, profile.kind === 'battleship')
     const weaponScale = weapon.type === 'gun' ? profile.gunScale : Math.min(0.85, profile.gunScale)
     mount.scale.setScalar(weaponScale)
     mount.name = weapon.name
@@ -301,6 +302,10 @@ export function buildShip(config: ShipDesignerPreviewConfig): THREE.Group {
 }
 
 function addHull(parent: THREE.Group, shape: ShipShapeClass, length: number, beam: number, height: number, armorBonus: number): void {
+  if (historicalProfile(shape).kind === 'battleship') {
+    parent.add(blenderBattleshipPart('hull', length / BLENDER_REFERENCE_LENGTH))
+    return
+  }
   parent.add(mesh(navalHull(length, beam, -height * 0.12, height * 0.44), MATERIALS.hull))
 
   const lower = mesh(navalHull(length, beam * 0.91, -height * 0.48, -height * 0.12, true), MATERIALS.lowerHull)
@@ -369,12 +374,12 @@ function addHullDetails(parent: THREE.Group, shape: ShipShapeClass, length: numb
 }
 
 
-function createWeapon(weapon: ShipDesignerPreviewWeapon): THREE.Group {
+function createWeapon(weapon: ShipDesignerPreviewWeapon, useBlender = false): THREE.Group {
   const barrels = barrelsFor(weapon)
   if (weapon.type === 'torpedo') return torpedoLauncher(barrels)
   if (weapon.type === 'aa') return aaGun(barrels)
   if (weapon.type === 'missile') return missileRack(barrels)
-  return gunTurret(weapon.type === 'gun' ? 1 : 0.58, barrels)
+  return gunTurret(weapon.type === 'gun' ? 1 : 0.58, barrels, useBlender)
 }
 
 function mesh(geometry: THREE.BufferGeometry, material: THREE.Material): THREE.Mesh {
@@ -394,8 +399,10 @@ function selectionRing(radius: number): THREE.Mesh {
 }
 
 
-function gunTurret(scale: number, barrels: number): THREE.Group {
+function gunTurret(scale: number, barrels: number, useBlender = false): THREE.Group {
   const group = new THREE.Group()
+  if (useBlender) group.add(blenderBattleshipPart('turret', scale))
+  else {
   group.add(mesh(new THREE.CylinderGeometry(0.36 * scale, 0.42 * scale, 0.12 * scale, 32), MATERIALS.dark))
 
   const armorShape = new THREE.Shape()
@@ -408,11 +415,20 @@ function gunTurret(scale: number, barrels: number): THREE.Group {
   body.scale.setScalar(scale)
   body.position.y = 0.32 * scale
   group.add(body)
+  }
 
   const spacing = 0.18 * scale
   const first = -((barrels - 1) * spacing) / 2
   for (let i = 0; i < barrels; i++) {
-    const barrel = mesh(new THREE.CylinderGeometry(0.026 * scale, 0.04 * scale, 1.18 * scale, 18), MATERIALS.dark)
+    if (useBlender) {
+      const barrel = blenderBattleshipPart('barrel', scale)
+      barrel.name = `gun-barrel-${i + 1}`
+      barrel.position.x = first + i * spacing
+      group.add(barrel)
+      continue
+    }
+    const barrel = mesh(new THREE.CylinderGeometry(0.026 * scale, 0.04 * scale, 1.18 * scale, 18), MATERIALS.metal)
+    barrel.name = `gun-barrel-${i + 1}`
     barrel.rotation.x = Math.PI / 2
     barrel.position.set(first + i * spacing, 0.23 * scale, -0.66 * scale)
     group.add(barrel)
@@ -420,6 +436,10 @@ function gunTurret(scale: number, barrels: number): THREE.Group {
     sleeve.rotation.x = Math.PI / 2
     sleeve.position.set(first + i * spacing, 0.23 * scale, -0.36 * scale)
     group.add(sleeve)
+    const blastBag = mesh(new THREE.SphereGeometry(1, 12, 8), MATERIALS.dark)
+    blastBag.scale.set(0.075 * scale, 0.070 * scale, 0.13 * scale)
+    blastBag.position.set(first + i * spacing, 0.23 * scale, -0.24 * scale)
+    group.add(blastBag)
     const bore = mesh(new THREE.CircleGeometry(0.021 * scale, 12), MATERIALS.dark)
     bore.rotation.y = Math.PI
     bore.position.set(first + i * spacing, 0.23 * scale, -1.253 * scale)

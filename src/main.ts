@@ -196,6 +196,18 @@ function main(): void {
 
   const applyHudAction = (id: string | null): boolean => {
     if (!id) return false
+    if (id.startsWith('select:')) {
+      input.selectWeaponMode(Number(id.slice(7)))
+      return true
+    }
+    if (id.startsWith('command:')) {
+      const action = id.slice(8)
+      if (action === 'pause') togglePause()
+      else if (action === 'sim') toggleDebugMap()
+      else if (action === 'return') goToStart()
+      else input.performControl(action)
+      return true
+    }
     if (id === 'toggle-autopilot') { state = toggleAutoPilot(state); return true }
     if (id === 'toggle-all')       { state = toggleAllAutoFire(state); return true }
     if (id === 'toggle-bgm')       { bgmEnabled = sound.toggleBgm(); return true }
@@ -359,6 +371,8 @@ function main(): void {
         return
       }
     }
+    // Non-interactive HUD space must not become a shot at the sea behind it.
+    if (hud.containsPanel(cx, cy)) e.stopImmediatePropagation()
   }, true)
 
   // ── Game loop ─────────────────────────────────────────────────────────────

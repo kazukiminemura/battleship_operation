@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import type { HistoricalShipProfile } from './historical-ship-profiles'
+import { blenderBattleshipPart, BLENDER_REFERENCE_LENGTH } from './blender-battleship'
 
 type Palette = Record<'hull' | 'metal' | 'dark' | 'armor' | 'glass', THREE.Material>
 interface MountFootprint { x: number; z: number; radius: number }
@@ -36,6 +37,8 @@ export function addHistoricalSuperstructure(
   bridge.position.set(bx, deckY, bz)
   root.add(bridge)
 
+  if (bb) bridge.add(blenderBattleshipPart('bridge', l / BLENDER_REFERENCE_LENGTH))
+  else {
   // Rounded/chamfered houses, with projecting observation decks, rather than a stepped pyramid.
   const house = (x: number, y: number, length: number, height: number, beam: number, group = bridge) => {
     const s = new THREE.Shape()
@@ -79,6 +82,7 @@ export function addHistoricalSuperstructure(
   pole(new THREE.Vector3(-bw * 0.28, bh * 0.4, 0), new THREE.Vector3(-bw * 0.28, bh * 1.35, 0), l * 0.0014, bridge)
   box(-bw * 0.28, bh * 1.13, 0, l * 0.0016, l * 0.0016, w * 0.80, materials.dark, bridge)
 
+  }
   if (bridgeOnly) return
   const placedFunnels: { x: number; radius: number }[] = []
   for (const [index, fraction] of profile.funnelPositions.entries()) {
@@ -92,6 +96,10 @@ export function addHistoricalSuperstructure(
     const funnel = new THREE.Group()
     funnel.name = `funnel-${index}`
     funnel.position.set(x, deckY, 0); root.add(funnel)
+    if (bb) {
+      funnel.add(blenderBattleshipPart('funnel', l / BLENDER_REFERENCE_LENGTH))
+      continue
+    }
     const stack = add(new THREE.CylinderGeometry(radius * 0.85, radius, fh, 24), materials.hull, 0, fh / 2, 0, funnel)
     stack.scale.x = bb ? 1.65 : 1.25
     stack.rotation.z = 0.14

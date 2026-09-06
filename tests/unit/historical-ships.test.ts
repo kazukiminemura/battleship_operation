@@ -21,7 +21,7 @@ describe('historical fleet appearance', () => {
         if (part.userData['weaponId']) weapons.push(part)
       })
       expect(funnels).toHaveLength(kind === 'battleship' ? 1 : 2)
-      expect(weapons.map(m => m.userData['weaponId'])).toEqual(entity.weapons.map(m => m.id))
+      expect(weapons.map(m => m.userData['weaponId'])).toEqual(entity.weapons.flatMap(m => (m.mounts?.length ? m.mounts : [m]).map(() => m.id)))
       expect(JSON.stringify(entity)).toBe(before)
       for (const part of weapons) expect(Number.isFinite(part.position.y)).toBe(true)
     })

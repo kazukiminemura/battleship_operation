@@ -10,6 +10,7 @@ import {
   estimateHullSections,
 } from './hullstatus'
 import { drawAccessKeyHint, isAccessKey } from './accesskeys'
+import { commandLayout } from './command-layout'
 
 export type WeaponMode = number
 
@@ -59,6 +60,11 @@ export class HUD {
     return this.clickRegions
   }
 
+  containsPanel(x: number, y: number): boolean {
+    return x >= 0 && x <= this.canvas.width &&
+      (y <= 138 || y >= this.canvas.height - commandLayout(this.canvas.width).height)
+  }
+
   checkAccessKey(e: KeyboardEvent): string | null {
     for (const region of this.clickRegions) {
       const key = accessKeyForClickRegion(region.id)
@@ -82,7 +88,7 @@ export class HUD {
   private renderSubtitle(text: string): void {
     const { ctx, canvas } = this
     const pad = 16
-    const barH = 40
+    const barH = commandLayout(canvas.width).height
     ctx.font = 'bold 17px sans-serif'
     const textW = ctx.measureText(text).width
     const boxW = textW + pad * 2
@@ -214,6 +220,7 @@ export class HUD {
           if (key) drawAccessKeyHint(ctx, key, btnX + 3, btnY - 2)
         }
         this.clickRegions.push(region)
+        this.clickRegions.push({ id: `select:${i}`, x, y: slotY, w: slotW, h: barH - 6 })
       }
     }
 
@@ -421,7 +428,7 @@ export class HUD {
     const { ctx, canvas } = this
     const rSize = RADAR_SIZE
     const rX = RADAR_PAD + RADAR_SIZE + 6
-    const rY = canvas.height - rSize - 42 - RADAR_PAD  // above bottom bar
+    const rY = canvas.height - rSize - commandLayout(canvas.width).height - 2 - RADAR_PAD
 
     // background
     ctx.fillStyle = '#020812'
@@ -710,7 +717,7 @@ export class HUD {
     const { ctx, canvas } = this
     const mSize = RADAR_SIZE
     const mX = RADAR_PAD
-    const mY = canvas.height - mSize - 42 - RADAR_PAD
+    const mY = canvas.height - mSize - commandLayout(canvas.width).height - 2 - RADAR_PAD
 
     ctx.fillStyle = '#020812'
     ctx.strokeStyle = '#1e4a6a'
@@ -794,7 +801,8 @@ export class HUD {
 
   private renderBottomBar(player: ShipEntity): void {
     const { ctx, canvas } = this
-    const barH = 40
+    const layout = commandLayout(canvas.width)
+    const barH = layout.height
     const y = canvas.height - barH
 
     ctx.fillStyle = '#010409'
@@ -806,53 +814,25 @@ export class HUD {
     ctx.lineTo(canvas.width, y + 0.5)
     ctx.stroke()
 
-    const items: Array<[string, string]> = [
-      ['ENG+', '↑ / W'],
-      ['ENG-', '↓ / S'],
-      ['RUDDER', '← → / A E'],
-      ['FIRE', 'Click'],
-      ['WEAPON', '1-8'],
-      ['PAUSE', 'P / Esc'],
-      ['SIM', 'D'],
-      ['RTB', 'R'],
-    ]
-
-    let x = 14
-    const cy = y + 24
     ctx.textBaseline = 'middle'
-    ctx.font = 'bold 10px monospace'
-    ctx.fillStyle = '#64748b'
-    ctx.fillText('COMMAND', x, y + 10)
-    x += 74
-
-    for (const [label, key] of items) {
-      ctx.font = 'bold 13px monospace'
-      const keyW = Math.max(54, ctx.measureText(key).width + 14)
-      const labelW = Math.max(44, ctx.measureText(label).width + 10)
-
+    for (const button of layout.buttons) {
+      const region = { ...button, y: y + button.y }
       ctx.fillStyle = '#07111d'
-      roundRect(ctx, x, y + 8, keyW, 24, 3)
+      roundRect(ctx, region.x, region.y, region.w, region.h, 4)
       ctx.fill()
       ctx.strokeStyle = '#334155'
       ctx.lineWidth = 1
-      roundRect(ctx, x, y + 8, keyW, 24, 3)
       ctx.stroke()
-
+      ctx.font = 'bold 12px sans-serif'
       ctx.fillStyle = '#f8fafc'
       ctx.textAlign = 'center'
-      ctx.fillText(key, x + keyW / 2, cy)
-
-      ctx.fillStyle = '#94a3b8'
-      ctx.textAlign = 'left'
-      ctx.font = 'bold 10px monospace'
-      ctx.fillText(label, x + keyW + 7, cy)
-
-      x += keyW + labelW + 15
-      if (x > canvas.width - 270) break
+      ctx.fillText(button.label, region.x + region.w / 2, region.y + region.h / 2)
+      this.clickRegions.push(region)
     }
-    if (canvas.width >= 620) {
-      this.renderBearingTape(player, canvas.width - 236, y + 1)
-    }
+    ctx.font = '10px sans-serif'
+    ctx.fillStyle = '#94a3b8'
+    ctx.fillText('海面クリックで射撃 / 旋回ボタンは1クリックずつ', canvas.width / 2, canvas.height - 9)
+    if (canvas.width >= 1000) this.renderBearingTape(player, canvas.width - 236, canvas.height - 40)
     ctx.textBaseline = 'alphabetic'
     ctx.textAlign = 'left'
   }

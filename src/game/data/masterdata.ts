@@ -1,5 +1,6 @@
 import { MAX_WEAPON_SLOTS, type BuildingEntity, type ShipEntity, type CombatState, type Entity, type MapObstacle, type Metrics, type WeaponState, type WeaponType, type WeatherCondition } from '../simulation/types'
 import shipTemplates from './ships.json'
+import { getDefaultLoadout } from './weapon-catalog'
 import type { ShipDesignLayout } from './ship-design-layout'
 import { KNOTS_PER_UNIT, WORLD_SIZE } from '../simulation/movement'
 
@@ -315,6 +316,7 @@ function makePlayerShip(type: PlayerShipType, customTemplateId?: string): ShipEn
     angle: -Math.PI / 2,
     team: 'player',
     }),
+    weapons: getDefaultLoadout(type).map(makeWeaponState),
     autoPilot: true,
   }
 }

@@ -25,7 +25,7 @@ const PROFILES: Record<HistoricalShipProfile['kind'], HistoricalShipProfile> = {
   },
   battleship: {
     kind: 'battleship', inspiration: 'Yamato-era battleship', lengthToBeam: 7.3,
-    freeboard: 0.039, gunScale: 1.13, funnelPositions: [-0.055],
+    freeboard: 0.028, gunScale: 1.13, funnelPositions: [-0.055],
     funnelHeight: 0.074, bridgeHeight: 0.14, timberDeck: true,
   },
 }

@@ -3,6 +3,7 @@ import type { DesignedStructure } from '../data/ship-design-layout'
 import type { HistoricalShipProfile } from './historical-ship-profiles'
 import { addHistoricalSuperstructure } from './historical-superstructure'
 import { bowSheer } from './naval-geometry'
+import { blenderBattleshipPart } from './blender-battleship'
 
 type Palette = Record<'hull' | 'metal' | 'dark' | 'armor' | 'glass', THREE.Material>
 
@@ -29,6 +30,12 @@ export function addDesignedStructures(parent: THREE.Group, parts: readonly Desig
       if (part.partId.includes('.rear.')) group.scale.y = 0.72
     } else if (part.category === 'funnel') {
       const h = length * profile.funnelHeight * (part.partId.includes('small') ? 0.8 : 1)
+      if (profile.kind === 'battleship') {
+        const funnel = blenderBattleshipPart('funnel')
+        funnel.scale.set(depth / 0.88, h / 0.955, width / 0.61)
+        group.add(funnel)
+        continue
+      }
       const stack = add(new THREE.CylinderGeometry(width * 0.43, width * 0.50, h, 24), materials.hull, h / 2)
       stack.scale.x = depth / width
       const cap = add(new THREE.CylinderGeometry(width * 0.45, width * 0.45, h * 0.12, 24), materials.dark, h)

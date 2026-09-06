@@ -1,4 +1,6 @@
 import type { PlayerShipType, WeaponTemplate } from './masterdata'
+import { DEFAULT_ARMAMENT } from './default-armament'
+import { firingArcForWeapon } from '../simulation/firing-arcs'
 
 export interface WeaponOption extends WeaponTemplate {
   name: string   // always required in catalog entries
@@ -151,8 +153,16 @@ export const WEAPON_CATALOG: Record<PlayerShipType, SlotCatalog[]> = {
 }
 
 export function getDefaultLoadout(shipType: PlayerShipType): WeaponTemplate[] {
-  return WEAPON_CATALOG[shipType].map(slot => {
+  return WEAPON_CATALOG[shipType].map((slot, index) => {
     const opt = slot.options[0]!
-    return { id: opt.id, name: opt.name, type: opt.type, ammo: opt.ammo }
+    const mounts = DEFAULT_ARMAMENT[shipType][index]!.map((position, i) => ({
+      instanceId: `standard.${index}.${i}`,
+      mount: { x: position.x, y: position.y },
+      barrels: position.barrels,
+      firingArc: firingArcForWeapon(opt.type, position),
+    }))
+    return { id: opt.id, name: mounts[0]?.barrels === 3 && opt.type === 'gun' ? opt.name.replace('連装', '三連装') : opt.name,
+      type: opt.type, ammo: opt.ammo * mounts.length, barrels: mounts[0]?.barrels,
+      mount: mounts[0]?.mount, firingArc: mounts[0]?.firingArc, mounts }
   })
 }
