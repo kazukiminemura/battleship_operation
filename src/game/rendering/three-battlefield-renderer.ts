@@ -1644,11 +1644,11 @@ function superstructureLength(shape: ShipShapeClass): number {
   return 0.28
 }
 
-function visualScaleForShip(shape: ShipShapeClass): number {
-  if (shape === 'destroyer') return 2.15
-  if (shape === 'cruiser') return 1.95
-  if (shape === 'boss') return 1.82
-  return 1.88
+export function visualScaleForShip(shape: ShipShapeClass): number {
+  if (shape === 'destroyer') return 2.78
+  if (shape === 'cruiser') return 2.66
+  if (shape === 'boss') return 2.40
+  return 2.72
 }
 
 function turretLayout(shape: ShipShapeClass, l: number, w: number): Array<{ x: number; y: number; r: number; barrels: number }> {

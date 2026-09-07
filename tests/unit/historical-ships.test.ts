@@ -3,11 +3,19 @@ import * as THREE from 'three'
 import { createInitialState } from '../../src/game/data/masterdata'
 import type { ShipEntity } from '../../src/game/simulation/types'
 import { combatShipPreviewConfig } from '../../src/game/rendering/three-battlefield-renderer'
-import { buildShip } from '../../src/game/rendering/three-ship-designer-renderer'
+import { buildShip, designerCameraDistance } from '../../src/game/rendering/three-ship-designer-renderer'
+import { visualScaleForShip } from '../../src/game/rendering/three-battlefield-renderer'
 import { historicalProfile } from '../../src/game/rendering/historical-ship-profiles'
 import { bowSheer, navalDeck } from '../../src/game/rendering/naval-geometry'
 
 describe('historical fleet appearance', () => {
+  it('uses close hero framing while keeping every combat ship clearly visible', () => {
+    expect(designerCameraDistance(10)).toBe(9)
+    expect(visualScaleForShip('destroyer')).toBeGreaterThanOrEqual(2.7)
+    expect(visualScaleForShip('cruiser')).toBeGreaterThanOrEqual(2.6)
+    expect(visualScaleForShip('battleship')).toBeGreaterThanOrEqual(2.7)
+    expect(visualScaleForShip('boss')).toBeGreaterThanOrEqual(2.4)
+  })
   for (const kind of ['destroyer', 'cruiser', 'battleship'] as const) {
     it(`${kind}: preserves live weapons and produces its own bridge and funnel layout`, () => {
       const entity = createInitialState(kind).entities.get('ship.player') as ShipEntity

@@ -1115,7 +1115,7 @@
 
 .sd-3d-preview-stage {
   position: relative;
-  height: var(--sd-preview-h, 132px);
+  height: var(--sd-preview-h, clamp(174px, 23vh, 224px));
   cursor: grab;
 }
 

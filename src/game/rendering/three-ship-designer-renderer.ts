@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { bowSheer, hullHalfWidth, navalHull, navalDeck, timberTexture } from './naval-geometry'
 import { historicalProfile } from './historical-ship-profiles'
+import { buildYukimuraSnowman } from './yukimura-snowman'
 import { blenderBattleshipPart, BLENDER_REFERENCE_LENGTH } from './blender-battleship'
 import { addHistoricalSuperstructure } from './historical-superstructure'
 import { addDesignedStructures } from './designed-structures'
@@ -78,7 +79,7 @@ export class ThreeShipDesignerRenderer {
     this.scene.background = this.createSkyTexture()
     this.scene.fog = new THREE.FogExp2(0x0c1d26, 0.018)
 
-    this.camera = new THREE.PerspectiveCamera(42, 1, 0.1, 1000)
+    this.camera = new THREE.PerspectiveCamera(38, 1, 0.1, 1000)
     this.camera.position.set(12, 7, 12)
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true })
@@ -214,10 +215,10 @@ export class ThreeShipDesignerRenderer {
       this.framedHull = config.hull.templateId
       const bounds = new THREE.Box3().setFromObject(ship)
       const size = bounds.getSize(new THREE.Vector3())
-      const distance = size.x * 1.30
-      this.controls.target.set(0, size.y * 0.22, 0)
-      this.camera.position.copy(this.controls.target).add(new THREE.Vector3(0.85, 0.55, 1.2).normalize().multiplyScalar(distance))
-      this.controls.minDistance = size.x * 0.60
+      const distance = designerCameraDistance(size.x)
+      this.controls.target.set(0, size.y * 0.28, 0)
+      this.camera.position.copy(this.controls.target).add(new THREE.Vector3(0.96, 0.48, 1.12).normalize().multiplyScalar(distance))
+      this.controls.minDistance = size.x * 0.46
       this.controls.maxDistance = size.x * 2.8
       this.controls.update()
     }
@@ -248,6 +249,11 @@ export class ThreeShipDesignerRenderer {
   }
 }
 
+/** Hero framing for the designer; geometry and gameplay dimensions stay intact. */
+export function designerCameraDistance(shipLength: number): number {
+  return shipLength * 0.90
+}
+
 export function buildShip(config: ShipDesignerPreviewConfig): THREE.Group {
   const dims = scaledShipDims(config.hull.templateId ?? config.hull.shipType, config.armorBonus)
   const shape = SHIP_SHAPES[config.hull.templateId] ?? config.hull.shipType
@@ -258,10 +264,13 @@ export function buildShip(config: ShipDesignerPreviewConfig): THREE.Group {
   const ship = new THREE.Group()
   ship.name = config.hull.name
 
-  addHull(ship, shape, l, w, h, config.armorBonus)
+  if (shape === 'yukimura') ship.add(buildYukimuraSnowman(l))
+  else addHull(ship, shape, l, w, h, config.armorBonus)
   ship.userData['historicalClass'] = profile.kind
   ship.userData['designInspiration'] = profile.inspiration
-  if (config.structures !== undefined) {
+  if (shape === 'yukimura') {
+    ship.userData['designInspiration'] = 'Green-hat plush snowman with red-green scarf'
+  } else if (config.structures !== undefined) {
     addDesignedStructures(ship, config.structures, profile, l, w, h, MATERIALS)
   } else addHistoricalSuperstructure(ship, profile, l, w, h * 0.44, config.towerMount, MATERIALS,
     config.weapons.map(weapon => ({
