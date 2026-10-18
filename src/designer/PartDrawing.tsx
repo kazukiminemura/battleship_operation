@@ -1,3 +1,5 @@
+import { componentGunGeometry } from './gun-clearance'
+import { TurretPlan, TurretElevation, BridgePlan, BridgeElevation, FunnelPlan, FunnelElevation, MachineryPlan, TurbineElevation } from './naval-part-drawings'
 import type { HLGPartDefinition, HLGRotation } from './hlg-system'
 
 /** Illustrations stay inside the existing physical footprint; placement uses the original grid. */
@@ -15,7 +17,15 @@ export function PartPlanDrawing({ part, rotation = 0, barrels = part.barrels ?? 
 }
 
 export function PartSymbol({ part }: { part: HLGPartDefinition }) {
-  return <PartPlanDrawing part={part} className="sd-part-symbol" />
+  const geometry = componentGunGeometry(part)
+  if (!geometry) return <PartPlanDrawing part={part} className="sd-part-symbol" />
+  const { bodyLength: length, bodyWidth: beam, barrelRoot: root, barrelLength: tube, barrelSpacing: spacing } = geometry
+  const count = Math.max(1, Math.min(4, part.barrels ?? 1))
+  const fore = Math.max(length / 2, root + tube)
+  return <svg className="sd-part-symbol" data-category={part.category} viewBox={`${-fore - .2} ${-beam / 2 - .2} ${fore + length / 2 + .4} ${beam + .4}`} aria-hidden="true" focusable="false">
+    <svg x={-length / 2} y={-beam / 2} width={length} height={beam}><PartPlanDrawing part={part} /></svg>
+    {Array.from({ length: count }, (_, i) => <path key={i} d={`M${-root} ${(i - (count - 1) / 2) * spacing}h${-tube}`} stroke="currentColor" strokeWidth=".8" vectorEffect="non-scaling-stroke" />)}
+  </svg>
 }
 
 function PlanBody({ part, barrels }: { part: HLGPartDefinition; barrels: number }) {
@@ -41,42 +51,11 @@ function PlanBody({ part, barrels }: { part: HLGPartDefinition; barrels: number 
     {Array.from({ length: barrels }, (_, i) => <path key={i} d={`M8 ${35 + (i + .5) * 30 / barrels}h41`} stroke="#d3d6c0" strokeWidth="2" />)}
     <rect x="53" y="37" width="18" height="26" fill="#334b52" /><path d="M61 40V60M56 50H66" />
   </>
-  if (part.type === 'gun' || part.type === 'secondary') return <>
-    <ellipse cx="54" cy="50" rx="40" ry="44" fill="#233b43" /><ellipse cx="54" cy="50" rx="34" ry="38" fill="#899385" />
-    <path d="M10 28L27 12H72L90 25V75L72 88H27L10 72Z" />
-    <path d="M10 28L26 37V63L10 72M26 37H73L90 25M26 63H73L90 75M73 37V63" fill="none" stroke="#b6c2b7" />
-    {Array.from({ length: barrels }, (_, i) => <path key={i} d={`M6 ${50 + (i - (barrels - 1) / 2) * 18}h24`} stroke="#d0d1ba" strokeWidth="3" />)}
-    <rect x="45" y="32" width="18" height="23" rx="3" fill="#364f54" /><circle cx="54" cy="43" r="6" fill="#aeb6a5" />
-    <path d="M49 66H68M49 72H68M34 16V26M34 74V84" fill="none" />
-    {[[32, 31], [70, 31], [32, 69], [70, 69]].map(([x, y], i) => <circle key={i} cx={x} cy={y} r="1.5" fill="#d6d0b1" stroke="none" />)}
-  </>
-  if (part.category === 'bridge') return <>
-    <path d="M6 29L20 12H74L94 26V74L74 88H20L6 71Z" fill="#3a5256" />
-    <path d="M13 33H88V67H13ZM24 21H72V79H24Z" fill="#8a978d" />
-    <path d="M24 30L35 24H64L74 32V68L64 76H35L24 70Z" />
-    <path d="M27 36V64M31 34V66M77 28V72" stroke="#192e37" strokeWidth="2" />
-    <rect x="42" y="36" width="18" height="28" fill="#c2c6aa" /><circle cx="51" cy="50" r="7" fill="#243d45" />
-    <path d="M51 20V80M37 50H65M16 28H84M16 72H84" fill="none" stroke="#d0cfb6" />
-    <circle cx="81" cy="21" r="5" fill="#233b43" /><circle cx="81" cy="79" r="5" fill="#233b43" />
-  </>
-  if (part.category === 'funnel') return <>
-    <rect x="7" y="8" width="86" height="84" rx="24" fill="#344b50" />
-    <rect x="15" y="15" width="70" height="70" rx="22" />
-    <rect x="23" y="22" width="54" height="56" rx="18" fill="#152d35" />
-    <path d="M34 25V75M44 23V77M54 23V77M64 25V75M24 42H76M24 58H76" stroke="#798d88" fill="none" />
-    <path d="M11 44H17M83 44H90M11 56H17M83 56H90" stroke="#c5c7ae" />
-  </>
-  if (part.category === 'boiler') return <>
-    <path d="M7 17H93V83H7Z" fill="#3d4947" />
-    {[27, 50, 73].map(y => <g key={y}><rect x="16" y={y - 9} width="66" height="18" rx="9" fill="#8d8270" /><ellipse cx="23" cy={y} rx="6" ry="8" fill="#b5a78b" /><path d={`M35 ${y - 7}v14m8-14v14m8-14v14m8-14v14m8-14v14`} /></g>)}
-    <path d="M10 12V88M88 12V88M9 27H17M9 73H17M81 50H95" fill="none" stroke="#d5b895" strokeWidth="2" />
-  </>
-  if (part.category === 'turbine') return <>
-    <path d="M7 30H88V70H7Z" fill="#233d45" /><path d="M10 50H98" stroke="#bbc7bd" strokeWidth="3" />
-    <path d="M17 32L26 23H66L82 35V65L66 77H26L17 68Z" />
-    <path d="M30 25V75M39 25V75M48 25V75M57 25V75M66 28V72" stroke="#b7c2ae" />
-    <rect x="82" y="36" width="11" height="28" rx="3" fill="#8b9b8f" /><circle cx="22" cy="50" r="8" fill="#304950" />
-  </>
+  if (part.type === 'gun' || part.type === 'secondary') return <TurretPlan barrels={barrels} light={part.type === 'secondary' || /127mm|152mm/.test(part.partId)} />
+  if (part.category === 'bridge') return <BridgePlan part={part} />
+  if (part.category === 'funnel') return <FunnelPlan />
+  if (part.category === 'boiler') return <MachineryPlan turbine={false} />
+  if (part.category === 'turbine') return <MachineryPlan turbine />
   if (part.category === 'armor') return <>
     <path d="M8 9H92V91H8Z" fill="#65706c" /><path d="M13 15H87V85H13ZM13 50H87M50 15V85M17 19L83 81M17 81L83 19" fill="none" />
     {[[20, 24], [80, 24], [20, 76], [80, 76]].map(([x, y], i) => <circle key={i} cx={x} cy={y} r="3" fill="#b4b9a3" />)}
@@ -99,34 +78,14 @@ export function PartElevation({ part }: { part: HLGPartDefinition }) {
     <circle cx="57" cy="54" r="12" fill="#2c4951" /><circle cx="57" cy="54" r="5" fill="#c0c8ac" />
     <path d="M70 46H87V72H70ZM82 73V87M34 77V88" fill="#657f78" />
   </>
-  if (part.type === 'gun' || part.type === 'secondary') return <>
-    <path d="M12 88H91V98H12Z" fill="#344c51" /><path d="M6 71L14 27L37 10H74L92 33V86H15Z" fill="#70847e" />
-    <path d="M14 27L34 38H76L92 33M34 38V78M15 78H91" fill="none" stroke="#c6cbb6" />
-    <path d="M49 14H68V22H49Z" fill="#304b53" /><path d="M53 48H78M53 54H78M53 60H78" />
-    <circle cx="20" cy="66" r="6" fill="#213c45" />
-  </>
-  if (part.category === 'bridge') {
-    const pagoda = /bb|jp/.test(part.partId) && !/us/.test(part.partId)
-    return <>
-      <path d={pagoda ? 'M8 100V79H15V60H25V42H32V21H43V5H62V21H72V42H81V60H89V79H96V100Z' : 'M8 100V75H20V25H30V12H70V25H82V75H94V100Z'} fill="#6e8580" />
-      {[33, 53, 73].map((y, i) => <g key={y}><path d={`M${26 - i * 7} ${y}H${78 + i * 7}v6H${26 - i * 7}Z`} fill="#a8b5a5" />{[0, 1, 2, 3].map(j => <path key={j} d={`M${33 + j * 11} ${y - 8}v5`} stroke="#193640" strokeWidth="2" />)}</g>)}
-      <path d="M52 4V-17M38 -8H68M44 -13H60M52 43V90" fill="none" stroke="#b5c6b5" />
-      <path d="M7 94H96M19 84H88" stroke="#304e57" />
-    </>
-  }
-  if (part.category === 'funnel') return <>
-    <path d="M10 96H90V100H10ZM19 94L30 6H73L86 94Z" fill="#7b8b7f" />
-    <path d="M29 6H74V22H27Z" fill="#192f37" /><path d="M24 42H78M22 67H81M20 87H84" fill="none" stroke="#bbbf9d" />
-    <path d="M62 24V92M67 24V92" fill="none" stroke="#2b464e" /><path d="M16 94L28 16M85 94L76 17" fill="none" />
-  </>
+  if (part.type === 'gun' || part.type === 'secondary') return <TurretElevation light={part.type === 'secondary' || /127mm|152mm/.test(part.partId)} />
+  if (part.category === 'bridge') return <BridgeElevation part={part} />
+  if (part.category === 'funnel') return <FunnelElevation />
   if (part.category === 'boiler') return <>
     <path d="M9 82H91V100H9Z" fill="#453e36" /><rect x="8" y="14" width="84" height="68" rx="15" fill="#8e8271" />
     <path d="M27 17V80M38 17V80M49 17V80M60 17V80M71 17V80M82 24V73" /><circle cx="20" cy="48" r="14" fill="#3e4945" /><circle cx="20" cy="48" r="8" fill="#b09d7d" /><path d="M37 14V3H74V14" fill="none" />
   </>
-  if (part.category === 'turbine') return <>
-    <path d="M5 87H93V100H5Z" fill="#334d54" /><path d="M10 76V29L30 8H65L83 27V76Z" fill="#7c9385" />
-    <path d="M31 13V79M42 11V79M53 11V79M64 13V79M75 22V79" /><path d="M82 52H100" strokeWidth="3" /><circle cx="16" cy="54" r="10" fill="#2b454d" />
-  </>
+  if (part.category === 'turbine') return <TurbineElevation />
   if (part.type === 'torpedo') return <>
     <path d="M33 75H67V100H33Z" fill="#344c53" /><path d="M4 26L14 15H91L98 25V64L90 74H14L4 63Z" fill="#869387" />
     <path d="M18 17V72M30 17V72M78 17V72M89 17V72M5 44H97" fill="none" /><circle cx="11" cy="44" r="10" fill="#253e47" />

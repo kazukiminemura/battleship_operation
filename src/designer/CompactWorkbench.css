@@ -90,3 +90,5 @@
 .sd-root--design .sd-blueprint-part:active { cursor: grabbing; }
 
 .sd-root--design .sd-blueprint-part[data-selected='true'] .sd-part-elevation { color: #fff0a1; }
+.sd-root--design .sd-fitting-outline { stroke-width: .95px; }
+.sd-root--design .sd-drawing-detail, .sd-root--design .sd-drawing-detail * { stroke-width: .4px; opacity: .8; }

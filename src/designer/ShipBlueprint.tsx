@@ -62,7 +62,7 @@ export function ShipBlueprint({ hull, design, selectedId, onSelect, onMovePrevie
         const internal = designerLayerForPart(part) === 'internal'
         const geometry = componentGunGeometry(part)
         const mountHeight = geometry ? normalizedMountHeight(component.mountHeight) : 0
-        const height = geometry ? geometry.bodyHeight * 5 : internal ? 27 : part.category === 'bridge' ? 64 : part.category === 'funnel' ? 43 : part.category === 'weapon' ? 16 : 24
+        const height = geometry ? geometry.bodyHeight * 5 : internal ? 27 : part.category === 'bridge' ? (/dd/.test(part.partId) ? 38 : /ca/.test(part.partId) ? 50 : 64) : part.category === 'funnel' ? 43 : part.category === 'weapon' ? 16 : 24
         const y = internal ? 112 : 106 - height - mountHeight * 5
         const selected = component.instanceId === selectedId
         const direction = -Math.cos(component.rotation * Math.PI / 180)
