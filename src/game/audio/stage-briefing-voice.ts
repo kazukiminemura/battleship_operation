@@ -25,8 +25,31 @@ const BRIEFING_CLIPS: Record<number, string> = {
 export class StageBriefingVoice {
   private currentAudio: HTMLAudioElement | null = null
   private currentStage: number | null = null
+  private volume = 0.9
+  private paused = false
+
+  get isSpeaking(): boolean { return this.currentAudio !== null && !this.paused }
+
+  setVolume(volume: number): void {
+    if (!Number.isFinite(volume)) return
+    this.volume = Math.max(0, Math.min(1, volume))
+    if (this.currentAudio) this.currentAudio.volume = this.volume
+    if (this.volume === 0) this.stop()
+  }
+
+  setPaused(paused: boolean): void {
+    if (paused === this.paused) return
+    this.paused = paused
+    const audio = this.currentAudio
+    if (!audio) return
+    if (paused) audio.pause()
+    else void audio.play().catch(() => {
+      if (!this.paused && this.currentAudio === audio) this.stop()
+    })
+  }
 
   play(stage: number): void {
+    if (this.volume === 0) return
     if (this.currentStage === stage && this.currentAudio && !this.currentAudio.ended) return
 
     this.stop()
@@ -34,7 +57,7 @@ export class StageBriefingVoice {
     if (!url) return
 
     const audio = new Audio(url)
-    audio.volume = stage >= 10 ? 0.92 : 0.84
+    audio.volume = this.volume
     audio.onended = () => {
       if (this.currentAudio === audio) {
         this.currentAudio = null
@@ -50,8 +73,9 @@ export class StageBriefingVoice {
 
     this.currentAudio = audio
     this.currentStage = stage
+    if (this.paused) return
     void audio.play().catch(() => {
-      if (this.currentAudio === audio) {
+      if (!this.paused && this.currentAudio === audio) {
         this.currentAudio = null
         this.currentStage = null
       }
@@ -63,6 +87,8 @@ export class StageBriefingVoice {
       this.currentStage = null
       return
     }
+    this.currentAudio.onended = null
+    this.currentAudio.onerror = null
     this.currentAudio.pause()
     this.currentAudio.currentTime = 0
     this.currentAudio = null
