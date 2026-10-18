@@ -1,3 +1,4 @@
+import { DESIGN_CELL_METERS, isGunMount, normalizedMountHeight, type GunMountGeometry } from '../data/gun-mount-geometry'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { bowSheer, hullHalfWidth, navalHull, navalDeck, timberTexture } from './naval-geometry'
@@ -20,6 +21,9 @@ export interface ShipDesignerPreviewWeapon {
   selected: boolean
   instanceId?: string
   rotation?: number
+  mountHeight?: number
+  gunGeometry?: GunMountGeometry
+  designDimensions?: { length: number; beam: number }
 }
 
 export interface ShipDesignerPreviewConfig {
@@ -282,25 +286,33 @@ export function buildShip(config: ShipDesignerPreviewConfig): THREE.Group {
     })))
 
   for (const weapon of config.weapons) {
-    const mount = createWeapon(weapon, profile.kind === 'battleship')
-    const weaponScale = weapon.type === 'gun' ? profile.gunScale : Math.min(0.85, profile.gunScale)
+    const dimensions = weapon.designDimensions
+    const lengthUnits = dimensions ? l * MOUNT_LENGTH_SCALE * 2 / ((Math.ceil(dimensions.length / DESIGN_CELL_METERS) - 1) * DESIGN_CELL_METERS) : l / 242
+    const beamUnits = dimensions ? w * MOUNT_BEAM_SCALE * 2 / dimensions.beam : lengthUnits
+    const sideways = weapon.rotation === 90 || weapon.rotation === 270
+    const geometryScale = { forward: sideways ? beamUnits : lengthUnits, side: sideways ? lengthUnits : beamUnits, vertical: lengthUnits }
+    const mount = createWeapon(weapon, profile.kind === 'battleship', geometryScale)
+    const weaponScale = weapon.gunGeometry ? 1 : weapon.type === 'gun' ? profile.gunScale : Math.min(0.85, profile.gunScale)
     mount.scale.setScalar(weaponScale)
     mount.name = weapon.name
     const superfiring = weapon.type === 'gun' && Math.abs(weapon.mount.x) < 0.1 && weapon.mount.y < -0.2 && weapon.mount.y > -0.6
-    const barbetteHeight = superfiring ? profile.gunScale * 0.24 : 0
+    const barbetteHeight = isGunMount(weapon.type) && weapon.mountHeight !== undefined ? normalizedMountHeight(weapon.mountHeight) * lengthUnits : superfiring ? profile.gunScale * 0.24 : 0
     if (barbetteHeight > 0) {
-      const barbette = mesh(new THREE.CylinderGeometry(profile.gunScale * 0.35, profile.gunScale * 0.35, barbetteHeight, 24), MATERIALS.hull)
+      const radius = weapon.gunGeometry ? Math.min(weapon.gunGeometry.bodyWidth * geometryScale.side, weapon.gunGeometry.bodyLength * geometryScale.forward) * .4 : profile.gunScale * .35
+      const barbette = mesh(new THREE.CylinderGeometry(radius, radius, barbetteHeight, 24), MATERIALS.hull)
+      barbette.name = `gun-pedestal-${weapon.instanceId ?? weapon.id}`
       barbette.position.set(-weapon.mount.y * l * MOUNT_LENGTH_SCALE, h * 0.44 + bowSheer(0.5 - weapon.mount.y * MOUNT_LENGTH_SCALE, h) + barbetteHeight / 2, weapon.mount.x * w * MOUNT_BEAM_SCALE)
       ship.add(barbette)
     }
     const seatY = h * 0.44 + bowSheer(0.5 - weapon.mount.y * MOUNT_LENGTH_SCALE, h)
-    mount.position.set(-weapon.mount.y * l * MOUNT_LENGTH_SCALE, seatY + 0.06 * weaponScale + barbetteHeight, weapon.mount.x * w * MOUNT_BEAM_SCALE)
+    mount.position.set(-weapon.mount.y * l * MOUNT_LENGTH_SCALE, seatY + (weapon.gunGeometry ? 0 : 0.06 * weaponScale) + barbetteHeight, weapon.mount.x * w * MOUNT_BEAM_SCALE)
     mount.rotation.y = weapon.rotation !== undefined ? -Math.PI / 2 - weapon.rotation * Math.PI / 180 : weapon.mount.y > 0.34 ? Math.PI / 2 : -Math.PI / 2
     mount.userData = {
       ...mount.userData,
       weaponId: weapon.id,
       designInstanceId: weapon.instanceId,
       weaponType: weapon.type,
+      mountHeight: weapon.mountHeight,
       baseRotationY: mount.rotation.y,
       canTraverse: weapon.type === 'gun' || weapon.type === 'secondary' || weapon.type === 'aa' || weapon.type === 'missile',
     }
@@ -385,8 +397,11 @@ function addHullDetails(parent: THREE.Group, shape: ShipShapeClass, length: numb
 }
 
 
-function createWeapon(weapon: ShipDesignerPreviewWeapon, useBlender = false): THREE.Group {
+interface GunModelScale { forward: number; side: number; vertical: number }
+
+function createWeapon(weapon: ShipDesignerPreviewWeapon, useBlender = false, modelScale?: GunModelScale): THREE.Group {
   const barrels = barrelsFor(weapon)
+  if (weapon.gunGeometry && modelScale) return gunTurret(1, barrels, useBlender && weapon.type === 'gun', { geometry: weapon.gunGeometry, scale: modelScale })
   if (weapon.type === 'torpedo') return torpedoLauncher(barrels)
   if (weapon.type === 'aa') return aaGun(barrels)
   if (weapon.type === 'missile') return missileRack(barrels)
@@ -410,11 +425,14 @@ function selectionRing(radius: number): THREE.Mesh {
 }
 
 
-function gunTurret(scale: number, barrels: number, useBlender = false): THREE.Group {
+function gunTurret(scale: number, barrels: number, useBlender = false, blueprint?: { geometry: GunMountGeometry; scale: GunModelScale }): THREE.Group {
   const group = new THREE.Group()
-  if (useBlender) group.add(blenderBattleshipPart('turret', scale))
+  const housing = new THREE.Group()
+  housing.name = 'gun-turret-housing'
+  group.add(housing)
+  if (useBlender) housing.add(blenderBattleshipPart('turret', scale))
   else {
-  group.add(mesh(new THREE.CylinderGeometry(0.36 * scale, 0.42 * scale, 0.12 * scale, 32), MATERIALS.dark))
+  housing.add(mesh(new THREE.CylinderGeometry(0.36 * scale, 0.42 * scale, 0.12 * scale, 32), MATERIALS.dark))
 
   const armorShape = new THREE.Shape()
   armorShape.moveTo(-0.35, 0.28); armorShape.lineTo(0.35, 0.28)
@@ -425,7 +443,28 @@ function gunTurret(scale: number, barrels: number, useBlender = false): THREE.Gr
   const body = mesh(armorGeometry, MATERIALS.metal)
   body.scale.setScalar(scale)
   body.position.y = 0.32 * scale
-  group.add(body)
+  housing.add(body)
+  }
+
+  if (blueprint) {
+    const { geometry: g, scale: units } = blueprint
+    const bounds = new THREE.Box3().setFromObject(housing)
+    const size = bounds.getSize(new THREE.Vector3())
+    housing.scale.set(g.bodyWidth * units.side / size.x, g.bodyHeight * units.vertical / size.y, g.bodyLength * units.forward / size.z)
+    const center = bounds.getCenter(new THREE.Vector3())
+    housing.position.set(-center.x * housing.scale.x, -bounds.min.y * housing.scale.y, -center.z * housing.scale.z)
+    for (let i = 0; i < barrels; i++) {
+      const barrel = mesh(new THREE.CylinderGeometry(g.barrelRadius * units.vertical * .75, g.barrelRadius * units.vertical, g.barrelLength * units.forward, 16), MATERIALS.metal)
+      barrel.name = `gun-barrel-${i + 1}`
+      barrel.rotation.x = Math.PI / 2
+      barrel.position.set((i - (barrels - 1) / 2) * g.barrelSpacing * units.side, g.barrelHeight * units.vertical, -(g.barrelRoot + g.barrelLength / 2) * units.forward)
+      group.add(barrel)
+      const bore = mesh(new THREE.CircleGeometry(g.barrelRadius * units.vertical * .6, 12), MATERIALS.dark)
+      bore.rotation.y = Math.PI
+      bore.position.set(barrel.position.x, barrel.position.y, -(g.barrelRoot + g.barrelLength) * units.forward - .001)
+      group.add(bore)
+    }
+    return group
   }
 
   const spacing = 0.18 * scale
@@ -514,7 +553,7 @@ function previewKey(config: ShipDesignerPreviewConfig): string {
     hull: config.hull.templateId,
     armor: config.armorBonus,
     tower: config.towerMount,
-    weapons: config.weapons.map(w => [w.id, w.instanceId, w.type, w.mount.x, w.mount.y, w.rotation, w.barrels, w.selected]),
+    weapons: config.weapons.map(w => [w.id, w.instanceId, w.type, w.mount.x, w.mount.y, w.rotation, w.mountHeight, w.gunGeometry, w.designDimensions, w.barrels, w.selected]),
     structures: config.structures,
   })
 }

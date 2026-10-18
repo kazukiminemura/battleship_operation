@@ -87,3 +87,7 @@
   .sd-workshop-nav-spacer { display: none; }
   .sd-equipment-dock .sd-loadout-slot-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
+
+.sd-barrel-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 6; overflow: visible; }
+.sd-mount-height { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 8px 0; }
+.sd-mount-height select, .sd-drawing-toolbar select { background: #102b33; color: #f4dda0; border: 1px solid #5a7e80; border-radius: 3px; padding: 4px; }

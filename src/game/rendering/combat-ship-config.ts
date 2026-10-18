@@ -18,6 +18,7 @@ export function combatShipPreviewConfig(ship: ShipEntity): ShipDesignerPreviewCo
       type: weapon.type,
       mount: mount.mount ?? combatVisualMount(ship, weapon, index),
       barrels: mount.barrels ?? weapon.barrels,
+      mountHeight: mount.mountHeight ?? weapon.mountHeight,
       selected: false,
     })) : [{
       id: weapon.id,
@@ -25,6 +26,7 @@ export function combatShipPreviewConfig(ship: ShipEntity): ShipDesignerPreviewCo
       type: weapon.type,
       mount: combatVisualMount(ship, weapon, index),
       barrels: weapon.barrels,
+      mountHeight: weapon.mountHeight,
       selected: false,
     }]),
   }

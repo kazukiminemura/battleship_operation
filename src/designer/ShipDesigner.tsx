@@ -1,3 +1,6 @@
+import { GUN_MOUNT_HEIGHTS, isGunMount, normalizedMountHeight } from '../game/data/gun-mount-geometry'
+import { barrelsInterfere, gunClearance } from './gun-clearance'
+import { GunBarrelOverlay } from './GunBarrelOverlay'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DragEvent as ReactDragEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react'
 import { Ship3DPreview } from './Ship3DPreview'
@@ -114,6 +117,7 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
   const [drawingView, setDrawingView] = useState<'plan' | 'dock'>('plan')
   const [layer, setLayer] = useState<'deck' | 'internal'>('deck')
   const [mirrorPlacement, setMirrorPlacement] = useState(true)
+  const [placementHeight, setPlacementHeight] = useState(0)
   const [selectedPartId, setSelectedPartId] = useState<string | null>(() => defaultSelectedPart(initialHull.shipType))
   const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null)
   const [selectedWeaponSlot, setSelectedWeaponSlot] = useState<number | null>(null)
@@ -221,16 +225,16 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
     const rotation: HLGRotation = 0
     const weaponSlot = resolveWeaponSlotForPart(selectedPart)
     if (weaponSlot === null) return
-    if (!canPlaceHLGPart(hull, design, selectedPart, cell, rotation, weaponSlot)) {
+    if (!canPlaceHLGPart(hull, design, selectedPart, cell, rotation, weaponSlot, placementHeight)) {
       const existing = componentAtCell(design, cell)
       if (existing) {
         selectComponent(existing.instanceId)
         return
       }
-      showToast('この位置には配置できません')
+      showToast('配置不可：船体区画・重量・装備や砲身の干渉を確認してください')
       return
     }
-    const components = makePlacementComponents(hull, design, selectedPart, cell, rotation, weaponSlot, mirrorPlacement)
+    const components = makePlacementComponents(hull, design, selectedPart, cell, rotation, weaponSlot, mirrorPlacement, placementHeight)
     const component = components[0]
     if (!component) return
     setDesign(prev => ({
@@ -249,11 +253,11 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
     const rotation: HLGRotation = 0
     const weaponSlot = resolveWeaponSlotForPart(part)
     if (weaponSlot === null) return false
-    if (!canPlaceHLGPart(hull, design, part, cell, rotation, weaponSlot)) {
-      showToast('この位置には配置できません')
+    if (!canPlaceHLGPart(hull, design, part, cell, rotation, weaponSlot, placementHeight)) {
+      showToast('配置不可：船体区画・重量・装備や砲身の干渉を確認してください')
       return false
     }
-    const components = makePlacementComponents(hull, design, part, cell, rotation, weaponSlot, mirrorPlacement)
+    const components = makePlacementComponents(hull, design, part, cell, rotation, weaponSlot, mirrorPlacement, placementHeight)
     const component = components[0]
     if (!component) return false
     setDesign(prev => ({
@@ -307,13 +311,27 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
       if (!component || !part) return prev
       const rotation = nextRotation(component.rotation)
       const without = { ...next, components: next.components.filter(c => c.instanceId !== component.instanceId) }
-      if (!canPlaceHLGPart(hull, without, part, component.cell, rotation)) {
+      if (!canPlaceHLGPart(hull, without, part, component.cell, rotation, component.weaponSlot, component.mountHeight, component.barrels)) {
         showToast('回転後の配置が不正です')
         return prev
       }
       next.components[index] = { ...component, rotation }
       return next
     })
+  }
+
+  const handleHeightChange = (value: number) => {
+    if (!selectedComponent) return
+    const part = HLG_PART_BY_ID[selectedComponent.partId]
+    if (!part?.type || !isGunMount(part.type)) return
+    const raised = { ...selectedComponent, mountHeight: normalizedMountHeight(value) }
+    const clearance = gunClearance(raised, part)
+    const blocked = design.components.some(other => {
+      const otherPart = HLG_PART_BY_ID[other.partId]
+      return other.instanceId !== raised.instanceId && otherPart && barrelsInterfere(clearance, gunClearance(other, otherPart))
+    })
+    if (blocked) { showToast('砲身が干渉するため、この高さには変更できません'); return }
+    setDesign(prev => ({ ...prev, components: prev.components.map(item => item.instanceId === raised.instanceId ? raised : item) }))
   }
 
   const handleDelete = () => {
@@ -338,7 +356,7 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
       if (!component || !part) return prev
       const moved = { ...component, cell: { c: component.cell.c + dc, r: component.cell.r + dr } }
       const without = { ...next, components: next.components.filter(c => c.instanceId !== component.instanceId) }
-      if (!canPlaceHLGPart(hull, without, part, moved.cell, moved.rotation)) {
+      if (!canPlaceHLGPart(hull, without, part, moved.cell, moved.rotation, component.weaponSlot, component.mountHeight, component.barrels)) {
         showToast('移動先には配置できません')
         return prev
       }
@@ -352,7 +370,7 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
     const part = component ? HLG_PART_BY_ID[component.partId] : undefined
     if (!component || !part) return false
     const without = { ...design, components: design.components.filter(item => item.instanceId !== instanceId) }
-    if (!canPlaceHLGPart(hull, without, part, cell, component.rotation)) return false
+    if (!canPlaceHLGPart(hull, without, part, cell, component.rotation, component.weaponSlot, component.mountHeight, component.barrels)) return false
     setDesign(prev => ({
       ...prev,
       components: prev.components.map(item => item.instanceId === instanceId ? { ...item, cell } : item),
@@ -365,8 +383,8 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
     const component = design.components.find(item => item.instanceId === instanceId)
     const part = component ? HLG_PART_BY_ID[component.partId] : undefined
     if (!component || !part) return false
-    if (!canPlaceHLGPart(hull, design, part, cell, component.rotation, component.weaponSlot)) return false
-    const copied = { ...makeComponent(part, cell, component.rotation, component.weaponSlot), barrels: component.barrels }
+    if (!canPlaceHLGPart(hull, design, part, cell, component.rotation, component.weaponSlot, component.mountHeight, component.barrels)) return false
+    const copied = { ...makeComponent(part, cell, component.rotation, component.weaponSlot), barrels: component.barrels, mountHeight: component.mountHeight }
     setDesign(prev => ({
       ...prev,
       components: [...prev.components, copied],
@@ -383,12 +401,14 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
     if (!part) return
     const existing = design.components.filter(component => component.weaponSlot === slotIndex)
     const preferred = preferredCellForGroupedPart(hull, part, existing.at(-1))
-    const cell = findNearestValidCell(hull, design, part, preferred)
+    const rotation = existing.at(-1)?.rotation ?? 0
+    const height = isGunMount(part.type) ? existing.at(-1)?.mountHeight ?? placementHeight : 0
+    const cell = findNearestValidCell(hull, design, part, preferred, rotation, slotIndex, height)
     if (!cell) {
       showToast('追加できる空き位置がありません')
       return
     }
-    const component = makeComponent(part, cell, existing.at(-1)?.rotation ?? 0, slotIndex)
+    const component = { ...makeComponent(part, cell, rotation, slotIndex), mountHeight: height }
     setDesign(prev => ({ ...prev, components: [...prev.components, component] }))
     setSelectedPartId(part.partId)
     setSelectedWeaponSlot(slotIndex)
@@ -595,6 +615,7 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
               <button type="button" aria-pressed={layer === 'deck'} onClick={() => { setLayer('deck'); setSelectedPartId(null); setSelectedComponentId(null) }}>上部構造</button>
               <button type="button" aria-pressed={layer === 'internal'} onClick={() => { setLayer('internal'); setSelectedPartId(null); setSelectedComponentId(null) }}>船内機関</button>
             </div>
+            <label>新規砲台高 <select aria-label="新規砲台高" value={placementHeight} onChange={event => setPlacementHeight(Number(event.target.value))}>{GUN_MOUNT_HEIGHTS.map(height => <option key={height} value={height}>{height} m</option>)}</select></label>
             <label><input type="checkbox" checked={mirrorPlacement} onChange={event => setMirrorPlacement(event.target.checked)} /> 左右対称配置</label>
             <button type="button" onClick={() => { setSelectedPartId(null); setSelectedComponentId(null) }}>選択・移動</button>
           </div>
@@ -606,6 +627,7 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
               design={design}
               layer={layer}
               mirrorPlacement={mirrorPlacement}
+              placementHeight={placementHeight}
               selectedPart={placementPart && designerLayerForPart(placementPart) === layer ? placementPart : undefined}
               paletteDrag={paletteDrag}
               paletteDrop={paletteDrop}
@@ -621,7 +643,7 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
             />
 
           </div>
-          <div className="sd-hull-hint">配置パーツからドラッグで配置。配置済みはドラッグで移動、Ctrl+ドラッグでコピー、船体外へドロップで削除。</div>
+          <div className="sd-hull-hint">配置パーツからドラッグで配置。配置済みはドラッグで移動、Ctrl+ドラッグでコピー、船体外へドロップで削除。砲身の線は設置方向の占有範囲。赤は干渉、砲台高で調整。</div>
         </main>
 
         <section className="sd-equipment-dock" aria-label="搭載兵装表">
@@ -640,7 +662,7 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
         <aside className="sd-panel sd-panel-right">
           <WeightGauge totalWeight={stats.totalWeight} maxWeight={stats.maxWeight} />
           <ArmorPlanPanel design={design} stats={stats} onChange={handleArmorChange} />
-          <HLGStatsPanel stats={stats} selectedComponent={selectedComponent} onRotate={handleRotate} onDelete={handleDelete} onNudge={handleNudge} />
+          <HLGStatsPanel stats={stats} selectedComponent={selectedComponent} onHeightChange={handleHeightChange} onRotate={handleRotate} onDelete={handleDelete} onNudge={handleNudge} />
           <div className="sd-section-title" style={{ marginTop: 16 }}>設計情報</div>
           <div className="sd-hlg-info">
             <div>船体: {hull.name}</div>
@@ -661,6 +683,7 @@ function HLGGrid({
   design,
   layer,
   mirrorPlacement,
+  placementHeight,
   selectedPart,
   paletteDrag,
   paletteDrop,
@@ -678,6 +701,7 @@ function HLGGrid({
   design: HLGDesign
   layer: 'deck' | 'internal'
   mirrorPlacement: boolean
+  placementHeight: number
   selectedPart?: HLGPartDefinition
   paletteDrag: PaletteDragState | null
   paletteDrop: PaletteDropState | null
@@ -777,7 +801,7 @@ function HLGGrid({
     const part = component ? HLG_PART_BY_ID[component.partId] : undefined
     if (!component || !part) return false
     const without = { ...design, components: design.components.filter(item => item.instanceId !== instanceId) }
-    return canPlaceHLGPart(hull, without, part, cell, component.rotation)
+    return canPlaceHLGPart(hull, without, part, cell, component.rotation, component.weaponSlot, component.mountHeight, component.barrels)
   }
 
   const beginDrag = (event: ReactPointerEvent<HTMLButtonElement>, component: HLGComponentInstance) => {
@@ -892,13 +916,20 @@ function HLGGrid({
     return true
   }
 
+  const draggedComponent = drag && design.components.find(item => item.instanceId === drag.id)
+  const overlayDesign = drag?.moved && !drag.deleteCandidate && draggedComponent ? {
+    ...design,
+    components: drag.copying
+      ? [...design.components, { ...draggedComponent, instanceId: 'barrel-copy-preview', cell: drag.cell }]
+      : design.components.map(item => item.instanceId === drag.id ? { ...item, cell: drag.cell } : item),
+  } : design
   const cells = []
   for (let r = 0; r < spec.rows; r++) {
     for (let c = 0; c < spec.cols; c++) {
       const cell = { c, r }
       const inside = hlgCellIsInsideHull(hull, cell)
       const zones = hlgCellZones(hull, cell)
-      const canPlace = inside && selectedPart ? canPlaceHLGPart(hull, design, selectedPart, cell, 0, selectedWeaponSlot ?? undefined) : false
+      const canPlace = inside && selectedPart ? canPlaceHLGPart(hull, design, selectedPart, cell, 0, selectedWeaponSlot ?? undefined, placementHeight) : false
       const edgeClass = inside ? [
         !hlgCellIsInsideHull(hull, { c, r: r - 1 }) ? ' sd-hlg-cell--edge-fore' : '',
         !hlgCellIsInsideHull(hull, { c, r: r + 1 }) ? ' sd-hlg-cell--edge-aft' : '',
@@ -949,6 +980,8 @@ function HLGGrid({
         onPointerMove={updatePlacementPreviewFromPointer}
       >
         {cells}
+        {layer === 'deck' && <GunBarrelOverlay hull={hull} design={overlayDesign} selectedId={selectedComponentId}
+          preview={selectedPart && placementPreviewCell && !componentAtCell(design, placementPreviewCell, selectedPart) ? { partId: selectedPart.partId, category: selectedPart.category, cell: placementPreviewCell, rotation: 0, barrels: selectedPart.barrels, instanceId: 'barrel-preview', mountHeight: placementHeight } : undefined} />}
         <div
           className="sd-hlg-centerline"
           style={{ gridColumn: `1 / span ${spec.rows}`, gridRow: `${spec.centerC + 1}` }}
@@ -958,6 +991,7 @@ function HLGGrid({
           const footprint = rotateFootprint(selectedPart.footprint, rotation)
           const previewComponent: HLGComponentInstance = {
             instanceId: 'placement-preview',
+            mountHeight: placementHeight,
             partId: selectedPart.partId,
             category: selectedPart.category,
             cell: placementPreviewCell,
@@ -966,11 +1000,11 @@ function HLGGrid({
             weaponSlot: selectedPart.type ? selectedWeaponSlot ?? undefined : undefined,
           }
           const rect = componentRect(previewComponent, selectedPart)
-          const valid = canPlaceHLGPart(hull, design, selectedPart, placementPreviewCell, rotation, selectedWeaponSlot ?? undefined)
+          const valid = canPlaceHLGPart(hull, design, selectedPart, placementPreviewCell, rotation, selectedWeaponSlot ?? undefined, placementHeight)
           const mirroredCell = mirrorPlacement ? mirroredPlacementCell(hull, placementPreviewCell) : null
           const mirrorPreview = mirroredCell && valid ? (() => {
             const withOriginal = { ...design, components: [...design.components, previewComponent] }
-            const mirrorValid = canPlaceHLGPart(hull, withOriginal, selectedPart, mirroredCell, rotation, selectedWeaponSlot ?? undefined)
+            const mirrorValid = canPlaceHLGPart(hull, withOriginal, selectedPart, mirroredCell, rotation, selectedWeaponSlot ?? undefined, placementHeight)
             const mirroredComponent = { ...previewComponent, instanceId: 'placement-preview-mirror', cell: mirroredCell }
             return { rect: componentRect(mirroredComponent, selectedPart), valid: mirrorValid }
           })() : null
@@ -1127,12 +1161,14 @@ function HLGStatsPanel({
   onRotate,
   onDelete,
   onNudge,
+  onHeightChange,
 }: {
   stats: ReturnType<typeof calcStats>
   selectedComponent: HLGComponentInstance | null
   onRotate: () => void
   onDelete: () => void
   onNudge: (dc: number, dr: number) => void
+  onHeightChange: (value: number) => void
 }) {
   const selectedPart = selectedComponent ? HLG_PART_BY_ID[selectedComponent.partId] : null
   return (
@@ -1156,6 +1192,11 @@ function HLGStatsPanel({
       {selectedPart ? (
         <div className="sd-hlg-selected">
           <strong>{selectedPart.name}</strong>
+          {selectedPart.type && isGunMount(selectedPart.type) && <label className="sd-mount-height">砲台高（甲板から）
+            <select aria-label="選択砲台の高さ" value={normalizedMountHeight(selectedComponent?.mountHeight)} onChange={event => onHeightChange(Number(event.target.value))}>
+              {GUN_MOUNT_HEIGHTS.map(height => <option key={height} value={height}>{height} m</option>)}
+            </select>
+          </label>}
           <span>{CATEGORY_LABEL[selectedPart.category]} / {selectedPart.weight}t</span>
           <div className="sd-hlg-nudge" aria-label="微調整">
             <span />

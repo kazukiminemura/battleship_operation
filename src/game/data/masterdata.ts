@@ -24,6 +24,7 @@ export interface WeaponTemplate {
   type: WeaponType
   ammo: number
   barrels?: number
+  mountHeight?: number
   mount?: { x: number; y: number }
   firingArc?: { center: number; width: number }
   mounts?: Array<{
@@ -31,6 +32,7 @@ export interface WeaponTemplate {
     mount?: { x: number; y: number }
     firingArc?: { center: number; width: number }
     barrels?: number
+    mountHeight?: number
   }>
 }
 
@@ -373,6 +375,7 @@ function makeWeaponState(template: WeaponTemplate): WeaponState {
       firingArc: mount.firingArc ? { ...mount.firingArc } : undefined,
     })),
     barrels: template.barrels,
+    mountHeight: template.mountHeight,
     cooldownTick: 0,
     ammo: template.ammo,
     maxAmmo: template.ammo,

@@ -1,3 +1,5 @@
+import { normalizedMountHeight, DESIGN_CELL_METERS } from '../game/data/gun-mount-geometry'
+import { componentGunGeometry } from './gun-clearance'
 import type { HullCatalogEntry } from '../game/data/hull-catalog'
 import { HLG_PART_BY_ID, hlgGridSpec, rotateFootprint, type HLGDesign, type HLGPartDefinition } from './hlg-system'
 import { designerLayerForPart } from './design-placement'
@@ -32,15 +34,19 @@ export function ShipBlueprint({ hull, design, selectedId, onSelect }: {
         const footprint = rotateFootprint(part.footprint, component.rotation)
         const x = xAt(component.cell.r + .5), width = Math.max(5, footprint.h / spec.rows * 1000)
         const internal = designerLayerForPart(part) === 'internal'
-        const height = internal ? 27 : part.category === 'bridge' ? 64 : part.category === 'funnel' ? 43 : part.category === 'weapon' ? 16 : 24
-        const y = internal ? 112 : 106 - height
+        const geometry = componentGunGeometry(part)
+        const mountHeight = geometry ? normalizedMountHeight(component.mountHeight) : 0
+        const height = geometry ? geometry.bodyHeight * 5 : internal ? 27 : part.category === 'bridge' ? 64 : part.category === 'funnel' ? 43 : part.category === 'weapon' ? 16 : 24
+        const y = internal ? 112 : 106 - height - mountHeight * 5
         const selected = component.instanceId === selectedId
-        const direction = component.rotation === 180 ? 1 : -1
+        const direction = -Math.cos(component.rotation * Math.PI / 180)
+        const units = 1000 / (spec.rows * DESIGN_CELL_METERS)
         return <g key={component.instanceId} className="sd-blueprint-part" tabIndex={0} role="button" aria-label={`${part.name}を選択`} onClick={() => onSelect(component.instanceId)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect(component.instanceId) } }}
           stroke={selected ? '#fff6b2' : internal ? '#cd8375' : '#d7bf62'} strokeWidth={selected ? 2.2 : 1}>
-          <title>{`${part.name} / ${part.weight}t`}</title>
+          <title>{`${part.name} / ${part.weight}t / 砲台高 ${mountHeight}m`}</title>
+          {mountHeight > 0 && <><rect x={x - width * .3} y={106 - mountHeight * 5} width={width * .6} height={mountHeight * 5} fill="rgba(100,140,145,.3)" /><text x={x} y={y - 4} textAnchor="middle" stroke="none" fill="currentColor" fontSize="9">+{mountHeight}m</text></>}
           <rect x={x - width / 2} y={y} width={width} height={height} fill={internal ? 'url(#sd-engine-hatch)' : selected ? 'rgba(234,198,95,.2)' : 'rgba(5,27,33,.75)'} />
-          {part.category === 'weapon' && <path d={`M${x} ${y + 6}h${direction * Math.max(15, width * .9)}M${x} ${y + 10}h${direction * Math.max(15, width * .9)}`} />}
+          {geometry && <path d={`M${x + direction * geometry.barrelRoot * units} ${106 - (mountHeight + geometry.barrelHeight) * 5}h${direction * geometry.barrelLength * units}`} strokeWidth={Math.max(1.2, geometry.barrelRadius * 10)} />}
           {part.category === 'bridge' && <path d={`M${x - width * .6} ${y + height * .35}h${width * 1.2}M${x} ${y}v-12M${x - 9} ${y - 8}h18`} />}
           {part.category === 'funnel' && <path d={`M${x - width / 2 - 2} ${y + 6}h${width + 4}`} />}
         </g>

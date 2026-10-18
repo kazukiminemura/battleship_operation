@@ -1,3 +1,4 @@
+import type { GunMountGeometry } from './gun-mount-geometry'
 import type { WeaponType } from '../simulation/types'
 
 export interface DesignedWeapon {
@@ -7,6 +8,9 @@ export interface DesignedWeapon {
   type: WeaponType
   mount: { x: number; y: number }
   rotation?: number
+  mountHeight?: number
+  gunGeometry?: GunMountGeometry
+  designDimensions?: { length: number; beam: number }
   barrels?: number
   selected: boolean
 }
