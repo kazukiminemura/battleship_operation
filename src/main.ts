@@ -16,7 +16,7 @@ import { StageBriefingVoice } from './game/audio/stage-briefing-voice'
 import { StartScreen } from './game/ui/startscreen'
 import { StageIntroScreen } from './game/ui/stageintroscreen'
 import { ResultsScreen } from './game/ui/resultsscreen'
-import { ScreenManager } from './game/ui/screen-manager'
+import { ScreenManager, type GameMode } from './game/ui/screen-manager'
 import type { WeaponTemplate } from './game/data/masterdata'
 import { getDefaultLoadout } from './game/data/weapon-catalog'
 import { isAccessKey } from './game/ui/accesskeys'
@@ -63,13 +63,15 @@ function main(): void {
     onVoiceVolume: volume => { navigator.setVolume(volume); briefingVoice.setVolume(volume) },
   })
   document.body.append(audioSettings.element)
-  const designerHost = document.getElementById('designer-root')!
-  // Reserve the settings' actual height, including its expanded panel.
-  const resizeAudioSettings = (): void => {
-    designerHost.style.top = `${audioSettings.element.offsetHeight + 24}px`
-  }
-  new ResizeObserver(resizeAudioSettings).observe(audioSettings.element)
-  resizeAudioSettings()
+  // The floating audio panel must not cover a screen's own top-right controls.
+  // The designer header is a fixed toolbar, so the panel starts under it.
+  const designerHeaderPx = ((): number => {
+    const cssVar = getComputedStyle(document.documentElement).getPropertyValue('--sd-header-h')
+    const parsed = Number.parseFloat(cssVar)
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 34 // Keep in sync with ShipDesigner.css.
+  })()
+  const audioPanelTop = (mode: GameMode): number =>
+    mode === 'combat' ? 146 : mode === 'designer' ? designerHeaderPx + 12 : 12
   // Media playback must be unlocked in a real user gesture, including after autoplay rejection.
   const unlockAudio = (): void => {
     sound.unlock()
@@ -425,7 +427,7 @@ function main(): void {
     },
     onRender: (_alpha) => {
       const mode = screens.mode
-      audioSettings.element.style.top = mode === 'combat' ? '146px' : '12px'
+      audioSettings.element.style.top = `${audioPanelTop(mode)}px`
       const audioPaused = document.hidden || (mode === 'combat' && paused)
       sound.setPaused(audioPaused)
       navigator.setPaused(audioPaused)
