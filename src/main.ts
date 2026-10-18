@@ -8,6 +8,9 @@ import { createDebugState, createInitialState, STATIC_DATA, type PlayerShipType 
 import { isShip, type CombatState } from './game/simulation/types'
 import { WORLD_SIZE } from './game/simulation/movement'
 import { SoundSystem } from './game/audio/sounds'
+import { NavalAmbience } from './game/audio/naval-ambience'
+import { CombatMusicDirector } from './game/audio/combat-music'
+import { createAudioSettings } from './game/audio/audio-settings'
 import { NavigatorVoice } from './game/audio/navigator-voice'
 import { StageBriefingVoice } from './game/audio/stage-briefing-voice'
 import { StartScreen } from './game/ui/startscreen'
@@ -29,7 +32,6 @@ import {
 } from './game/ui/pause-overlay'
 import {
   selectedWeapon,
-  isBossStage,
   toggleWeaponAutoFire,
   toggleAutoPilot,
   toggleAllAutoFire,
@@ -53,6 +55,23 @@ function main(): void {
   const sound        = new SoundSystem()
   const navigator    = new NavigatorVoice()
   const briefingVoice = new StageBriefingVoice()
+  const musicDirector = new CombatMusicDirector()
+  let ambience: NavalAmbience | null = null
+  const audioSettings = createAudioSettings({
+    onMusicVolume: volume => sound.setMusicVolume(volume),
+    onEffectsVolume: volume => sound.setEffectsVolume(volume),
+    onVoiceVolume: volume => { navigator.setVolume(volume); briefingVoice.setVolume(volume) },
+  })
+  document.body.append(audioSettings.element)
+  // Media playback must be unlocked in a real user gesture, including after autoplay rejection.
+  const unlockAudio = (): void => {
+    sound.unlock()
+    if (!ambience && typeof AudioContext !== 'undefined') {
+      ambience = new NavalAmbience(sound.getAudioContext(), sound.getEffectsDestination())
+    }
+  }
+  window.addEventListener('pointerdown', unlockAudio, { capture: true })
+  window.addEventListener('keydown', unlockAudio, { capture: true })
   const input        = new InputAdapter(canvas, renderer, {
     onWeaponSelected: (weaponMode) => {
       const weapon = selectedWeapon(state, weaponMode)
@@ -101,11 +120,12 @@ function main(): void {
     selectedShip = 'battleship'
     currentStage = state.stage
     rng = createRngStreams(BASE_SEED + 99099)
-    sound.setBgmEnabled(bgmEnabled, isBossStage(state) ? 'boss' : 'normal')
+    sound.setBgmEnabled(bgmEnabled, 'cruise')
   }
 
   // ── Screen transition helpers (game-state concerns remain here) ───────────
   const openDesigner = (continueCurrentDesign = false): void => {
+    navigator.reset()
     screens.openDesigner(
       () => screens.closeDesigner(true),
       (result) => {
@@ -119,6 +139,7 @@ function main(): void {
 
   const goToStart = (): void => {
     paused = false
+    navigator.reset()
     screens.toStart(bgmEnabled)
   }
 
@@ -129,7 +150,9 @@ function main(): void {
     const layout = selectedFreeformDesign && designedHull ? designLayoutFromHLG(designedHull, selectedFreeformDesign) : undefined
     state = createInitialState(selectedShip, currentStage, selectedLoadout, selectedTemplateId, selectedArmorBonus, selectedTowerMount, layout)
     rng = createRngStreams(BASE_SEED + currentStage * 1009)
-    screens.toCombat(bgmEnabled, isBossStage(state))
+    musicDirector.reset()
+    screens.toCombat(bgmEnabled, false)
+    sound.setBgmMode('cruise')
   }
 
   const beginDebugCombat = (): void => {
@@ -144,7 +167,9 @@ function main(): void {
     state = createDebugState(selectedShip)
     currentStage = state.stage
     rng = createRngStreams(BASE_SEED + 99099)
-    screens.toCombat(bgmEnabled, isBossStage(state))
+    musicDirector.reset()
+    screens.toCombat(bgmEnabled, false)
+    sound.setBgmMode('cruise')
   }
 
   const toggleDebugMap = (): void => {
@@ -236,6 +261,8 @@ function main(): void {
       e.preventDefault()
       return
     }
+
+    if (document.hidden) return
 
     if (e.altKey) {
       accessKeysVisible = true
@@ -379,13 +406,26 @@ function main(): void {
   const ticker = new FixedTicker({
     onTick: (tick) => {
       if (screens.mode !== 'combat') return
-      if (paused) return
+      if (paused || document.hidden) return
       if (state.missionResult !== 'none') return
-      sound.setBgmMode(isBossStage(state) ? 'boss' : 'normal')
       state = combatStep(state, input.pollCommands(tick), rng, STATIC_DATA)
+      // Consume every tick, including the final mission event, before the next render.
+      const listener = state.entities.get('ship.player')
+      sound.processEvents(state.eventLog, state.tick, listener && isShip(listener) ? listener.pos : undefined)
+      navigator.update(state)
+      sound.setBgmMode(musicDirector.update(state))
     },
     onRender: (_alpha) => {
       const mode = screens.mode
+      audioSettings.element.style.top = mode === 'combat' ? '146px' : '12px'
+      const audioPaused = document.hidden || (mode === 'combat' && paused)
+      sound.setPaused(audioPaused)
+      navigator.setPaused(audioPaused)
+      briefingVoice.setPaused(audioPaused)
+      sound.setVoiceActive(navigator.isSpeaking || briefingVoice.isSpeaking)
+      const audioPlayer = state.entities.get('ship.player')
+      ambience?.update(audioPlayer && isShip(audioPlayer) ? audioPlayer : undefined, state.weather,
+        mode === 'combat' && !audioPaused && state.missionResult === 'none')
       if (mode === 'start')   { start.render(accessKeysVisible); return }
       if (mode === 'designer') return
       if (mode === 'stage-intro') {
@@ -410,10 +450,23 @@ function main(): void {
         return
       }
 
-      navigator.update(state)
       hud.render(state, input.getWeaponMode(), WORLD_SIZE, bgmEnabled, navigator.getSubtitle(), accessKeysVisible, autoPilotOn)
-      sound.processEvents(state.eventLog, state.tick)
     },
+  })
+
+  // Browsers may stop rendering hidden tabs; silence immediately instead of waiting for a frame.
+  document.addEventListener('visibilitychange', () => {
+    const suspended = document.hidden || (screens.mode === 'combat' && paused)
+    sound.setPaused(suspended)
+    navigator.setPaused(suspended)
+    briefingVoice.setPaused(suspended)
+    input.setSuspended(suspended)
+    if (document.hidden) ambience?.update(undefined, state.weather, false)
+  })
+  window.addEventListener('pagehide', () => {
+    sound.setPaused(true)
+    navigator.setPaused(true)
+    briefingVoice.setPaused(true)
   })
 
   ticker.start()

@@ -46,6 +46,11 @@ export class NavigatorVoice {
   private queue: QueuedLine[] = []
   private speaking = false
   private currentAudio: HTMLAudioElement | null = null
+  private utterance: SpeechSynthesisUtterance | null = null
+  private generation = 0
+  private volume = 0.9
+  private paused = false
+  private pausedAt = 0
   private subtitleText = ''
   private subtitleExpiry = 0   // Date.now() ms
   private lastProcessedTick = -1
@@ -69,7 +74,39 @@ export class NavigatorVoice {
     this.enemySunkCount = 0
     this.enemyApproachNextTick = 0
     this.ammoAlerted.clear()
-    window.speechSynthesis?.cancel()
+  }
+
+  get isSpeaking(): boolean { return this.speaking && !this.paused }
+
+  setVolume(volume: number): void {
+    if (!Number.isFinite(volume)) return
+    this.volume = Math.max(0, Math.min(1, volume))
+    if (this.currentAudio) this.currentAudio.volume = this.volume
+    if (this.utterance) this.utterance.volume = this.volume
+    if (this.volume === 0) {
+      this.queue = []
+      this.stopCurrentAudio()
+      this.speaking = false
+    }
+  }
+
+  setPaused(paused: boolean): void {
+    if (paused === this.paused) return
+    this.paused = paused
+    if (paused) {
+      this.pausedAt = Date.now()
+      this.currentAudio?.pause()
+      if (this.utterance) window.speechSynthesis?.pause()
+    } else {
+      this.subtitleExpiry += Date.now() - this.pausedAt
+      const audio = this.currentAudio
+      const generation = this.generation
+      if (audio) void audio.play().catch(() => {
+        if (!this.paused && this.generation === generation && this.currentAudio === audio) this.finishSpeaking(generation)
+      })
+      if (this.utterance) window.speechSynthesis?.resume()
+      this.trySpeakNext()
+    }
   }
 
   announceCombatStart(): void {
@@ -81,11 +118,11 @@ export class NavigatorVoice {
     this.lastProcessedTick = state.tick
 
     this.handleEvents(state)
-    this.checkPlayerState(state)
+    if (state.missionResult === 'none') this.checkPlayerState(state)
   }
 
   getSubtitle(): string {
-    return Date.now() < this.subtitleExpiry ? this.subtitleText : ''
+    return (this.paused ? this.pausedAt : Date.now()) < this.subtitleExpiry ? this.subtitleText : ''
   }
 
   private handleEvents(state: CombatState): void {
@@ -167,9 +204,10 @@ export class NavigatorVoice {
     this.subtitleText = text
     this.subtitleExpiry = Date.now() + Math.max(2500, text.length * 120)
 
+    if (this.volume === 0) return
+
     if (priority === 'high') {
       this.queue = [{ text, priority, clip }]
-      window.speechSynthesis?.cancel()
       this.stopCurrentAudio()
       this.speaking = false
     } else if (this.queue.length < 3) {
@@ -180,7 +218,7 @@ export class NavigatorVoice {
   }
 
   private trySpeakNext(): void {
-    if (this.speaking || this.queue.length === 0) return
+    if (this.paused || this.volume === 0 || this.speaking || this.queue.length === 0) return
     const msg = this.queue.shift()!
     this.speaking = true
 
@@ -200,39 +238,62 @@ export class NavigatorVoice {
     }
 
     const audio = new Audio(url)
-    audio.volume = msg.priority === 'low' ? 0.76 : 0.88
-    audio.onended = () => this.finishSpeaking()
-    audio.onerror = () => this.speakWithBrowser(msg.text)
+    const generation = ++this.generation
+    audio.volume = this.volume
+    let failed = false
+    const fallback = (): void => {
+      if (generation !== this.generation || this.currentAudio !== audio || failed) return
+      failed = true
+      audio.onended = null
+      audio.onerror = null
+      audio.pause()
+      this.currentAudio = null
+      this.speakWithBrowser(msg.text)
+    }
+    audio.onended = () => this.finishSpeaking(generation)
+    audio.onerror = fallback
     this.currentAudio = audio
-    void audio.play().catch(() => this.speakWithBrowser(msg.text))
+    void audio.play().catch(() => { if (!this.paused) fallback() })
   }
 
   private speakWithBrowser(text: string): void {
+    const generation = ++this.generation
     const synth = window.speechSynthesis
-    if (!synth) { this.finishSpeaking(); return }
+    if (!synth || this.volume === 0) { this.finishSpeaking(generation); return }
 
     const utt = new SpeechSynthesisUtterance(text)
     utt.lang = 'ja-JP'
     utt.rate = 1.05
     utt.pitch = 1.0
-    utt.volume = 0.9
-
-    utt.onend = () => this.finishSpeaking()
-    utt.onerror = () => this.finishSpeaking()
-
+    utt.volume = this.volume
+    this.utterance = utt
+    utt.onend = () => this.finishSpeaking(generation)
+    utt.onerror = () => this.finishSpeaking(generation)
     synth.speak(utt)
+    if (this.paused) synth.pause()
   }
 
-  private finishSpeaking(): void {
-    this.currentAudio = null
+  private finishSpeaking(generation: number): void {
+    if (generation !== this.generation) return
+    this.stopCurrentAudio()
     this.speaking = false
     this.trySpeakNext()
   }
 
   private stopCurrentAudio(): void {
-    if (!this.currentAudio) return
-    this.currentAudio.pause()
-    this.currentAudio.currentTime = 0
-    this.currentAudio = null
+    this.generation++
+    if (this.currentAudio) {
+      this.currentAudio.onended = null
+      this.currentAudio.onerror = null
+      this.currentAudio.pause()
+      this.currentAudio.currentTime = 0
+      this.currentAudio = null
+    }
+    if (this.utterance) {
+      this.utterance.onend = null
+      this.utterance.onerror = null
+      this.utterance = null
+      window.speechSynthesis?.cancel()
+    }
   }
 }

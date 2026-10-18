@@ -21,7 +21,7 @@ import { inferWeaponSoundClass, inferWeaponType, type WeaponSoundClass } from '.
 type ExplosionSample = keyof typeof EXPLOSION_SAMPLE_URLS
 type CannonSample = keyof typeof CANNON_SAMPLE_URLS
 type SpeedDirection = 'up' | 'down'
-type BgmMode = 'title' | 'prep' | 'intro' | 'normal' | 'boss' | 'results'
+type BgmMode = 'title' | 'prep' | 'intro' | 'cruise' | 'normal' | 'boss' | 'results'
 
 const EXPLOSION_SAMPLE_URLS = {
   surface: surfaceExplosionUrl,
@@ -40,6 +40,7 @@ const BGM_TRACKS: Record<BgmMode, { urls: string[], volume: number }> = {
   title:   { urls: [titleBgmUrl],                                                volume: 0.42 },
   prep:    { urls: [prepBgmUrl, prepAltBgmUrl],                                  volume: 0.30 },
   intro:   { urls: [introBgmUrl],                                                volume: 0.36 },
+  cruise:  { urls: [introBgmUrl], volume: 0.24 },
   normal:  { urls: [normalBgmUrl, normalAltBgmUrl, normalAlt2BgmUrl, normalAlt3BgmUrl], volume: 0.44 },
   boss:    { urls: [bossBgmUrl],                                                 volume: 0.52 },
   results: { urls: [resultsBgmUrl],                                              volume: 0.36 },
@@ -54,16 +55,23 @@ export class SoundSystem {
   private cannonBuffers: Partial<Record<CannonSample, AudioBuffer>> = {}
   private cannonLoads: Partial<Record<CannonSample, Promise<AudioBuffer | null>>> = {}
   private bgmEnabled = false
-  private bgmGain: GainNode | null = null
-  private bgmTimer: ReturnType<typeof setInterval> | null = null
-  private bgmStep = 0
+  private effectsGain: GainNode | null = null
+  private eventDestination: AudioNode | null = null
+  private activeEvents: { expires: number, node: GainNode, panner: StereoPannerNode }[] = []
+  private effectWindowStart = -1
+  private effectWindowCount = 0
+  private paused = false
+  private musicVolume = 0.7
+  private effectsVolume = 0.8
+  private voiceActive = false
   private bgmMode: BgmMode = 'normal'
   private bgmAudio: HTMLAudioElement | null = null
-  private bgmFadeTimer: ReturnType<typeof setInterval> | null = null
+  private bgmFades = new Map<HTMLAudioElement, ReturnType<typeof setInterval>>()
   private bgmTrackIndex: Record<BgmMode, number> = {
     title: 0,
     prep: 0,
     intro: 0,
+    cruise: 0,
     normal: 0,
     boss: 0,
     results: 0,
@@ -71,6 +79,13 @@ export class SoundSystem {
 
   reset(): void {
     this.lastProcessedTick = -1
+    for (const voice of this.activeEvents) {
+      voice.node.disconnect()
+      voice.panner.disconnect()
+    }
+    this.activeEvents = []
+    this.effectWindowStart = -1
+    this.effectWindowCount = 0
   }
 
   isBgmEnabled(): boolean {
@@ -104,28 +119,118 @@ export class SoundSystem {
   setBgmMode(mode: BgmMode): void {
     if (mode === this.bgmMode) return
     this.bgmMode = mode
-    this.bgmStep = 0
     if (this.bgmEnabled) {
       this.restartBgm()
     }
   }
 
-  processEvents(events: CombatEvent[], currentTick: number): void {
-    for (const ev of events) {
-      if (ev.tick <= this.lastProcessedTick) continue
-      if (ev.type === 'weapon.fired' && ev.weaponId) {
-        this.playFired(inferWeaponSoundClass(ev.weaponId), ev.weaponId, ev.salvoCount ?? 1)
-      } else if (ev.type === 'weapon.hit') {
-        this.playShipHit(ev.damage ?? 30, ev.weaponId ?? 'gun')
-      } else if (ev.type === 'weapon.missed' && ev.weaponId) {
-        this.playSplash(inferWeaponType(ev.weaponId))
+  /** Call from a user gesture; a rejected autoplay attempt is safe to retry. */
+  unlock(): void {
+    if (typeof AudioContext !== 'undefined') {
+      const ctx = this.getCtx()
+      if (ctx.state === 'suspended') void ctx.resume().catch(() => {})
+    }
+    if (this.bgmEnabled && !this.paused) this.startBgm()
+  }
+
+  setPaused(paused: boolean): void {
+    if (this.paused === paused) return
+    this.paused = paused
+    this.updateEffectsVolume()
+    if (paused) {
+      if (this.bgmAudio) this.clearBgmFade(this.bgmAudio)
+      this.bgmAudio?.pause()
+      for (const audio of this.bgmFades.keys()) this.stopBgmAudio(audio)
+    } else if (this.bgmEnabled) {
+      this.startBgm()
+    }
+  }
+
+  setMusicVolume(volume: number): void {
+    this.musicVolume = clampVolume(volume)
+    this.updateMusicVolume()
+  }
+
+  setEffectsVolume(volume: number): void {
+    this.effectsVolume = clampVolume(volume)
+    this.updateEffectsVolume()
+  }
+
+  setVoiceActive(active: boolean): void {
+    if (this.voiceActive === active) return
+    this.voiceActive = active
+    this.updateMusicVolume()
+  }
+
+  getAudioContext(): AudioContext {
+    return this.getCtx()
+  }
+
+  getEffectsDestination(): AudioNode {
+    this.getCtx()
+    return this.effectsGain!
+  }
+
+  processEvents(events: CombatEvent[], currentTick: number, listener?: { x: number, y: number }): void {
+    if (this.paused || typeof AudioContext === 'undefined') {
+      this.lastProcessedTick = currentTick
+      return
+    }
+    const priority = (event: CombatEvent) => event.type === 'entity.destroyed' ? 0
+      : event.type === 'weapon.hit' ? 1 : event.type === 'weapon.fired' ? 2 : 3
+    const audible = events.filter(ev => ev.tick > this.lastProcessedTick &&
+      (['weapon.fired', 'weapon.hit', 'weapon.missed'].includes(ev.type) ||
+        (ev.type === 'entity.destroyed' && ev.targetId?.startsWith('ship.'))))
+      .sort((a, b) => priority(a) - priority(b))
+    for (const ev of audible) {
+      const ctx = this.getCtx()
+      if (ctx.state !== 'running') continue
+      const now = ctx.currentTime
+      this.activeEvents = this.activeEvents.filter(voice => {
+        if (voice.expires > now) return true
+        voice.node.disconnect()
+        voice.panner.disconnect()
+        return false
+      })
+      if (now - this.effectWindowStart >= 0.1 || this.effectWindowStart < 0) {
+        this.effectWindowStart = now
+        this.effectWindowCount = 0
+      }
+      // Bound whole sound events (including their sampled/procedural layers).
+      if (this.activeEvents.length >= 32 || this.effectWindowCount >= 10) continue
+      const position = ev.position
+      const dx = listener && position ? position.x - listener.x : 0
+      const dy = listener && position ? position.y - listener.y : 0
+      const distance = Math.hypot(dx, dy)
+      const gain = ctx.createGain()
+      gain.gain.value = 1 / (1 + (distance / 900) ** 2)
+      const panner = ctx.createStereoPanner()
+      panner.pan.value = Math.max(-0.85, Math.min(0.85, (dx - dy) / (Math.SQRT2 * 1200)))
+      gain.connect(panner)
+      panner.connect(this.getEffectsDestination())
+      this.activeEvents.push({ expires: now + (ev.type === 'entity.destroyed' ? 4 : ev.type === 'weapon.missed' ? 0.8 : 3.6), node: gain, panner })
+      this.effectWindowCount++
+      this.eventDestination = gain
+      try {
+        if (ev.type === 'weapon.fired' && ev.weaponId) {
+          this.playFired(inferWeaponSoundClass(ev.weaponId), ev.weaponId, ev.salvoCount ?? 1)
+        } else if (ev.type === 'weapon.hit') {
+          this.playShipHit(ev.damage ?? 30, ev.weaponId ?? 'gun')
+        } else if (ev.type === 'weapon.missed' && ev.weaponId) {
+          this.playSplash(inferWeaponType(ev.weaponId))
+        } else if (ev.type === 'entity.destroyed') {
+          this.playSinking()
+        }
+      } finally {
+        this.eventDestination = null
       }
     }
     this.lastProcessedTick = currentTick
   }
 
   playWeaponSelected(type: WeaponType): void {
-    const ctx = this.getCtx()
+    const ctx = this.getUiContext()
+    if (!ctx) return
     const dst = this.dest()
     const now = ctx.currentTime
     const baseFreq: Record<WeaponType, number> = {
@@ -144,7 +249,8 @@ export class SoundSystem {
   }
 
   playSpeedChange(direction: SpeedDirection): void {
-    const ctx = this.getCtx()
+    const ctx = this.getUiContext()
+    if (!ctx) return
     const dst = this.dest()
     const now = ctx.currentTime
     const startFreq = direction === 'up' ? 82 : 132
@@ -157,7 +263,8 @@ export class SoundSystem {
   }
 
   playDesignSelect(): void {
-    const ctx = this.getCtx()
+    const ctx = this.getUiContext()
+    if (!ctx) return
     const dst = this.dest()
     const now = ctx.currentTime
     filteredNoise(ctx, dst, now + 0.000, 0.026, 'bandpass', 1300, 1.4, 0.001, 0.035)
@@ -166,7 +273,8 @@ export class SoundSystem {
   }
 
   playDesignPlace(): void {
-    const ctx = this.getCtx()
+    const ctx = this.getUiContext()
+    if (!ctx) return
     const dst = this.dest()
     const now = ctx.currentTime
     filteredNoise(ctx, dst, now + 0.000, 0.048, 'bandpass', 360, 1.0, 0.002, 0.070)
@@ -175,7 +283,8 @@ export class SoundSystem {
   }
 
   playDesignEquip(): void {
-    const ctx = this.getCtx()
+    const ctx = this.getUiContext()
+    if (!ctx) return
     const dst = this.dest()
     const now = ctx.currentTime
     filteredNoise(ctx, dst, now + 0.000, 0.040, 'highpass', 2200, 0.8, 0.001, 0.030)
@@ -185,7 +294,8 @@ export class SoundSystem {
   }
 
   playDesignBack(): void {
-    const ctx = this.getCtx()
+    const ctx = this.getUiContext()
+    if (!ctx) return
     const dst = this.dest()
     const now = ctx.currentTime
     pulseTone(ctx, dst, now + 0.000, 390, 0.030, 0.070, 'triangle')
@@ -194,7 +304,8 @@ export class SoundSystem {
   }
 
   playDesignConfirm(): void {
-    const ctx = this.getCtx()
+    const ctx = this.getUiContext()
+    if (!ctx) return
     const dst = this.dest()
     const now = ctx.currentTime
     filteredNoise(ctx, dst, now + 0.000, 0.052, 'bandpass', 520, 1.2, 0.002, 0.080)
@@ -205,12 +316,21 @@ export class SoundSystem {
   }
 
   playDesignDenied(): void {
-    const ctx = this.getCtx()
+    const ctx = this.getUiContext()
+    if (!ctx) return
     const dst = this.dest()
     const now = ctx.currentTime
     filteredNoise(ctx, dst, now + 0.000, 0.026, 'bandpass', 180, 0.8, 0.002, 0.085)
     pulseTone(ctx, dst, now + 0.000, 180, 0.030, 0.070, 'square')
     pulseTone(ctx, dst, now + 0.060, 150, 0.022, 0.090, 'square')
+  }
+
+  private getUiContext(): AudioContext | null {
+    if (typeof AudioContext === 'undefined') return null
+    const ctx = this.getCtx()
+    // UI feedback may be called directly from a user gesture.
+    if (ctx.state === 'suspended') void ctx.resume().catch(() => {})
+    return ctx
   }
 
   private getCtx(): AudioContext {
@@ -224,229 +344,131 @@ export class SoundSystem {
       this.bus.attack.value  = 0.003
       this.bus.release.value = 0.12
       this.bus.connect(this.actx.destination)
+      this.effectsGain = this.actx.createGain()
+      this.effectsGain.gain.value = this.paused ? 0 : this.effectsVolume
+      this.effectsGain.connect(this.bus)
       this.preloadExplosionSamples(this.actx)
       this.preloadCannonSamples(this.actx)
     }
-    if (this.actx.state === 'suspended') this.actx.resume()
     return this.actx
   }
 
   private dest(): AudioNode {
-    this.getCtx()
-    return this.bus!
+    return this.eventDestination ?? this.getEffectsDestination()
+  }
+
+  private updateEffectsVolume(): void {
+    if (!this.effectsGain || !this.actx) return
+    this.effectsGain.gain.setTargetAtTime(this.paused ? 0 : this.effectsVolume, this.actx.currentTime, 0.025)
+  }
+
+  private musicTarget(): number {
+    return BGM_TRACKS[this.bgmMode].volume * this.musicVolume * (this.voiceActive ? 0.30 : 1)
+  }
+
+  private updateMusicVolume(): void {
+    if (this.paused && this.bgmAudio) this.bgmAudio.volume = this.musicTarget()
+    // Old crossfade tails must also yield to voice or a music mute.
+    if (this.voiceActive || this.musicVolume === 0) {
+      for (const audio of [...this.bgmFades.keys()]) {
+        if (audio !== this.bgmAudio) {
+          this.fadeBgmTo(audio, 0, 120, () => this.stopBgmAudio(audio))
+        }
+      }
+    }
+    if (this.bgmAudio && this.bgmEnabled && !this.paused) {
+      this.fadeBgmTo(this.bgmAudio, this.musicTarget(), this.voiceActive ? 120 : 450)
+    }
   }
 
   private startBgm(): void {
+    if (!this.bgmEnabled || this.paused) return
     const track = BGM_TRACKS[this.bgmMode]
-    const trackIndex = this.bgmTrackIndex[this.bgmMode] % track.urls.length
-    const trackUrl = track.urls[trackIndex]!
-    this.clearBgmFade()
-
-    if (!this.bgmAudio || this.bgmAudio.src !== new URL(trackUrl, window.location.href).href) {
-      this.stopBgmAudioNow()
-      this.bgmAudio = new Audio(trackUrl)
-      this.bgmAudio.loop = track.urls.length === 1
-      this.bgmAudio.preload = 'auto'
-      this.bgmAudio.onended = () => this.playNextBgmTrack(this.bgmMode)
+    const url = track.urls[this.bgmTrackIndex[this.bgmMode] % track.urls.length]!
+    if (!this.bgmAudio) {
+      const audio = new Audio(url)
+      audio.loop = track.urls.length === 1
+      audio.preload = 'auto'
+      audio.volume = 0
+      const mode = this.bgmMode
+      audio.onended = () => this.playNextBgmTrack(mode)
+      this.bgmAudio = audio
     }
-
-    this.bgmAudio.volume = 0
-    void this.bgmAudio.play()
-      .then(() => this.fadeBgmTo(track.volume, 700))
-      .catch(() => {
-        // Browsers may block music before the first user gesture. The next UI sound
-        // unlocks audio, and subsequent mode changes will try playback again.
-      })
+    const audio = this.bgmAudio
+    if (!audio.paused) return
+    void audio.play().then(() => {
+      if (this.bgmAudio === audio && this.bgmEnabled && !this.paused) {
+        this.fadeBgmTo(audio, this.musicTarget(), 700)
+      } else {
+        // A pending play can resolve after a pause or rapid screen transition.
+        audio.pause()
+      }
+    }).catch(() => {
+      // unlock() retries this same track on the next user gesture.
+    })
   }
 
   private playNextBgmTrack(mode: BgmMode): void {
-    if (!this.bgmEnabled || mode !== this.bgmMode) return
+    if (!this.bgmEnabled || mode !== this.bgmMode || this.paused) return
     this.bgmTrackIndex[mode] = (this.bgmTrackIndex[mode] + 1) % BGM_TRACKS[mode].urls.length
-    this.stopBgmAudioNow()
-    this.startBgm()
+    this.restartBgm()
   }
 
   private restartBgm(): void {
-    if (this.bgmTimer) {
-      clearInterval(this.bgmTimer)
-      this.bgmTimer = null
+    const previous = this.bgmAudio
+    this.bgmAudio = null
+    if (previous) {
+      previous.onended = null
+      this.fadeBgmTo(previous, 0, 700, () => this.stopBgmAudio(previous))
     }
-    this.stopBgmAudioNow()
     this.startBgm()
   }
 
   private stopBgm(): void {
-    if (this.bgmTimer) {
-      clearInterval(this.bgmTimer)
-      this.bgmTimer = null
-    }
-    if (!this.bgmAudio) return
-    this.fadeBgmTo(0, 350, () => this.stopBgmAudioNow())
-  }
-
-  private stopBgmAudioNow(): void {
-    this.clearBgmFade()
-    if (!this.bgmAudio) return
-    this.bgmAudio.onended = null
-    this.bgmAudio.pause()
-    this.bgmAudio.currentTime = 0
+    const previous = this.bgmAudio
     this.bgmAudio = null
+    if (previous) {
+      previous.onended = null
+      this.fadeBgmTo(previous, 0, 350, () => this.stopBgmAudio(previous))
+    }
   }
 
-  private fadeBgmTo(target: number, durationMs: number, done?: () => void): void {
-    if (!this.bgmAudio) return
-    this.clearBgmFade()
-    const audio = this.bgmAudio
+  private stopBgmAudio(audio: HTMLAudioElement): void {
+    this.clearBgmFade(audio)
+    audio.onended = null
+    audio.pause()
+    audio.currentTime = 0
+  }
+
+  private fadeBgmTo(audio: HTMLAudioElement, target: number, durationMs: number, done?: () => void): void {
+    this.clearBgmFade(audio)
     const from = audio.volume
     const startedAt = performance.now()
-    this.bgmFadeTimer = setInterval(() => {
+    const timer = setInterval(() => {
       const t = Math.min(1, (performance.now() - startedAt) / durationMs)
-      audio.volume = from + (target - from) * t
+      audio.volume = clampVolume(from + (target - from) * t)
       if (t >= 1) {
-        this.clearBgmFade()
+        this.clearBgmFade(audio)
         done?.()
       }
     }, 32)
+    this.bgmFades.set(audio, timer)
   }
 
-  private clearBgmFade(): void {
-    if (!this.bgmFadeTimer) return
-    clearInterval(this.bgmFadeTimer)
-    this.bgmFadeTimer = null
+  private clearBgmFade(audio: HTMLAudioElement): void {
+    const timer = this.bgmFades.get(audio)
+    if (timer !== undefined) clearInterval(timer)
+    this.bgmFades.delete(audio)
   }
 
-  private scheduleBgmBar(): void {
-    if (!this.bgmEnabled || !this.bgmGain) return
+  private playSinking(): void {
     const ctx = this.getCtx()
-    const start = ctx.currentTime + 0.05
-    if (this.bgmMode === 'title') {
-      this.scheduleTitleBgmBar(ctx, start)
-      return
-    }
-    if (this.bgmMode === 'prep') {
-      this.schedulePrepBgmBar(ctx, start)
-      return
-    }
-    const isBoss = this.bgmMode === 'boss'
-    const rootProgression = isBoss ? [41, 46, 49, 39] : [49, 46, 41, 44]
-    const root = rootProgression[this.bgmStep % rootProgression.length]!
-    const phraseStep = this.bgmStep % 2
-    this.bgmStep += 1
-
-    const chord = isBoss ? [1, 1.189, 1.498, 1.782] : [1, 1.189, 1.498, 2]
-    const padVolume = isBoss ? 0.038 : 0.030
-    for (let i = 0; i < chord.length; i++) {
-      const ratio = chord[i]!
-      pulseTone(ctx, this.bgmGain, start + i * 0.025, root * 2 * ratio, padVolume, 3.8, 'sawtooth')
-      pulseTone(ctx, this.bgmGain, start + 0.06 + i * 0.020, root * 4 * ratio, padVolume * 0.22, 3.3, 'triangle')
-    }
-
-    pulseTone(ctx, this.bgmGain, start, root * 0.5, isBoss ? 0.080 : 0.058, 3.7, 'sine')
-    sweepTone(ctx, this.bgmGain, start, root * (isBoss ? 3.4 : 2.7), root * 1.1, isBoss ? 0.052 : 0.038, 3.8)
-
-    const beatCount = 16
-    const beatDur = 0.25
-    const bassLine = isBoss ? [0, 0, 7, 0, 10, 0, 7, 0, 0, -2, 3, -2, 7, 0, 10, 7] : [0, 0, 7, 0, 5, 0, 3, 0, 0, 7, 10, 7, 5, 3, 5, 7]
-    for (let i = 0; i < beatCount; i++) {
-      const t = start + i * beatDur
-      const downbeat = i % 4 === 0
-      const bassFreq = root * 0.5 * Math.pow(2, bassLine[i]! / 12)
-      pulseTone(ctx, this.bgmGain, t, bassFreq, downbeat ? (isBoss ? 0.120 : 0.090) : isBoss ? 0.074 : 0.052, 0.34, 'square')
-      sineDecay(ctx, this.bgmGain, t + 0.006, root * 0.42, downbeat ? 0.052 : 0.026, 0.006, 0.220)
-      if (i % 2 === 0) filteredNoise(ctx, this.bgmGain, t + 0.010, isBoss ? 0.060 : 0.044, 'lowpass', 125, 0.7, 0.004, 0.180)
-      if (i % 4 === 2) filteredNoise(ctx, this.bgmGain, t + 0.012, isBoss ? 0.040 : 0.030, 'bandpass', 1450, 1.4, 0.002, 0.110)
-      filteredNoise(ctx, this.bgmGain, t + 0.004, isBoss ? 0.018 : 0.014, 'highpass', 4200, 0.6, 0.001, 0.050)
-      if (isBoss && i % 4 === 2) {
-        pulseTone(ctx, this.bgmGain, t + 0.020, root * 2, 0.040, 0.150, 'sawtooth')
-      }
-      if (i === beatCount - 1) filteredNoise(ctx, this.bgmGain, t + 0.12, isBoss ? 0.060 : 0.044, 'highpass', 3600, 0.8, 0.010, 0.420)
-    }
-
-    const arp = isBoss ? [0, 7, 10, 15, 12, 10, 7, 3, 0, 3, 7, 10, 12, 15, 19, 22] : [0, 7, 10, 14, 12, 10, 7, 5, 0, 5, 7, 10, 12, 10, 7, 5]
-    for (let i = 0; i < arp.length; i++) {
-      const freq = root * 4 * Math.pow(2, arp[i]! / 12)
-      pulseTone(ctx, this.bgmGain, start + i * 0.125, freq, isBoss ? 0.020 : 0.016, 0.090, 'square')
-      pulseTone(ctx, this.bgmGain, start + i * 0.125 + 0.055, freq * 2, isBoss ? 0.010 : 0.008, 0.060, 'triangle')
-    }
-
-    const motif = isBoss
-      ? [12, 10, 7, 10, 15, 14, 12, 10, 7, 10, 12, 15, 19, 17, 15, 14]
-      : phraseStep === 0
-        ? [12, 10, 7, 10, 14, 12, 10, 7, 5, 7, 10, 12, 14, 12, 10, 7]
-        : [7, 10, 12, 14, 17, 14, 12, 10, 7, 5, 7, 10, 12, 10, 7, 5]
-    for (let i = 0; i < motif.length; i++) {
-      const freq = root * 4 * Math.pow(2, motif[i]! / 12)
-      pulseTone(ctx, this.bgmGain, start + i * beatDur + 0.045, freq, isBoss ? 0.044 : 0.034, 0.155, 'square')
-      if (i % 2 === 0) pulseTone(ctx, this.bgmGain, start + i * beatDur + 0.062, freq * 1.5, isBoss ? 0.018 : 0.013, 0.120, 'triangle')
-    }
-  }
-
-  private scheduleTitleBgmBar(ctx: AudioContext, start: number): void {
-    const rootProgression = [37, 44, 41, 49]
-    const root = rootProgression[this.bgmStep % rootProgression.length]!
-    const phraseStep = this.bgmStep % 2
-    this.bgmStep += 1
-
-    const chord = phraseStep === 0 ? [1, 1.259, 1.498, 2] : [1, 1.189, 1.498, 1.782]
-    for (let i = 0; i < chord.length; i++) {
-      const ratio = chord[i]!
-      pulseTone(ctx, this.bgmGain!, start + i * 0.055, root * 2 * ratio, 0.030, 3.8, 'triangle')
-      pulseTone(ctx, this.bgmGain!, start + 0.12 + i * 0.050, root * 4 * ratio, 0.012, 3.3, 'sine')
-    }
-
-    pulseTone(ctx, this.bgmGain!, start, root * 0.5, 0.052, 3.7, 'sine')
-    sweepTone(ctx, this.bgmGain!, start, root * 1.2, root * 2.4, 0.018, 3.6)
-
-    for (let i = 0; i < 8; i++) {
-      const t = start + i * 0.5
-      if (i % 4 === 0) {
-        sineDecay(ctx, this.bgmGain!, t + 0.006, root * 0.42, 0.045, 0.006, 0.350)
-        filteredNoise(ctx, this.bgmGain!, t + 0.010, 0.018, 'lowpass', 120, 0.7, 0.004, 0.210)
-      }
-      if (i % 4 === 2) filteredNoise(ctx, this.bgmGain!, t + 0.010, 0.014, 'bandpass', 1100, 1.0, 0.004, 0.130)
-      filteredNoise(ctx, this.bgmGain!, t + 0.006, 0.005, 'highpass', 4200, 0.6, 0.001, 0.050)
-    }
-
-    const motif = phraseStep === 0 ? [0, 7, 12, 10, 7, 5, 7, 10] : [12, 10, 7, 5, 3, 5, 7, 10]
-    for (let i = 0; i < motif.length; i++) {
-      const freq = root * 4 * Math.pow(2, motif[i]! / 12)
-      pulseTone(ctx, this.bgmGain!, start + i * 0.5 + 0.12, freq, 0.020, 0.180, 'triangle')
-      if (i % 2 === 0) pulseTone(ctx, this.bgmGain!, start + i * 0.5 + 0.14, freq * 1.5, 0.008, 0.130, 'sine')
-    }
-  }
-
-  private schedulePrepBgmBar(ctx: AudioContext, start: number): void {
-    const rootProgression = [49, 55, 46, 41]
-    const root = rootProgression[this.bgmStep % rootProgression.length]!
-    const phraseStep = this.bgmStep % 2
-    this.bgmStep += 1
-
-    const chord = [1, 1.189, 1.498, 2]
-    for (let i = 0; i < chord.length; i++) {
-      const ratio = chord[i]!
-      pulseTone(ctx, this.bgmGain!, start + i * 0.035, root * 2 * ratio, 0.026, 3.7, 'triangle')
-      pulseTone(ctx, this.bgmGain!, start + 0.08 + i * 0.025, root * 4 * ratio, 0.008, 3.2, 'sine')
-    }
-
-    pulseTone(ctx, this.bgmGain!, start, root * 0.5, 0.040, 3.6, 'sine')
-    sweepTone(ctx, this.bgmGain!, start, root * 1.8, root * 0.9, 0.020, 3.8)
-
-    const beatDur = 0.5
-    const bassLine = phraseStep === 0 ? [0, 7, 5, 3, 0, 7, 10, 7] : [0, 5, 7, 10, 12, 10, 7, 5]
-    for (let i = 0; i < bassLine.length; i++) {
-      const t = start + i * beatDur
-      const bassFreq = root * 0.5 * Math.pow(2, bassLine[i]! / 12)
-      pulseTone(ctx, this.bgmGain!, t, bassFreq, i % 4 === 0 ? 0.048 : 0.032, 0.34, 'square')
-      if (i % 2 === 0) filteredNoise(ctx, this.bgmGain!, t + 0.012, 0.018, 'lowpass', 130, 0.7, 0.004, 0.150)
-      filteredNoise(ctx, this.bgmGain!, t + 0.006, 0.008, 'highpass', 3800, 0.6, 0.001, 0.040)
-    }
-
-    const motif = phraseStep === 0 ? [0, 7, 10, 12, 10, 7, 5, 7] : [7, 10, 12, 14, 12, 10, 7, 5]
-    for (let i = 0; i < motif.length; i++) {
-      const freq = root * 4 * Math.pow(2, motif[i]! / 12)
-      pulseTone(ctx, this.bgmGain!, start + i * beatDur + 0.08, freq, 0.018, 0.150, 'triangle')
-      if (i % 2 === 0) pulseTone(ctx, this.bgmGain!, start + i * beatDur + 0.10, freq * 1.5, 0.008, 0.120, 'sine')
-    }
+    const dst = this.dest()
+    const now = ctx.currentTime
+    this.playExplosionSample('heavy', now, 0.58, 0.65, { type: 'lowpass', freq: 650, Q: 0.6 })
+    filteredNoise(ctx, dst, now + 0.12, 0.32, 'bandpass', 190, 2.6, 0.12, 1.8)
+    filteredNoise(ctx, dst, now + 0.45, 0.30, 'lowpass', 420, 0.7, 0.4, 3.2)
+    sineDecay(ctx, dst, now + 0.16, 52, 0.42, 0.1, 2.8)
   }
 
   private playFired(type: WeaponSoundClass, weaponId = '', salvoCount = 1): void {
@@ -886,4 +908,8 @@ function cannonPlaybackRateForCaliber(caliber: number, shotIndex: number): numbe
         : caliber >= 150 ? 0.96
           : 1.08
   return base + (shotIndex % 2 === 0 ? 0 : 0.025)
+}
+
+function clampVolume(volume: number): number {
+  return Number.isFinite(volume) ? Math.max(0, Math.min(1, volume)) : 0
 }

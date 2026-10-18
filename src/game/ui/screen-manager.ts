@@ -75,7 +75,7 @@ export class ScreenManager {
     this._mode = 'results'
     this.d.input.setSuspended(false)
     this.d.briefingVoice.stop()
-    this.d.sound.reset()
+    // Let the final hit and sinking tails finish under the results music.
     this.d.sound.setBgmEnabled(bgmEnabled, 'results')
     this.d.results.attach()
   }
