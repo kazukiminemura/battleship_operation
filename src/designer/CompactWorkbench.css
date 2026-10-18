@@ -86,3 +86,7 @@
 .sd-design-menu summary { list-style: none; cursor: pointer; }
 .sd-design-menu summary::-webkit-details-marker { display: none; }
 .sd-design-menu > div { position: absolute; right: 0; top: calc(100% + 7px); z-index: 100; display: grid; gap: 7px; width: 165px; padding: 9px; background: #142932; border: 1px solid #779292; box-shadow: 0 8px 24px #0008; }
+.sd-root--design .sd-blueprint-part { cursor: grab; touch-action: none; }
+.sd-root--design .sd-blueprint-part:active { cursor: grabbing; }
+
+.sd-root--design .sd-blueprint-part[data-selected='true'] .sd-part-elevation { color: #fff0a1; }

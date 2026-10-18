@@ -1,3 +1,4 @@
+import { previewDesignMove, COPY_PREVIEW_ID, type ComponentMovePreview } from './design-preview'
 import { HullPlanOutline } from './HullPlanOutline'
 import { PartPlanDrawing } from './PartDrawing'
 import { GUN_MOUNT_HEIGHTS, isGunMount, normalizedMountHeight } from '../game/data/gun-mount-geometry'
@@ -119,6 +120,7 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
   const [workshop, setWorkshop] = useState<Workshop>('weapon')
   const [sideTab, setSideTab] = useState<'parts' | 'loadout' | 'stats' | 'armor'>('parts')
   const [partSearch, setPartSearch] = useState('')
+  const [movePreview, setMovePreview] = useState<ComponentMovePreview | null>(null)
   const [drawingView, setDrawingView] = useState<'plan' | 'dock'>('plan')
   const [layer, setLayer] = useState<'deck' | 'internal'>('deck')
   const [mirrorPlacement, setMirrorPlacement] = useState(true)
@@ -138,6 +140,7 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
   const hulls = getHullsByClass(shipType)
   const hull = hulls[hullIdx] ?? hulls[0]!
   const spec = useMemo(() => hlgGridSpec(hull), [hull])
+  const drawingDesign = useMemo(() => previewDesignMove(design, movePreview), [design, movePreview])
   const stats = useMemo(() => calcStats(design, hull), [design, hull])
   const visibleParts = useMemo(
     () => HLG_PARTS.filter(part => part.allowedShipClasses.includes(shipType) && (partFilter === 'all' || part.category === partFilter) &&
@@ -196,6 +199,7 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
   }
 
   const replaceDesign = useCallback((next: HLGDesign, clearHistory = false) => {
+    setMovePreview(null)
     if (clearHistory) resetDesign(next)
     else setDesign(cloneHLGDesign(next))
     setSelectedComponentId(null)
@@ -610,11 +614,12 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
             </> : selectedPart ? <><strong>配置中：{selectedPart.name}</strong><span>艦上をクリック / ドラッグで配置</span><button type="button" onClick={() => setSelectedPartId(null)}>配置を終了</button></> : <><strong>選択・移動</strong><span>部品を選んで配置。艦上の部品をクリックして調整。</span></>}
           </div>
           <div className="sd-hlg-stage">
-            {drawingView === 'dock' ? <Ship3DPreview hull={hull} design={design} armorBonus={stats.armorDefense} /> : <ShipBlueprint hull={hull} design={design} selectedId={selectedComponentId} onSelect={selectComponent} />}
+            {drawingView === 'dock' ? <Ship3DPreview hull={hull} design={drawingDesign} armorBonus={stats.armorDefense} /> : <ShipBlueprint hull={hull} design={drawingDesign} selectedId={movePreview?.copying ? COPY_PREVIEW_ID : selectedComponentId} onSelect={selectComponent} onMovePreview={setMovePreview} onMove={handleMoveComponent} />}
             <div className="sd-drawing-caption"><span>PLAN / {layer === 'deck' ? '上面・上部構造' : '上面・船内機関'}</span><span>← 艦首　左舷 ↑ / 右舷 ↓　艦尾 →</span></div>
             <div className="sd-plan-viewport"><HLGGrid
               hull={hull}
               design={design}
+              drawingDesign={drawingDesign}
               layer={layer}
               mirrorPlacement={mirrorPlacement}
               placementHeight={placementHeight}
@@ -629,11 +634,12 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
               onMoveComponent={handleMoveComponent}
               onCopyComponent={handleCopyComponent}
               onDeleteComponent={handleDeleteComponent}
+              onMovePreview={setMovePreview}
               onPaletteDropHandled={() => setPaletteDrop(null)}
             /></div>
 
           </div>
-          <div className="sd-hull-hint">ドラッグで移動 · Ctrl＋ドラッグでコピー · Escで選択解除 · 赤い砲身は干渉あり</div>
+          <div className="sd-hull-hint">両図でドラッグ移動（側面図は前後） · Ctrl＋ドラッグでコピー · Escで中止 · 赤い砲身は干渉あり</div>
         </main>
 
         <aside className="sd-inspector" aria-label="設計パネル">
@@ -704,6 +710,7 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
 function HLGGrid({
   hull,
   design,
+  drawingDesign,
   layer,
   mirrorPlacement,
   placementHeight,
@@ -719,9 +726,11 @@ function HLGGrid({
   onCopyComponent,
   onDeleteComponent,
   onPaletteDropHandled,
+  onMovePreview,
 }: {
   hull: ReturnType<typeof getHullsByClass>[number]
   design: HLGDesign
+  drawingDesign: HLGDesign
   layer: 'deck' | 'internal'
   mirrorPlacement: boolean
   placementHeight: number
@@ -737,6 +746,7 @@ function HLGGrid({
   onCopyComponent: (id: string, cell: HLGCell) => boolean
   onDeleteComponent: (id: string) => void
   onPaletteDropHandled: () => void
+  onMovePreview: (preview: ComponentMovePreview | null) => void
 }) {
   const spec = hlgGridSpec(hull)
   const gridRef = useRef<HTMLDivElement | null>(null)
@@ -750,14 +760,16 @@ function HLGGrid({
   const setDragState = (next: typeof drag) => {
     dragRef.current = next
     setDrag(next)
+    onMovePreview(next?.moved ? { instanceId: next.id, cell: next.cell, copying: next.copying } : null)
   }
 
   useEffect(() => {
-    const handleBlur = () => setCtrlCopyMode(false)
+    const handleBlur = () => { setCtrlCopyMode(false); setDragState(null) }
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setDragState(null)
       if (event.key === 'Control') {
         setCtrlCopyMode(true)
-        if (dragRef.current) setDragState({ ...dragRef.current, copying: true })
+        if (dragRef.current) setDragState({ ...dragRef.current, copying: true, valid: !dragRef.current.deleteCandidate && dragCellIsValid(dragRef.current.id, dragRef.current.cell, true) })
       }
     }
     const handleKeyUp = (event: KeyboardEvent) => {
@@ -777,7 +789,7 @@ function HLGGrid({
       window.removeEventListener('keyup', handleKeyUp)
       window.removeEventListener('blur', handleBlur)
     }
-  }, [])
+  }, [design, hull, onMovePreview])
 
   const cellFromClient = (clientX: number, clientY: number): { cell: HLGCell; outOfBounds: boolean } | null => {
     const grid = gridRef.current
@@ -819,12 +831,12 @@ function HLGGrid({
     onPaletteDropHandled()
   }, [paletteDrop, hull, onPartDrop, onPaletteDropHandled, spec.cols, spec.rows])
 
-  const dragCellIsValid = (instanceId: string, cell: HLGCell): boolean => {
+  const dragCellIsValid = (instanceId: string, cell: HLGCell, copying = false): boolean => {
     const component = design.components.find(item => item.instanceId === instanceId)
     const part = component ? HLG_PART_BY_ID[component.partId] : undefined
     if (!component || !part) return false
     const without = { ...design, components: design.components.filter(item => item.instanceId !== instanceId) }
-    return canPlaceHLGPart(hull, without, part, cell, component.rotation, component.weaponSlot, component.mountHeight, component.barrels)
+    return canPlaceHLGPart(hull, copying ? design : without, part, cell, component.rotation, component.weaponSlot, component.mountHeight, component.barrels)
   }
 
   const beginDrag = (event: ReactPointerEvent<HTMLButtonElement>, component: HLGComponentInstance) => {
@@ -859,7 +871,7 @@ function HLGGrid({
     setDragState({
       ...current,
       cell,
-      valid: !deleteCandidate && dragCellIsValid(current.id, cell),
+      valid: !deleteCandidate && dragCellIsValid(current.id, cell, event.ctrlKey || ctrlCopyMode),
       moved: current.moved || cell.c !== current.cell.c || cell.r !== current.cell.r,
       copying: event.ctrlKey || ctrlCopyMode,
       deleteCandidate,
@@ -939,13 +951,7 @@ function HLGGrid({
     return true
   }
 
-  const draggedComponent = drag && design.components.find(item => item.instanceId === drag.id)
-  const overlayDesign = drag?.moved && !drag.deleteCandidate && draggedComponent ? {
-    ...design,
-    components: drag.copying
-      ? [...design.components, { ...draggedComponent, instanceId: 'barrel-copy-preview', cell: drag.cell }]
-      : design.components.map(item => item.instanceId === drag.id ? { ...item, cell: drag.cell } : item),
-  } : design
+  const overlayDesign = drawingDesign
   const cells = []
   for (let r = 0; r < spec.rows; r++) {
     for (let c = 0; c < spec.cols; c++) {
@@ -1061,7 +1067,7 @@ function HLGGrid({
           const part = HLG_PART_BY_ID[component.partId]
           if (!part || designerLayerForPart(part) !== layer) return null
           const footprint = rotateFootprint(part.footprint, component.rotation)
-          const displayedComponent = drag?.id === component.instanceId && !drag.copying ? { ...component, cell: drag.cell } : component
+          const displayedComponent = drawingDesign.components.find(item => item.instanceId === component.instanceId) ?? component
           const rect = componentRect(displayedComponent, part)
           return (
             <button
@@ -1074,7 +1080,8 @@ function HLGGrid({
               onPointerDown={(event) => beginDrag(event, component)}
               onPointerMove={updateDrag}
               onPointerUp={finishDrag}
-              onPointerCancel={finishDrag}
+              onPointerCancel={() => setDragState(null)}
+              onLostPointerCapture={() => setDragState(null)}
               onClick={(event) => {
                 event.stopPropagation()
                 if (placeSelectedPartAtPointer(event)) return
@@ -1107,7 +1114,7 @@ function HLGGrid({
           )
         })()}
         {selectedComponentId && (() => {
-          const component = design.components.find(item => item.instanceId === selectedComponentId)
+          const component = drawingDesign.components.find(item => item.instanceId === selectedComponentId)
           const part = component ? HLG_PART_BY_ID[component.partId] : undefined
           return component && part?.type
             ? <FiringArcOverlay component={component} part={part} spec={spec} />
