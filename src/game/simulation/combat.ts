@@ -1,8 +1,9 @@
 import type { CombatState, Command, ShipEntity, WeaponType, CombatEvent } from './types'
 import type { RngStreams } from './random'
 import type { StaticData } from '../data/masterdata'
-import { stepMovement, stepCollisions, applyMoveCommand, applySpeedUpCommand, applySpeedDownCommand, applyRotateCommand, applyStopCommand } from './movement'
+import { stepMovementAndCollisions, applyMoveCommand, applySpeedUpCommand, applySpeedDownCommand, applyRotateCommand, applyStopCommand } from './movement'
 import { stepWeaponCooldowns, fireWeapon, fireWeaponAtSlot } from './weapons'
+import { stepAircraft } from './aircraft'
 import { stepProjectiles } from './projectiles'
 import { getWeaponConfig } from './weapon-strategies'
 import { generateAiCommands, generateAutoPilotCommands } from './ai'
@@ -42,17 +43,17 @@ export function combatStep(
   s = applyCommands(s, effectiveCmds, rng)
 
   // 3. auto-fire commands for weapons in auto mode
-  s = applyCommands(s, generateAutoFireCommands(s), rng)
+  const manualSlots = new Set(effectiveCmds.filter(c => c.actorId === 'ship.player' && c.type === 'fire.slot').map(c => c.value))
+  s = applyCommands(s, generateAutoFireCommands(s).filter(c => !manualSlots.has(c.value)), rng)
 
   // 4. generate and apply AI commands
   const aiCmds = generateAiCommands(s, rng.ai)
   s = applyCommands(s, aiCmds, rng)
 
   // 5. movement step
-  s = stepMovement(s)
+  s = stepMovementAndCollisions(s)
 
-  // 5.2. ship-ship collision step
-  s = stepCollisions(s)
+  s = stepAircraft(s)
 
   // 5.5. detection update (uses current positions after movement)
   s = stepDetection(s)

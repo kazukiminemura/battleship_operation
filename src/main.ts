@@ -82,6 +82,7 @@ function main(): void {
   window.addEventListener('pointerdown', unlockAudio, { capture: true })
   window.addEventListener('keydown', unlockAudio, { capture: true })
   const input        = new InputAdapter(canvas, renderer, {
+    canFireAt: (x, y): boolean => screens.mode === 'combat' && !paused && !document.hidden && state.missionResult === 'none' && !hud.containsPanel(x, y),
     onWeaponSelected: (weaponMode) => {
       const weapon = selectedWeapon(state, weaponMode)
       if (screens.mode === 'combat' && weapon) sound.playWeaponSelected(weapon.type)
@@ -469,7 +470,7 @@ function main(): void {
     sound.setPaused(suspended)
     navigator.setPaused(suspended)
     briefingVoice.setPaused(suspended)
-    input.setSuspended(suspended)
+    input.setSuspended(suspended || screens.mode !== 'combat')
     if (document.hidden) ambience?.update(undefined, state.weather, false)
   })
   window.addEventListener('pagehide', () => {

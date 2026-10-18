@@ -1,5 +1,4 @@
 import type { ShipEntity } from '../simulation/types'
-import { SHIP_DIMS } from './ship-rendering-data'
 
 interface ProjectionContext {
   scale: number
@@ -15,34 +14,35 @@ interface SternTrailPoint {
 }
 
 interface WakeSprites {
-  bowWave: OffscreenCanvas
   foamLg: OffscreenCanvas
   foamSm: OffscreenCanvas
   foamMist: OffscreenCanvas
   sternWash: OffscreenCanvas
 }
 
-const TRAIL_HISTORY = 46
+const TRAIL_HISTORY = 84
 const TRAIL_RECORD_INTERVAL = 2
-const STERN_WAKE_OFFSET = 0.62
+export type WaterlinePoint = (ship: ShipEntity, longitudinal: number, lateral?: number) => { x: number; y: number } | undefined
 
 export class ShipWakeRenderer {
   private trails = new Map<string, SternTrailPoint[]>()
   private sprites: WakeSprites | null = null
+  private lastRecordedTick = -1
 
-  update(ships: ShipEntity[], tick: number): void {
+  update(ships: ShipEntity[], tick: number, waterline: WaterlinePoint): void {
+    if (tick === this.lastRecordedTick) return
+    if (tick < this.lastRecordedTick) this.trails.clear()
+    this.lastRecordedTick = tick
     const alive = new Set<string>()
     for (const ship of ships) {
       alive.add(ship.id)
       if (tick % TRAIL_RECORD_INTERVAL !== 0) continue
-      const dim = SHIP_DIMS[ship.templateId] ?? { l: 100, w: 22, h: 12 }
-      const cosA = Math.cos(ship.angle)
-      const sinA = Math.sin(ship.angle)
-      const stern = localPoint(ship, cosA, sinA, -dim.l * STERN_WAKE_OFFSET, 0)
+      const stern = waterline(ship, -0.5)
+      if (!stern) continue
       let trail = this.trails.get(ship.id)
       if (!trail) { trail = []; this.trails.set(ship.id, trail) }
-      trail.push({ x: stern.x, y: stern.y, speed: Math.abs(ship.speed), tick })
-      if (trail.length > TRAIL_HISTORY) trail.shift()
+      if (Math.abs(ship.speed) > 0.03) trail.push({ x: stern.x, y: stern.y, speed: Math.abs(ship.speed), tick })
+      while (trail.length && (trail.length > TRAIL_HISTORY || tick - trail[0]!.tick >= TRAIL_HISTORY * TRAIL_RECORD_INTERVAL)) trail.shift()
     }
 
     for (const id of this.trails.keys()) {
@@ -56,6 +56,7 @@ export class ShipWakeRenderer {
     w2s: WorldToScreen,
     ships: ShipEntity[],
     tick: number,
+    waterline: WaterlinePoint,
   ): void {
     if (!this.sprites) this.sprites = buildWakeSprites()
     const sp = this.sprites
@@ -64,24 +65,30 @@ export class ShipWakeRenderer {
     ctx.globalCompositeOperation = 'screen'
 
     for (const ship of ships) {
-      const dim = SHIP_DIMS[ship.templateId] ?? { l: 100, w: 22, h: 12 }
-      const speedRatio = ship.maxSpeed > 0 ? Math.min(1, Math.abs(ship.speed) / ship.maxSpeed) : 0
-      const speedF = Math.max(speedRatio, Math.min(1, Math.abs(ship.speed) / 5))
-      if (speedF < 0.06 || ship.speedLevel === 'stop') continue
-
-      const cosA = Math.cos(ship.angle)
-      const sinA = Math.sin(ship.angle)
-      const screenAngle = projectedAngle(cosA, sinA, iso)
-      const sternAlpha = 0.24 + speedF * 0.48
-      const baseSize = Math.max(3, dim.w * iso.scale * (0.16 + speedF * 0.18))
-      const currentStern = localPoint(ship, cosA, sinA, -dim.l * STERN_WAKE_OFFSET, 0)
+      const currentStern = waterline(ship, -0.5)
+      const bow = waterline(ship, 0.5)
+      const port = waterline(ship, 0, -0.5)
+      const starboard = waterline(ship, 0, 0.5)
+      if (!currentStern || !bow || !port || !starboard) continue
+      const [sx, sy] = w2s(currentStern.x, currentStern.y)
+      const [bx, by] = w2s(bow.x, bow.y)
+      const [px, py] = w2s(port.x, port.y)
+      const [tx, ty] = w2s(starboard.x, starboard.y)
+      const screenAngle = Math.atan2(by - sy, bx - sx)
+      const beam = Math.hypot(tx - px, ty - py)
+      const speedF = ship.maxSpeed > 0 ? Math.min(1, Math.abs(ship.speed) / ship.maxSpeed) : 0
+      const sternAlpha = 0.44 + speedF * 0.38
+      const baseSize = Math.max(3, beam * (0.40 + speedF * 0.50))
       const trail = [
         ...(this.trails.get(ship.id) ?? []),
-        { x: currentStern.x, y: currentStern.y, speed: Math.abs(ship.speed), tick },
+        ...(speedF > 0.03 ? [{ x: currentStern.x, y: currentStern.y, speed: Math.abs(ship.speed), tick }] : []),
       ]
 
-      drawBowSplash(ctx, sp, w2s, ship, dim, iso, cosA, sinA, screenAngle, speedF)
       drawSternTrail(ctx, sp, w2s, trail, tick, baseSize, sternAlpha)
+      if (speedF > 0.03) {
+        ctx.globalAlpha = speedF * 0.48
+        drawFoam(ctx, sp.sternWash, sx - Math.cos(screenAngle) * baseSize * 1.75, sy - Math.sin(screenAngle) * baseSize * 1.75, screenAngle, baseSize * 3.5, baseSize * 1.6)
+      }
     }
 
     ctx.restore()
@@ -111,32 +118,33 @@ function drawSternTrail(
     const age = Math.max(0, tick - next.tick)
     const fade = Math.max(0, 1 - age / maxAge)
 
-    ctx.globalAlpha = alpha * fade * 0.24
-    ctx.strokeStyle = 'rgba(130,210,232,0.44)'
-    ctx.lineWidth = Math.max(1.4, baseSize * (0.42 + fade * 0.18))
+    const spread = baseSize * (0.9 + (1 - fade) * 1.7)
+    ctx.globalAlpha = alpha * fade * fade * 0.52
+    ctx.strokeStyle = 'rgba(203,232,230,0.68)'
+    ctx.lineWidth = Math.max(2, spread)
     ctx.beginPath()
     ctx.moveTo(prev.screen[0], prev.screen[1])
     ctx.lineTo(next.screen[0], next.screen[1])
     ctx.stroke()
 
-    ctx.globalAlpha = alpha * fade * 0.46
+    ctx.globalAlpha = alpha * Math.pow(fade, 1.3) * 0.75
     ctx.strokeStyle = 'rgba(238,252,255,0.62)'
-    ctx.lineWidth = Math.max(0.7, baseSize * (0.08 + fade * 0.12))
+    ctx.lineWidth = Math.max(0.7, baseSize * (0.35 + fade * 0.45))
     ctx.beginPath()
     ctx.moveTo(prev.screen[0], prev.screen[1])
     ctx.lineTo(next.screen[0], next.screen[1])
     ctx.stroke()
   }
 
-  for (let i = Math.max(0, screenTrail.length - 12); i < screenTrail.length - 3; i += 2) {
+  for (let i = 0; i < screenTrail.length - 2; i += 2) {
     const point = screenTrail[i]!
     const age = Math.max(0, tick - point.tick)
     if (age < 8) continue
     const fade = Math.max(0, 1 - age / maxAge)
-    const size = baseSize * (0.75 + fade * 0.70)
-    ctx.globalAlpha = alpha * fade * 0.18
+    const size = baseSize * (1.0 + (1 - fade) * 1.8)
+    ctx.globalAlpha = alpha * fade * 0.32
     drawFoam(ctx, sp.foamMist, point.screen[0], point.screen[1], 0, size * 2.10, size * 1.10)
-    ctx.globalAlpha = alpha * fade * 0.34
+    ctx.globalAlpha = alpha * fade * 0.55
     drawFoam(ctx, sp.foamLg, point.screen[0], point.screen[1], 0, size * 1.45, size * 0.82)
   }
 
@@ -172,62 +180,6 @@ function drawSternTrail(
   }
 }
 
-function drawBowSplash(
-  ctx: CanvasRenderingContext2D,
-  sp: WakeSprites,
-  w2s: WorldToScreen,
-  ship: ShipEntity,
-  dim: { l: number; w: number; h: number },
-  iso: ProjectionContext,
-  cosA: number,
-  sinA: number,
-  screenAngle: number,
-  speedF: number,
-): void {
-  const [sx, sy] = projectLocal(w2s, ship, cosA, sinA, dim.l * 0.48, 0)
-  const sprW = dim.l * iso.scale * 0.58
-  const sprH = dim.w * iso.scale * 1.35
-  ctx.save()
-  ctx.translate(sx, sy)
-  ctx.rotate(screenAngle)
-  ctx.globalAlpha *= 0.22 + speedF * 0.28
-  ctx.drawImage(sp.bowWave, -sprW * 0.10, -sprH / 2, sprW, sprH)
-  ctx.restore()
-}
-
-function projectLocal(
-  w2s: WorldToScreen,
-  ship: ShipEntity,
-  cosA: number,
-  sinA: number,
-  lon: number,
-  lat: number,
-): [number, number] {
-  return w2s(
-    ship.pos.x + cosA * lon + sinA * lat,
-    ship.pos.y + sinA * lon - cosA * lat,
-  )
-}
-
-function localPoint(
-  ship: ShipEntity,
-  cosA: number,
-  sinA: number,
-  lon: number,
-  lat: number,
-): { x: number; y: number } {
-  return {
-    x: ship.pos.x + cosA * lon + sinA * lat,
-    y: ship.pos.y + sinA * lon - cosA * lat,
-  }
-}
-
-function projectedAngle(cosA: number, sinA: number, iso: ProjectionContext): number {
-  const svx = (cosA - sinA) * iso.scale
-  const svy = (cosA + sinA) * iso.scale * 0.5
-  return Math.atan2(svy, svx)
-}
-
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
 }
@@ -259,29 +211,6 @@ function signedNoise(a: number, b: number, c: number): number {
 }
 
 function buildWakeSprites(): WakeSprites {
-  const BW = 200, BH = 80
-  const bowOC = new OffscreenCanvas(BW, BH)
-  const bowCtx = bowOC.getContext('2d')!
-  const apexX = BW, apexY = BH / 2
-
-  for (const side of [-1, 1]) {
-    const grad = bowCtx.createLinearGradient(apexX, apexY, 0, apexY + side * BH * 0.46)
-    grad.addColorStop(0, 'rgba(255,255,255,0.58)')
-    grad.addColorStop(0.35, 'rgba(230,248,255,0.34)')
-    grad.addColorStop(1, 'rgba(200,240,255,0)')
-    bowCtx.beginPath()
-    for (let i = 0; i <= 22; i++) {
-      const t = i / 22
-      const x = apexX - BW * t
-      const y = apexY + side * BH * 0.34 * Math.pow(t, 1.45)
-      i === 0 ? bowCtx.moveTo(x, y) : bowCtx.lineTo(x, y)
-    }
-    bowCtx.strokeStyle = grad
-    bowCtx.lineWidth = Math.max(1.2, BH * 0.032)
-    bowCtx.lineCap = 'round'
-    bowCtx.stroke()
-  }
-
   const foamLgOC = buildFoamSprite(40, 24, 34, 0.82)
   const foamSmOC = buildFoamSprite(20, 14, 16, 0.74)
   const foamMistOC = buildFoamSprite(64, 28, 42, 0.34)
@@ -296,7 +225,7 @@ function buildWakeSprites(): WakeSprites {
   stCtx.beginPath(); stCtx.arc(28, 28, 28, 0, Math.PI * 2)
   stCtx.fillStyle = stGrad; stCtx.fill()
 
-  return { bowWave: bowOC, foamLg: foamLgOC, foamSm: foamSmOC, foamMist: foamMistOC, sternWash: sternOC }
+  return { foamLg: foamLgOC, foamSm: foamSmOC, foamMist: foamMistOC, sternWash: sternOC }
 }
 
 function buildFoamSprite(width: number, height: number, bubbles: number, strength: number): OffscreenCanvas {

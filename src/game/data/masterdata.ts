@@ -1,4 +1,5 @@
 import { MAX_WEAPON_SLOTS, type BuildingEntity, type ShipEntity, type CombatState, type Entity, type MapObstacle, type Metrics, type WeaponState, type WeaponType, type WeatherCondition } from '../simulation/types'
+import { naturalCoastline } from './coastlines'
 import shipTemplates from './ships.json'
 import { getDefaultLoadout } from './weapon-catalog'
 import type { ShipDesignLayout } from './ship-design-layout'
@@ -23,6 +24,7 @@ export interface WeaponTemplate {
   type: WeaponType
   ammo: number
   barrels?: number
+  mountHeight?: number
   mount?: { x: number; y: number }
   firingArc?: { center: number; width: number }
   mounts?: Array<{
@@ -30,6 +32,7 @@ export interface WeaponTemplate {
     mount?: { x: number; y: number }
     firingArc?: { center: number; width: number }
     barrels?: number
+    mountHeight?: number
   }>
 }
 
@@ -372,6 +375,7 @@ function makeWeaponState(template: WeaponTemplate): WeaponState {
       firingArc: mount.firingArc ? { ...mount.firingArc } : undefined,
     })),
     barrels: template.barrels,
+    mountHeight: template.mountHeight,
     cooldownTick: 0,
     ammo: template.ammo,
     maxAmmo: template.ammo,
@@ -534,6 +538,11 @@ export function createDebugState(playerType: PlayerShipType = 'battleship'): Com
   }
 }
 
+for (const stage of STATIC_DATA.stages) {
+  stage.mapObstacles.forEach((obstacle, i) => { obstacle.points = naturalCoastline(obstacle, stage.stage + i) })
+}
+DEBUG_MAP_OBSTACLES.forEach((obstacle, i) => { obstacle.points = naturalCoastline(obstacle, i) })
+
 function hardenDebugEnemy(ship: ShipEntity): ShipEntity {
   const multiplier = ship.templateId === 'hull.enemy.boss.dreadnought'
     ? DEBUG_BOSS_HP_MULTIPLIER
@@ -562,11 +571,16 @@ function makeStageBuildings(stage: StageDefinition): [string, number, number, nu
       templateId,
     ])
   }
+  const airfieldIsland = stage.mapObstacles[0]
+  if (airfieldIsland) buildings.push([
+    `building.stage${stage.stage}.airfield`, airfieldIsland.x, airfieldIsland.y, 240, 85, 'building.airfield.base',
+  ])
   return buildings
 }
 
 function makeDebugBuildings(): [string, number, number, number, number, string][] {
   return [
+    ['building.debug.airfield', 6750, 7600, 300, 85, 'building.airfield.base'],
     ['building.debug.command.north', 8000, 3400, 220, 50, 'building.command.bunker'],
     ['building.debug.radar.west', 3520, 6380, 120, 34, 'building.radar.tower'],
     ['building.debug.radar.east', 12400, 6850, 120, 34, 'building.radar.tower'],

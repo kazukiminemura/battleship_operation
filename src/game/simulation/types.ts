@@ -9,12 +9,12 @@ export interface MapObstacle {
   y: number
   rx: number
   ry: number
-  points?: { x: number; y: number }[]  // polygon coastline for rendering (collision still uses rx/ry ellipse)
+  points?: { x: number; y: number }[]  // shared polygon coastline for rendering and collision
 }
 
 export type WeaponType = 'gun' | 'secondary' | 'torpedo' | 'aa' | 'missile'
 
-export type EntityType = 'ship' | 'projectile' | 'torpedo' | 'objective' | 'building'
+export type EntityType = 'ship' | 'projectile' | 'torpedo' | 'objective' | 'building' | 'aircraft'
 
 export type SpeedLevel = 'full' | 'cruise' | 'slow' | 'stop' | 'reverse'
 
@@ -28,11 +28,13 @@ export interface WeaponState {
   mount?: { x: number; y: number }
   firingArc?: { center: number; width: number }
   barrels?: number
+  mountHeight?: number
   mounts?: Array<{
     instanceId?: string
     mount?: { x: number; y: number }
     firingArc?: { center: number; width: number }
     barrels?: number
+    mountHeight?: number
   }>
   cooldownTick: number
   ammo: number
@@ -94,13 +96,31 @@ export interface BuildingEntity {
   templateId: string
 }
 
+export interface AircraftEntity {
+  kind: 'aircraft'
+  id: string
+  pos: Vec3
+  vel: Vec3
+  angle: number
+  hp: number
+  maxHp: number
+  team: 'enemy'
+  destroyed: boolean
+  homeId: string
+  bornTick: number
+  phase: 'takeoff' | 'attack' | 'return' | 'crashing' | 'crashed'
+  crashTick?: number
+  impactTick?: number
+  impactOnLand?: boolean
+}
+
 export interface ObjectiveEntity {
   kind: 'objective'
   id: string
   completed: boolean
 }
 
-export type Entity = ShipEntity | ProjectileEntity | ObjectiveEntity | BuildingEntity
+export type Entity = ShipEntity | ProjectileEntity | ObjectiveEntity | BuildingEntity | AircraftEntity
 
 export function isShip(e: Entity): e is ShipEntity        { return e.kind === 'ship' }
 export function isProjectile(e: Entity): e is ProjectileEntity { return e.kind === 'projectile' }

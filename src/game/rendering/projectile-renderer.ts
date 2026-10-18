@@ -102,84 +102,56 @@ function renderAa(
 
 function renderGun(
   ctx: CanvasRenderingContext2D,
-  sx: number,
-  sy: number,
-  hx: number,
-  hy: number,
-  thx: number,
-  thy: number,
-  angle: number,
-  arcPx: number,
+  sx: number, sy: number, hx: number, hy: number,
+  thx: number, thy: number, angle: number, arcPx: number,
 ): void {
   if (arcPx > 3) {
     ctx.beginPath()
-    ctx.ellipse(sx, sy, 5, 2, 0, 0, Math.PI * 2)
-    ctx.fillStyle = 'rgba(0,0,0,0.16)'
+    ctx.ellipse(sx, sy, 2.8, 1, angle, 0, Math.PI * 2)
+    ctx.fillStyle = 'rgba(0,0,0,0.12)'
     ctx.fill()
   }
-
   ctx.save()
-  ctx.translate(hx, hy); ctx.rotate(angle)
-  ctx.fillStyle = '#a06818'
+  ctx.translate(hx, hy)
+  ctx.rotate(angle)
+  // Short motion blur; a ballistic shell has no rocket flame or fins.
+  const blur = ctx.createLinearGradient(-10, 0, 0, 0)
+  blur.addColorStop(0, 'rgba(195,189,156,0)')
+  blur.addColorStop(1, 'rgba(195,189,156,0.32)')
+  ctx.strokeStyle = blur
+  ctx.lineWidth = 1
   ctx.beginPath()
-  ctx.ellipse(-1, 0, 5.5, 2.4, 0, 0, Math.PI * 2)
+  ctx.moveTo(-10, 0)
+  ctx.lineTo(-2, 0)
+  ctx.stroke()
+  const steel = ctx.createLinearGradient(0, -1.2, 0, 1.2)
+  steel.addColorStop(0, '#d0d0b7')
+  steel.addColorStop(0.45, '#797e75')
+  steel.addColorStop(1, '#252f31')
+  ctx.fillStyle = steel
+  ctx.beginPath()
+  ctx.moveTo(-3.5, -1.2)
+  ctx.lineTo(1, -1.2)
+  ctx.quadraticCurveTo(3.2, -0.8, 4.2, 0)
+  ctx.quadraticCurveTo(3.2, 0.8, 1, 1.2)
+  ctx.lineTo(-3.5, 1.2)
+  ctx.closePath()
   ctx.fill()
-  ctx.fillStyle = '#c08428'
-  ctx.beginPath()
-  ctx.moveTo(3.5, -2.4); ctx.lineTo(9.5, 0); ctx.lineTo(3.5, 2.4)
-  ctx.closePath(); ctx.fill()
-  ctx.fillStyle = '#5a3008'
-  ctx.fillRect(-6.5, -2.4, 2.5, 4.8)
-  ctx.fillStyle = 'rgba(255,215,110,0.38)'
-  ctx.beginPath()
-  ctx.ellipse(0.5, -0.9, 3.5, 0.9, 0, 0, Math.PI * 2)
-  ctx.fill()
+  ctx.fillStyle = '#a4874e'
+  ctx.fillRect(-2.5, -1.2, 0.7, 2.4)
   ctx.restore()
 }
 
 function renderSecondary(
   ctx: CanvasRenderingContext2D,
-  sx: number,
-  sy: number,
-  hx: number,
-  hy: number,
-  thx: number,
-  thy: number,
-  angle: number,
-  arcPx: number,
+  sx: number, sy: number, hx: number, hy: number,
+  thx: number, thy: number, angle: number, arcPx: number,
 ): void {
-  if (arcPx > 3) {
-    ctx.beginPath()
-    ctx.ellipse(sx, sy, 4, 1.5, 0, 0, Math.PI * 2)
-    ctx.fillStyle = 'rgba(0,0,0,0.14)'
-    ctx.fill()
-  }
-
   ctx.save()
-  ctx.translate(hx, hy); ctx.rotate(angle)
-  ctx.fillStyle = '#c03018'
-  ctx.beginPath()
-  ctx.ellipse(0, 0, 5, 2.2, 0, 0, Math.PI * 2)
-  ctx.fill()
-  ctx.fillStyle = '#d84028'
-  ctx.beginPath()
-  ctx.moveTo(3.5, -2.2); ctx.lineTo(8.5, 0); ctx.lineTo(3.5, 2.2)
-  ctx.closePath(); ctx.fill()
-  ctx.fillStyle = '#7a1a08'
-  ctx.beginPath()
-  ctx.moveTo(-5, 0); ctx.lineTo(-8, -5); ctx.lineTo(-6, 0)
-  ctx.closePath(); ctx.fill()
-  ctx.beginPath()
-  ctx.moveTo(-5, 0); ctx.lineTo(-8,  5); ctx.lineTo(-6, 0)
-  ctx.closePath(); ctx.fill()
-  ctx.beginPath()
-  ctx.ellipse(-7.5, 0, 3.5, 1.5, 0, 0, Math.PI * 2)
-  ctx.fillStyle = 'rgba(255,190,50,0.78)'
-  ctx.fill()
-  ctx.beginPath()
-  ctx.ellipse(-6, 0, 2, 0.9, 0, 0, Math.PI * 2)
-  ctx.fillStyle = '#fff0a0'
-  ctx.fill()
+  ctx.translate(hx, hy)
+  ctx.scale(0.72, 0.72)
+  ctx.translate(-hx, -hy)
+  renderGun(ctx, sx, sy, hx, hy, thx, thy, angle, arcPx)
   ctx.restore()
 }
 
@@ -320,112 +292,72 @@ function renderYukidaru(
 
 function renderMissile(
   ctx: CanvasRenderingContext2D,
-  sx: number,
-  sy: number,
-  hx: number,
-  hy: number,
-  thx: number,
-  thy: number,
-  angle: number,
-  arcPx: number,
-  progress: number,
+  sx: number, sy: number, hx: number, hy: number,
+  thx: number, thy: number, angle: number, arcPx: number, progress: number,
 ): void {
-  const launchT = missileLaunchPhase(progress)
-  if (arcPx > 3) {
+  ctx.save()
+  // Exhaust disperses into smoke, rather than a luminous solid beam.
+  for (let i = 1; i <= 8; i++) {
+    const t = i / 8
     ctx.beginPath()
-    ctx.ellipse(sx, sy, 6, 2, 0, 0, Math.PI * 2)
-    ctx.fillStyle = 'rgba(0,0,0,0.14)'
+    ctx.ellipse(hx + (thx - hx) * t, hy + (thy - hy) * t, 1 + t * 3.5, 0.8 + t * 2, angle, 0, Math.PI * 2)
+    ctx.fillStyle = `rgba(184,183,171,${(1 - t) * 0.20})`
     ctx.fill()
   }
-
-  ctx.save()
-  ctx.translate(hx, hy); ctx.rotate(angle)
-  ctx.fillStyle = '#b8bcd4'
+  ctx.translate(hx, hy)
+  ctx.rotate(angle)
+  const exhaust = 4 + missileLaunchPhase(progress) * 7
+  const flame = ctx.createLinearGradient(-5, 0, -5 - exhaust, 0)
+  flame.addColorStop(0, '#fff0bf')
+  flame.addColorStop(0.3, 'rgba(234,166,80,0.8)')
+  flame.addColorStop(1, 'rgba(196,116,54,0)')
+  ctx.fillStyle = flame
   ctx.beginPath()
-  ctx.ellipse(0, 0, 7, 1.8, 0, 0, Math.PI * 2)
+  ctx.moveTo(-4, -1)
+  ctx.lineTo(-5 - exhaust, 0)
+  ctx.lineTo(-4, 1)
   ctx.fill()
-  ctx.fillStyle = '#d4d8ec'
+  ctx.fillStyle = '#adb1aa'
+  ctx.fillRect(-4.5, -1.3, 7, 2.6)
+  ctx.fillStyle = '#52605d'
   ctx.beginPath()
-  ctx.moveTo(4.5, -1.8); ctx.lineTo(12, 0); ctx.lineTo(4.5, 1.8)
-  ctx.closePath(); ctx.fill()
-  ctx.fillStyle = '#7880a0'
-  ctx.beginPath()
-  ctx.moveTo(-7, 0); ctx.lineTo(-11, -5.5); ctx.lineTo(-8.5, -1)
-  ctx.closePath(); ctx.fill()
-  ctx.beginPath()
-  ctx.moveTo(-7, 0); ctx.lineTo(-11,  5.5); ctx.lineTo(-8.5,  1)
-  ctx.closePath(); ctx.fill()
-  ctx.beginPath()
-  ctx.ellipse(-10, 0, 4.5, 1.8, 0, 0, Math.PI * 2)
-  ctx.fillStyle = 'rgba(140,200,255,0.72)'
+  ctx.moveTo(2.5, -1.3); ctx.lineTo(6, 0); ctx.lineTo(2.5, 1.3)
   ctx.fill()
   ctx.beginPath()
-  ctx.ellipse(-8, 0, 2.8, 1.1, 0, 0, Math.PI * 2)
-  ctx.fillStyle = '#dff0ff'
+  ctx.moveTo(-3.5, 0); ctx.lineTo(-5, -3); ctx.lineTo(-1, 0); ctx.lineTo(-5, 3)
   ctx.fill()
   ctx.restore()
-
-  if (launchT > 0.02) {
-    const flameLen = 18 * launchT
-    ctx.save()
-    ctx.translate(hx, hy)
-    ctx.rotate(angle + Math.PI)
-    const flame = ctx.createLinearGradient(0, 0, flameLen, 0)
-    flame.addColorStop(0, `rgba(255,245,180,${0.92 * launchT})`)
-    flame.addColorStop(0.45, `rgba(120,200,255,${0.55 * launchT})`)
-    flame.addColorStop(1, 'rgba(120,200,255,0)')
-    ctx.beginPath()
-    ctx.moveTo(0, -2.5)
-    ctx.lineTo(flameLen, 0)
-    ctx.lineTo(0, 2.5)
-    ctx.closePath()
-    ctx.fillStyle = flame
-    ctx.fill()
-    ctx.restore()
-  }
 }
 
 function renderTorpedo(
   ctx: CanvasRenderingContext2D,
-  sx: number,
-  sy: number,
-  thx: number,
-  thy: number,
-  angle: number,
+  sx: number, sy: number, thx: number, thy: number, angle: number,
 ): void {
-  ctx.beginPath()
-  ctx.moveTo(thx, thy); ctx.lineTo(sx, sy)
-  ctx.strokeStyle = 'rgba(160,215,255,0.50)'
-  ctx.lineWidth = 5; ctx.stroke()
-  ctx.beginPath()
-  ctx.moveTo(thx, thy); ctx.lineTo(sx, sy)
-  ctx.strokeStyle = 'rgba(245,214,75,0.28)'
-  ctx.lineWidth = 2; ctx.stroke()
-
   ctx.save()
-  ctx.translate(sx, sy); ctx.rotate(angle)
-  ctx.fillStyle = '#485a68'
+  const dx = sx - thx, dy = sy - thy
+  const length = Math.max(1, Math.hypot(dx, dy))
+  const nx = -dy / length, ny = dx / length
+  // A submerged body is identified chiefly by its widening bubble wake.
+  const wake = ctx.createLinearGradient(thx, thy, sx, sy)
+  wake.addColorStop(0, 'rgba(196,219,213,0)')
+  wake.addColorStop(0.7, 'rgba(196,219,213,0.30)')
+  wake.addColorStop(1, 'rgba(221,235,225,0.60)')
+  ctx.fillStyle = wake
   ctx.beginPath()
-  ctx.ellipse(0, 0, 9, 3.8, 0, 0, Math.PI * 2)
+  ctx.moveTo(sx, sy)
+  ctx.lineTo(thx + nx * 3, thy + ny * 3)
+  ctx.lineTo(thx - nx * 3, thy - ny * 3)
+  ctx.closePath()
   ctx.fill()
-  ctx.fillStyle = '#607888'
+  ctx.translate(sx, sy)
+  ctx.rotate(angle)
+  ctx.fillStyle = 'rgba(35,53,53,0.55)'
   ctx.beginPath()
-  ctx.moveTo(6, -3.8); ctx.lineTo(12, 0); ctx.lineTo(6, 3.8)
-  ctx.closePath(); ctx.fill()
-  ctx.fillStyle = '#28383f'
-  ctx.fillRect(-3, -3.8, 3.5, 7.6)
-  ctx.strokeStyle = '#6a8898'
-  ctx.lineWidth = 1.2
-  ctx.beginPath()
-  ctx.moveTo(-9, -4); ctx.lineTo(-12, 0); ctx.lineTo(-9, 4)
-  ctx.stroke()
-  ctx.beginPath()
-  ctx.moveTo(-9, 0); ctx.lineTo(-12, 0)
-  ctx.stroke()
-  ctx.beginPath()
-  ctx.arc(12, 0, 3, 0, Math.PI * 2)
-  ctx.fillStyle = 'rgba(160,220,255,0.60)'
+  ctx.ellipse(0, 0, 5.5, 1.3, 0, 0, Math.PI * 2)
   ctx.fill()
+  ctx.strokeStyle = 'rgba(210,228,215,0.55)'
+  ctx.lineWidth = 0.8
+  ctx.beginPath(); ctx.moveTo(-6, -1); ctx.lineTo(-9, -2.5); ctx.moveTo(-6, 1); ctx.lineTo(-9, 2.5); ctx.stroke()
   ctx.restore()
 }
 
@@ -443,7 +375,7 @@ function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: n
   ctx.closePath()
 }
 
-function projectileVisualPoint(
+export function projectileVisualPoint(
   iso: ProjectionContext,
   w2s: WorldToScreen,
   proj: ProjectileEntity,
@@ -475,7 +407,9 @@ function projectileVisualPoint(
   const worldY = launch.y + (target.y - launch.y) * pathT
   const height = proj.weaponType === 'missile'
     ? missileArcHeight(proj.maxHeight, progress)
-    : proj.maxHeight * Math.sin(Math.PI * progress)
+    : proj.weaponType === 'aa' && (proj.targetPos?.z ?? 0) > 0 ? proj.targetPos!.z * progress
+    : proj.weaponId === 'weapon.aircraft.bomb' ? (proj.launchPos?.z ?? 150) * (1 - progress)
+    : proj.maxHeight * 4 * progress * (1 - progress)
   const [sx, sy] = w2s(worldX, worldY)
   const heightPx = height * iso.scale
   return { sx, sy, hx: sx, hy: sy - heightPx, heightPx }

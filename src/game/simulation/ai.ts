@@ -2,71 +2,20 @@ import type { CombatState, ShipEntity, BuildingEntity, Command, Vec3, MapObstacl
 import { isShip, isBuilding } from './types'
 import type { SeededRandom } from './random'
 import { getWeaponConfig, WEAPON_CONFIGS, WEAPON_AIM_ERRORS } from './weapon-strategies'
+import { isOnLand } from './movement'
+import { shipContactDimensions } from './ship-contact'
 import { enemyCanDetectPlayer } from './detection'
+import { planGunRun } from './naval-tactics'
 
 const RANGE_MARGIN = 0.85
 
-type AiBehaviorFn = (
-  enemy: ShipEntity,
-  player: ShipEntity,
-  dist: number,
-  tick: number,
-  rng: SeededRandom,
-) => Command[]
-
-function destroyerBehavior(enemy: ShipEntity, player: ShipEntity, dist: number, tick: number, rng: SeededRandom): Command[] {
-  const cmds: Command[] = []
-  const gun = enemy.weapons.find(w => w.type === 'gun')
-  const gunRange = gun ? getWeaponConfig(gun.id, gun.type).maxRange * RANGE_MARGIN : 0
-
-  if (dist > gunRange) {
-    cmds.push({ tick, actorId: enemy.id, type: 'move', value: enemy.maxSpeed })
-  } else {
-    cmds.push({ tick, actorId: enemy.id, type: 'stop' })
-    if (gun && gun.cooldownTick === 0 && gun.ammo > 0) {
-      cmds.push({
-        tick, actorId: enemy.id, type: 'fire.primary',
-        target: enemyAimTarget(enemy, player, gun, gunRange, dist, rng),
-      })
-    }
-  }
-  return cmds
-}
-
-function makeRangeKiteAI(preferredDist: number): AiBehaviorFn {
-  return (enemy, player, dist, tick, rng) => {
-    const cmds: Command[] = []
-
-    if (dist > preferredDist + 100) {
-      cmds.push({ tick, actorId: enemy.id, type: 'move', value: enemy.maxSpeed })
-    } else if (dist < preferredDist - 100) {
-      cmds.push({ tick, actorId: enemy.id, type: 'move', value: -enemy.maxSpeed * 0.5 })
-    } else {
-      cmds.push({ tick, actorId: enemy.id, type: 'stop' })
-    }
-
-    for (let slot = 0; slot < enemy.weapons.length; slot++) {
-      const weapon = enemy.weapons[slot]!
-      if (weapon.cooldownTick > 0 || weapon.ammo <= 0) continue
-      const range = getWeaponConfig(weapon.id, weapon.type).maxRange * RANGE_MARGIN
-      if (dist > range) continue
-      cmds.push({
-        tick, actorId: enemy.id, type: 'fire.slot', value: slot,
-        target: enemyAimTarget(enemy, player, weapon, range, dist, rng),
-      })
-    }
-    return cmds
-  }
-}
-
-const AI_BEHAVIORS: Record<string, AiBehaviorFn> = {
-  'hull.enemy.destroyer.basic': destroyerBehavior,
-  'hull.cruiser.basic': makeRangeKiteAI(WEAPON_CONFIGS.torpedo.maxRange * RANGE_MARGIN * 0.7),
-  'hull.enemy.boss.dreadnought': makeRangeKiteAI(1900),
-}
-
-function defaultAiBehavior(enemy: ShipEntity, _player: ShipEntity, _dist: number, tick: number, _rng: SeededRandom): Command[] {
-  return [{ tick, actorId: enemy.id, type: 'stop' }]
+const ENGAGEMENT_RANGES: Record<string, (enemy: ShipEntity) => number> = {
+  'hull.enemy.destroyer.basic': enemy => {
+    const gun = enemy.weapons.find(weapon => weapon.type === 'gun')
+    return (gun ? getWeaponConfig(gun.id, gun.type).maxRange : WEAPON_CONFIGS.gun.maxRange) * .72
+  },
+  'hull.cruiser.basic': () => WEAPON_CONFIGS.torpedo.maxRange * RANGE_MARGIN * .7,
+  'hull.enemy.boss.dreadnought': () => 1900,
 }
 
 export function generateAiCommands(state: CombatState, rng: SeededRandom): Command[] {
@@ -92,16 +41,27 @@ export function generateAiCommands(state: CombatState, rng: SeededRandom): Comma
       continue
     }
 
-    const angleDiff = normalizeAngle(Math.atan2(dy, dx) - enemy.angle)
-    if (Math.abs(angleDiff) > 0.05) {
-      commands.push({
-        tick: state.tick, actorId: enemy.id, type: 'rotate',
-        value: Math.sign(angleDiff) * enemy.turnRate,
+    const preferredRange = ENGAGEMENT_RANGES[enemy.templateId]?.(enemy)
+    if (preferredRange === undefined) {
+      commands.push({ tick: state.tick, actorId: enemy.id, type: 'stop' })
+      continue
+    }
+    const maneuver = planGunRun(enemy, player.pos, preferredRange)
+    const avoidance = shipCollisionAvoidance(enemy, state)
+    const shore = obstacleSteer(enemy, state.mapObstacles)
+    const angleDiff = normalizeAngle(maneuver.heading - enemy.angle)
+    const steer = shore || avoidance?.steer || (Math.abs(angleDiff) > .05 ? Math.sign(angleDiff) : 0)
+    if (steer) commands.push({ tick: state.tick, actorId: enemy.id, type: 'rotate', value: steer * enemy.turnRate })
+    commands.push({ tick: state.tick, actorId: enemy.id, type: 'move', value: maneuver.speed * (shore ? 1 : avoidance?.speedFactor ?? 1) })
+    for (let slot = 0; slot < enemy.weapons.length; slot++) {
+      const weapon = enemy.weapons[slot]!
+      if (weapon.cooldownTick > 0 || weapon.ammo <= 0) continue
+      const range = getWeaponConfig(weapon.id, weapon.type).maxRange * RANGE_MARGIN
+      if (dist > range) continue
+      commands.push({ tick: state.tick, actorId: enemy.id, type: 'fire.slot', value: slot,
+        target: enemyAimTarget(enemy, player, weapon, range, dist, rng),
       })
     }
-
-    const behavior = AI_BEHAVIORS[enemy.templateId] ?? defaultAiBehavior
-    commands.push(...behavior(enemy, player, dist, state.tick, rng))
   }
 
   return commands
@@ -146,7 +106,7 @@ export function generateAutoPilotCommands(state: CombatState): Command[] {
   const tick = state.tick
   const cmds: Command[] = []
 
-  const collisionAvoidance = enemyCollisionAvoidance(ship, state)
+  const collisionAvoidance = shipCollisionAvoidance(ship, state)
   if (collisionAvoidance) {
     cmds.push({ tick, actorId, type: 'rotate', value: collisionAvoidance.steer * ship.turnRate })
     cmds.push({ tick, actorId, type: 'move', value: ship.maxSpeed * collisionAvoidance.speedFactor })
@@ -195,55 +155,43 @@ function findTarget(state: CombatState, ship: ShipEntity): Vec3 | undefined {
   return undefined
 }
 
-function enemyCollisionAvoidance(ship: ShipEntity, state: CombatState): { steer: number; speedFactor: number } | null {
-  const AVOID_RADIUS = 760
-  const EMERGENCY_RADIUS = 360
-  const FORWARD_ARC = Math.PI * 0.72
-
-  let nearestThreat: ShipEntity | undefined
-  let nearestThreatDist = Infinity
-  let nearestThreatRel = 0
+function shipCollisionAvoidance(ship: ShipEntity, state: CombatState): { steer: number; speedFactor: number } | null {
+  const own = shipContactDimensions(ship)
+  const fx = Math.cos(ship.angle), fy = Math.sin(ship.angle)
+  let nearest = Infinity, side = -1
   for (const entity of state.entities.values()) {
-    if (!isShip(entity) || entity.team !== 'enemy' || entity.destroyed) continue
-    const dx = entity.pos.x - ship.pos.x
-    const dy = entity.pos.y - ship.pos.y
-    const dist = Math.sqrt(dx * dx + dy * dy)
-    if (dist > AVOID_RADIUS || dist >= nearestThreatDist) continue
-    const rel = normalizeAngle(Math.atan2(dy, dx) - ship.angle)
-    if (Math.abs(rel) > FORWARD_ARC && dist > EMERGENCY_RADIUS) continue
-    nearestThreat = entity
-    nearestThreatDist = dist
-    nearestThreatRel = rel
+    if (!isShip(entity) || entity.id === ship.id || entity.destroyed) continue
+    const dx = entity.pos.x - ship.pos.x, dy = entity.pos.y - ship.pos.y
+    const ahead = dx * fx + dy * fy
+    if (ahead <= 0) continue
+    const other = shipContactDimensions(entity)
+    const relative = entity.angle - ship.angle
+    const clearance = own.beam / 2 + Math.abs(Math.sin(relative)) * other.length / 2 + Math.abs(Math.cos(relative)) * other.beam / 2 + 45
+    const lateral = dx * -fy + dy * fx
+    const gap = ahead - own.length / 2 - other.length / 2
+    if (gap > 340 || Math.abs(lateral) > clearance || gap >= nearest) continue
+    nearest = gap
+    side = lateral >= 0 ? -1 : 1
   }
-
-  if (!nearestThreat) return null
-  const side = nearestThreatRel >= 0 ? -1 : 1
-  const speedFactor = nearestThreatDist < EMERGENCY_RADIUS ? 0.25 : 0.55
-  return { steer: side, speedFactor }
+  return nearest < Infinity ? { steer: side, speedFactor: nearest < 80 ? .25 : .6 } : null
 }
-
 
 function obstacleSteer(ship: ShipEntity, obstacles: readonly MapObstacle[]): number {
-  const LOOKAHEAD = 900
-  const MARGIN   = 380
-
-  const fx = ship.pos.x + Math.cos(ship.angle) * LOOKAHEAD
-  const fy = ship.pos.y + Math.sin(ship.angle) * LOOKAHEAD
-
-  let worstObs: MapObstacle | undefined
-  let worstDepth = 0
-  for (const obs of obstacles) {
-    const nx = (fx - obs.x) / (obs.rx + MARGIN)
-    const ny = (fy - obs.y) / (obs.ry + MARGIN)
-    const depth = 1 - (nx * nx + ny * ny)
-    if (depth > worstDepth) { worstDepth = depth; worstObs = obs }
+  const dimensions = shipContactDimensions(ship)
+  const lookahead = dimensions.length / 2 + Math.max(180, Math.abs(ship.speed) * 45)
+  const margin = dimensions.beam / 2 + 35
+  const fx = Math.cos(ship.angle), fy = Math.sin(ship.angle)
+  for (const fraction of [.4, .7, 1]) for (const offset of [-margin, 0, margin]) {
+    const x = ship.pos.x + fx * lookahead * fraction - fy * offset
+    const y = ship.pos.y + fy * lookahead * fraction + fx * offset
+    const coast = obstacles.find(obstacle => isOnLand(x, y, [obstacle]))
+    if (!coast) continue
+    const rel = normalizeAngle(Math.atan2(coast.y - ship.pos.y, coast.x - ship.pos.x) - ship.angle)
+    return rel >= 0 ? -1 : 1
   }
-  if (!worstObs) return 0
-
-  // Turn away from the side the obstacle center is on
-  const rel = normalizeAngle(Math.atan2(worstObs.y - ship.pos.y, worstObs.x - ship.pos.x) - ship.angle)
-  return rel >= 0 ? -1 : 1
+  return 0
 }
+
 
 function nearest(from: Vec3, positions: Vec3[]): Vec3 {
   return positions.reduce((best, p) => {

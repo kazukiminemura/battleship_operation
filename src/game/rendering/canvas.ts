@@ -1,4 +1,4 @@
-import type { BuildingEntity, CombatEvent, CombatState, Entity, MapObstacle, ShipEntity, ProjectileEntity, Vec3, WeaponState, WeaponType } from '../simulation/types'
+import type { AircraftEntity, BuildingEntity, CombatEvent, CombatState, Entity, MapObstacle, ShipEntity, ProjectileEntity, Vec3, WeaponState, WeaponType } from '../simulation/types'
 import { isOnLand, WORLD_SIZE } from '../simulation/movement'
 import { effectiveDetectionRange } from '../simulation/detection'
 import { getWeaponConfig } from '../simulation/weapon-strategies'
@@ -7,10 +7,15 @@ import { renderProjectile as renderProjectileEntity } from './projectile-rendere
 import { SHIP_DIMS, SHIP_SHAPES, scaledShipDims, type ShipShapeClass } from './ship-rendering-data'
 import { ThreeBattlefieldRenderer } from './three-battlefield-renderer'
 import { ShipWakeRenderer } from './wake-renderer'
+import { DamageSmokeRenderer, damageSmokeLevel } from './damage-smoke'
+import { renderAircraft } from './aircraft-renderer'
+import { AircraftEffectsRenderer } from './aircraft-effects'
+import { IslandTerrainRenderer } from './island-terrain'
 import { FogOfWarRenderer } from './fog-of-war-renderer'
 
 // Isometric projection parameters
 interface IsoParams {
+  tiltFactor: number
   scale: number    // world units → screen pixels (horizontal component)
   ox: number       // screen origin X (maps world 0,0 → ox, oy in screen)
   oy: number
@@ -21,18 +26,21 @@ const HUD_BOTTOM = 32
 export type WeatherMode = 'clear' | 'storm'
 
 export class CanvasRenderer {
+  private readonly aircraftEffects = new AircraftEffectsRenderer()
   private ctx: CanvasRenderingContext2D
   private canvas: HTMLCanvasElement
-  private iso: IsoParams = { scale: 0.08, ox: 0, oy: 0 }
+  private iso: IsoParams = { scale: 0.08, ox: 0, oy: 0, tiltFactor: Math.sin(0.6) }
   private camX = 5000
   private camY = 5000
-  private zoomLevel = 1.0  // ズーム倍率 (1.0 = デフォルト)
+  private zoomLevel = 1.35  // ズーム倍率 (1.0 = デフォルト)
   private tiltAngle = 0.6  // カメラ틸ト角度 (ラジアン) - 斜め上から見下ろす角度
   // イベントはシミュレーション毎ティック消去されるためレンダラー側で蓄積
   private effectLog: CombatEvent[] = []
   private effectKeys = new Set<string>()
   private shipWakeRenderer = new ShipWakeRenderer()
   private fogRenderer = new FogOfWarRenderer()
+  private terrainRenderer = new IslandTerrainRenderer()
+  private damageSmoke = new DamageSmokeRenderer()
   private threeRenderer: ThreeBattlefieldRenderer
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas
@@ -82,8 +90,9 @@ export class CanvasRenderer {
     const scale = baseScale * this.zoomLevel
     this.iso = {
       scale,
+      tiltFactor: Math.sin(this.tiltAngle),
       ox: W / 2,
-      oy: HUD_TOP + contentH / 2,
+      oy: HUD_TOP + contentH * 0.54,
     }
   }
 
@@ -154,7 +163,6 @@ export class CanvasRenderer {
       s.team === 'player' || state.detectedByPlayer.has(s.id)
     )
 
-    this.shipWakeRenderer.update(ships, state.tick)
 
     const projectiles = [...state.entities.values()]
       .filter(e => e.kind === 'projectile' && !(e as ProjectileEntity).destroyed && canSeePosition((e as ProjectileEntity).pos)) as ProjectileEntity[]
@@ -164,8 +172,15 @@ export class CanvasRenderer {
       .sort((a, b) => a.pos.y - b.pos.y)
 
     this.threeRenderer.render(state, ships, weather, this.iso, this.w2s.bind(this))
-    this.renderGrid()
-    this.renderIslands(state.mapObstacles)
+    const waterline = (ship: ShipEntity, longitudinal: number, lateral = 0): { x: number; y: number } | undefined => {
+      const screen = this.threeRenderer.shipWaterlinePoint(ship.id, longitudinal, lateral)
+      if (!screen) return undefined
+      const [x, y] = this.s2w(screen[0], screen[1])
+      return { x, y }
+    }
+    this.shipWakeRenderer.update(ships, state.tick, waterline)
+    if (state.stage >= 90) this.renderGrid()
+    this.renderIslands(state.mapObstacles, state.tick)
 
     // Range ellipse for selected weapon
     if (selectedWeapon) {
@@ -174,11 +189,25 @@ export class CanvasRenderer {
     }
 
     this.renderWaterSplashes(visibleEffects, state.tick, state.mapObstacles)
-    for (const b of buildings)   this.renderBuilding(b)
+    for (const b of buildings)   this.renderBuilding(b, state.tick)
     for (const p of projectiles) this.renderProjectile(p)
     this.renderMuzzleBursts(visibleEffects, state.tick)
-    this.shipWakeRenderer.render(this.ctx, this.iso, this.w2s.bind(this), ships, state.tick)
+    this.shipWakeRenderer.render(this.ctx, this.iso, this.w2s.bind(this), ships, state.tick, waterline)
     this.renderShipFires(ships, state.tick)
+    for (const ship of ships) {
+      const severity = damageSmokeLevel(ship.hp, ship.maxHp)
+      if (!severity) continue
+      const anchor = this.threeRenderer.shipWaterlinePoint(ship.id, 0.06)
+      if (!anchor) continue
+      const dim = scaledShipDims(ship.templateId, ship.armorBonus)
+      this.damageSmoke.render(ctx, anchor[0], anchor[1] - dim.h * this.iso.scale * .8,
+        Math.max(5, dim.w * this.iso.scale * .8), severity, state.tick, ship.id.length)
+    }
+    for (const building of buildings) {
+      const [x, y] = this.w2s(building.pos.x, building.pos.y)
+      this.damageSmoke.render(ctx, x, y - (building.destroyed ? 0 : 45 * this.iso.scale),
+        Math.max(6, building.radius * this.iso.scale * .7), damageSmokeLevel(building.hp, building.maxHp, building.destroyed), state.tick, building.id.length)
+    }
     this.renderShipStatusOverlays(ships)
     this.renderLandDust(visibleEffects, state.tick, state.entities, state.mapObstacles)
     renderShipExplosions(this.ctx, this.iso, this.w2s.bind(this), visibleEffects, state.tick, state.entities)
@@ -191,6 +220,10 @@ export class CanvasRenderer {
       isoScale: this.iso.scale,
       w2s: this.w2s.bind(this),
     })
+
+    const aircraft = [...state.entities.values()].filter((entity): entity is AircraftEntity => entity.kind === 'aircraft' && state.detectedByPlayer.has(entity.id))
+    this.aircraftEffects.render(ctx, aircraft, this.iso.scale, this.w2s.bind(this), state.tick)
+    for (const plane of aircraft) renderAircraft(ctx, plane, this.iso.scale, this.w2s.bind(this), state.tick)
 
     if (selectedWeapon && aimPoint) {
       const player = state.entities.get('ship.player') as ShipEntity | undefined
@@ -768,210 +801,15 @@ export class CanvasRenderer {
 
   // ── island and buildings ──────────────────────────────────────────────────
 
-  private renderIslands(obstacles: readonly MapObstacle[]): void {
-    for (const obstacle of obstacles) this.renderIsland(obstacle)
+  private renderIslands(obstacles: readonly MapObstacle[], tick: number): void {
+    for (const obstacle of obstacles) this.terrainRenderer.render(this.ctx, obstacle, this.w2s.bind(this), tick)
   }
 
-  private renderIsland(obstacle: MapObstacle): void {
-    if (obstacle.points && obstacle.points.length >= 3) {
-      this.renderIslandPoly(obstacle)
-    } else {
-      this.renderIslandEllipse(obstacle)
-    }
-  }
-
-  private renderIslandEllipse(obstacle: MapObstacle): void {
-    const { ctx } = this
-    const steps = 72
-    const shoreline: [number, number][] = []
-    const beach: [number, number][] = []
-    const grass: [number, number][] = []
-
-    for (let i = 0; i < steps; i++) {
-      const a = (i / steps) * Math.PI * 2
-      const n1 = signedNoise(obstacle.x, obstacle.y, i)
-      const n2 = signedNoise(obstacle.y, obstacle.x, i + 19)
-      const r = 1 + n1 * 0.08 + n2 * 0.04
-      shoreline.push(this.w2s(
-        obstacle.x + Math.cos(a) * obstacle.rx * r,
-        obstacle.y + Math.sin(a) * obstacle.ry * r,
-      ))
-      beach.push(this.w2s(
-        obstacle.x + Math.cos(a) * obstacle.rx * 0.91 * r,
-        obstacle.y + Math.sin(a) * obstacle.ry * 0.91 * r,
-      ))
-      grass.push(this.w2s(
-        obstacle.x + Math.cos(a) * obstacle.rx * 0.74 * r,
-        obstacle.y + Math.sin(a) * obstacle.ry * 0.74 * r,
-      ))
-    }
-
-    const cliff = shoreline.map(([x, y]) => [x + 10, y + 24] as [number, number])
-    drawClosedPath(ctx, cliff)
-    const cliffGrad = ctx.createLinearGradient(0, this.canvas.height * 0.34, 0, this.canvas.height * 0.84)
-    cliffGrad.addColorStop(0, 'rgba(97,91,75,0.72)')
-    cliffGrad.addColorStop(0.55, 'rgba(49,45,39,0.80)')
-    cliffGrad.addColorStop(1, 'rgba(12,19,22,0.62)')
-    ctx.fillStyle = cliffGrad
-    ctx.fill()
-
-    for (let i = 0; i < shoreline.length; i++) {
-      const a = shoreline[i]!
-      const b = shoreline[(i + 1) % shoreline.length]!
-      const c = cliff[(i + 1) % cliff.length]!
-      const d = cliff[i]!
-      drawClosedPath(ctx, [a, b, c, d])
-      ctx.fillStyle = i % 2 === 0 ? 'rgba(38,34,29,0.30)' : 'rgba(110,99,78,0.20)'
-      ctx.fill()
-    }
-
-    drawClosedPath(ctx, shoreline)
-    ctx.fillStyle = 'rgba(212,176,92,0.52)'
-    ctx.fill()
-    ctx.strokeStyle = 'rgba(225,240,220,0.34)'
-    ctx.lineWidth = 1.2
-    ctx.stroke()
-
-    drawClosedPath(ctx, beach)
-    const beachGrad = ctx.createLinearGradient(0, this.canvas.height * 0.35, 0, this.canvas.height * 0.72)
-    beachGrad.addColorStop(0, '#d8bd73')
-    beachGrad.addColorStop(1, '#8c7441')
-    ctx.fillStyle = beachGrad
-    ctx.fill()
-
-    drawClosedPath(ctx, grass)
-    const grassGrad = ctx.createLinearGradient(0, this.canvas.height * 0.30, 0, this.canvas.height * 0.78)
-    grassGrad.addColorStop(0, '#597f3d')
-    grassGrad.addColorStop(0.55, '#335f36')
-    grassGrad.addColorStop(1, '#1d3f2e')
-    ctx.fillStyle = grassGrad
-    ctx.fill()
-
-    for (let i = 0; i < 11; i++) {
-      const px = obstacle.x + signedNoise(obstacle.x, obstacle.y, i + 100) * obstacle.rx * 0.42
-      const py = obstacle.y + signedNoise(obstacle.y, obstacle.x, i + 130) * obstacle.ry * 0.34
-      const [sx, sy] = this.w2s(px, py)
-      ctx.save()
-      ctx.translate(sx, sy)
-      ctx.scale(1.5, 0.62)
-      ctx.beginPath()
-      ctx.arc(0, 0, (45 + Math.abs(signedNoise(px, py, i)) * 45) * this.iso.scale, 0, Math.PI * 2)
-      ctx.fillStyle = i % 3 === 0 ? 'rgba(104,132,74,0.28)' : 'rgba(38,77,44,0.30)'
-      ctx.fill()
-      ctx.restore()
-    }
-
-    for (let i = 0; i < steps; i += 6) {
-      const a = (i / steps) * Math.PI * 2
-      const [x0, y0] = this.w2s(obstacle.x + Math.cos(a) * obstacle.rx * 1.03, obstacle.y + Math.sin(a) * obstacle.ry * 1.03)
-      const [x1, y1] = this.w2s(obstacle.x + Math.cos(a + 0.10) * obstacle.rx * 1.03, obstacle.y + Math.sin(a + 0.10) * obstacle.ry * 1.03)
-      ctx.beginPath()
-      ctx.moveTo(x0, y0)
-      ctx.lineTo(x1, y1)
-      ctx.strokeStyle = 'rgba(220,245,255,0.38)'
-      ctx.lineWidth = 1.2
-      ctx.stroke()
-    }
-  }
-
-  private renderIslandPoly(obstacle: MapObstacle): void {
-    const { ctx } = this
-    const pts = obstacle.points!
-    const cx = obstacle.x
-    const cy = obstacle.y
-
-    // Build screen-space point array with optional inward scaling and a small noise perturbation.
-    const screenLayer = (factor: number): [number, number][] =>
-      pts.map((p, i) => {
-        const n = signedNoise(p.x * 0.0015, p.y * 0.0015, i + 37) * 0.04
-        return this.w2s(
-          cx + (p.x - cx) * factor * (1 + n),
-          cy + (p.y - cy) * factor * (1 + n),
-        ) as [number, number]
-      })
-
-    const shoreline = screenLayer(1.0)
-    const beach     = screenLayer(0.91)
-    const grass     = screenLayer(0.74)
-
-    const cliff = shoreline.map(([x, y]) => [x + 10, y + 24] as [number, number])
-    drawSmoothClosedPath(ctx, cliff)
-    const cliffGrad = ctx.createLinearGradient(0, this.canvas.height * 0.34, 0, this.canvas.height * 0.84)
-    cliffGrad.addColorStop(0, 'rgba(97,91,75,0.72)')
-    cliffGrad.addColorStop(0.55, 'rgba(49,45,39,0.80)')
-    cliffGrad.addColorStop(1, 'rgba(12,19,22,0.62)')
-    ctx.fillStyle = cliffGrad
-    ctx.fill()
-
-    for (let i = 0; i < shoreline.length; i++) {
-      const a = shoreline[i]!
-      const b = shoreline[(i + 1) % shoreline.length]!
-      const c = cliff[(i + 1) % cliff.length]!
-      const d = cliff[i]!
-      drawClosedPath(ctx, [a, b, c, d])
-      ctx.fillStyle = i % 2 === 0 ? 'rgba(38,34,29,0.30)' : 'rgba(110,99,78,0.20)'
-      ctx.fill()
-    }
-
-    drawSmoothClosedPath(ctx, shoreline)
-    ctx.fillStyle = 'rgba(212,176,92,0.52)'
-    ctx.fill()
-    ctx.strokeStyle = 'rgba(225,240,220,0.34)'
-    ctx.lineWidth = 1.2
-    ctx.stroke()
-
-    drawSmoothClosedPath(ctx, beach)
-    const beachGrad = ctx.createLinearGradient(0, this.canvas.height * 0.35, 0, this.canvas.height * 0.72)
-    beachGrad.addColorStop(0, '#d8bd73')
-    beachGrad.addColorStop(1, '#8c7441')
-    ctx.fillStyle = beachGrad
-    ctx.fill()
-
-    drawSmoothClosedPath(ctx, grass)
-    const grassGrad = ctx.createLinearGradient(0, this.canvas.height * 0.30, 0, this.canvas.height * 0.78)
-    grassGrad.addColorStop(0, '#597f3d')
-    grassGrad.addColorStop(0.55, '#335f36')
-    grassGrad.addColorStop(1, '#1d3f2e')
-    ctx.fillStyle = grassGrad
-    ctx.fill()
-
-    for (let i = 0; i < 11; i++) {
-      const px = cx + signedNoise(cx, cy, i + 100) * obstacle.rx * 0.42
-      const py = cy + signedNoise(cy, cx, i + 130) * obstacle.ry * 0.34
-      const [sx, sy] = this.w2s(px, py)
-      ctx.save()
-      ctx.translate(sx, sy)
-      ctx.scale(1.5, 0.62)
-      ctx.beginPath()
-      ctx.arc(0, 0, (45 + Math.abs(signedNoise(px, py, i)) * 45) * this.iso.scale, 0, Math.PI * 2)
-      ctx.fillStyle = i % 3 === 0 ? 'rgba(104,132,74,0.28)' : 'rgba(38,77,44,0.30)'
-      ctx.fill()
-      ctx.restore()
-    }
-
-    // Surf strokes along each polygon edge.
-    for (let i = 0; i < pts.length; i++) {
-      const p0 = pts[i]!
-      const p1 = pts[(i + 1) % pts.length]!
-      const [x0, y0] = this.w2s(cx + (p0.x - cx) * 1.03, cy + (p0.y - cy) * 1.03)
-      const [x1, y1] = this.w2s(cx + (p1.x - cx) * 1.03, cy + (p1.y - cy) * 1.03)
-      ctx.beginPath()
-      ctx.moveTo(x0, y0)
-      ctx.lineTo(x1, y1)
-      ctx.strokeStyle = 'rgba(220,245,255,0.38)'
-      ctx.lineWidth = 1.2
-      ctx.stroke()
-    }
-  }
-
-  private renderBuilding(building: BuildingEntity): void {
-    if (building.destroyed) {
-      this.renderRuins(building)
-      return
-    }
-
+  private renderBuilding(building: BuildingEntity, tick: number): void {
     const { ctx, iso } = this
     const [cx, cy] = this.w2s(building.pos.x, building.pos.y)
+    ctx.save()
+    if (building.destroyed) ctx.filter = 'grayscale(1) brightness(0.42)'
     const hpRatio = building.hp / building.maxHp
     const spec = building.templateId.includes('radar')
       ? { w: 48, d: 42, h: 130, top: '#94a3b8', side: '#475569' }
@@ -979,7 +817,34 @@ export class CanvasRenderer {
         ? { w: 130, d: 92, h: 54, top: '#9a3412', side: '#5c1f0a' }
         : { w: 112, d: 82, h: 72, top: '#78716c', side: '#44403c' }
 
-    this.drawIsoBox(building.pos.x, building.pos.y, spec.w, spec.d, spec.h, spec.top, spec.side)
+    if (building.templateId.includes('airfield')) {
+      this.renderAirfield(building)
+    } else {
+      this.drawIsoBox(building.pos.x, building.pos.y, spec.w, spec.d, spec.h, spec.top, spec.side)
+      const bx = building.pos.x, by = building.pos.y
+      if (building.templateId.includes('command')) {
+        this.drawIsoBox(bx, by, 145, 115, 12, '#6c705d', '#424a3c')
+        this.drawIsoBox(bx, by, 96, 70, 58, '#858775', '#555f54')
+        for (let i = -1; i <= 1; i++) {
+          const [x, y] = this.w2s(bx + i * 26, by + 36)
+          ctx.fillStyle = '#14211e'
+          ctx.fillRect(x - 2, y - 30 * iso.scale, 4, Math.max(2, 8 * iso.scale))
+        }
+        this.drawIsoBox(bx - 37, by - 12, 22, 28, 82, '#949786', '#535e52')
+      } else if (building.templateId.includes('depot')) {
+        // A pitched roof and adjacent cylindrical fuel tanks distinguish the supply depot.
+        const ridgeA = this.w2s(bx - 68, by), ridgeB = this.w2s(bx + 68, by)
+        const edgeA = this.w2s(bx - 68, by + 50), edgeB = this.w2s(bx + 68, by + 50)
+        drawClosedPath(ctx, [[ridgeA[0], ridgeA[1] - 82 * iso.scale], [ridgeB[0], ridgeB[1] - 82 * iso.scale], [edgeB[0], edgeB[1] - 54 * iso.scale], [edgeA[0], edgeA[1] - 54 * iso.scale]])
+        ctx.fillStyle = '#777b70'; ctx.fill()
+        for (let i = 0; i < 3; i++) {
+          const [x, y] = this.w2s(bx + i * 45 - 45, by + 90)
+          ctx.fillStyle = '#59665f'; ctx.fillRect(x - 9 * iso.scale, y - 38 * iso.scale, 18 * iso.scale, 38 * iso.scale)
+          ctx.beginPath(); ctx.ellipse(x, y - 38 * iso.scale, 9 * iso.scale, 5 * iso.scale, 0, 0, Math.PI * 2)
+          ctx.fillStyle = '#a0a595'; ctx.fill()
+        }
+      }
+    }
 
     if (building.templateId.includes('radar')) {
       const mastTop = cy - spec.h * iso.scale
@@ -989,8 +854,16 @@ export class CanvasRenderer {
       ctx.moveTo(cx, cy - 8 * iso.scale)
       ctx.lineTo(cx, mastTop)
       ctx.stroke()
+      for (const side of [-1, 1]) {
+        ctx.beginPath(); ctx.moveTo(cx + side * 16 * iso.scale, cy); ctx.lineTo(cx, mastTop); ctx.stroke()
+        for (let j = 1; j <= 4; j++) {
+          const y = cy - j * 24 * iso.scale
+          ctx.beginPath(); ctx.moveTo(cx - 12 * iso.scale, y); ctx.lineTo(cx + 10 * iso.scale, y - 20 * iso.scale); ctx.stroke()
+        }
+      }
       ctx.save()
       ctx.translate(cx, mastTop)
+      ctx.rotate(Math.sin((building.destroyed ? 0 : tick) * .015) * .45)
       ctx.scale(1.7, 0.55)
       ctx.beginPath()
       ctx.arc(0, 0, 34 * iso.scale, 0, Math.PI * 2)
@@ -1000,6 +873,11 @@ export class CanvasRenderer {
       ctx.restore()
     }
 
+    ctx.restore()
+    if (building.destroyed) {
+      this.renderBuildingFire(building, tick)
+      return
+    }
     const barW = Math.max(18, building.radius * iso.scale * 1.4)
     const barY = cy - spec.h * iso.scale - 13
     ctx.fillStyle = 'rgba(0,0,0,0.62)'
@@ -1008,29 +886,74 @@ export class CanvasRenderer {
     ctx.fillRect(cx - barW / 2, barY, barW * hpRatio, 3)
   }
 
-  private renderRuins(building: BuildingEntity): void {
+  private renderAirfield(building: BuildingEntity): void {
     const { ctx, iso } = this
-    const [cx, cy] = this.w2s(building.pos.x, building.pos.y)
-    const r = building.radius * iso.scale
-
-    ctx.save()
-    ctx.translate(cx, cy)
-    ctx.scale(1.35, 0.55)
-    ctx.beginPath()
-    ctx.arc(0, 0, r * 1.2, 0, Math.PI * 2)
-    ctx.fillStyle = 'rgba(40,32,28,0.55)'
-    ctx.fill()
-    ctx.restore()
-
-    for (let i = 0; i < 9; i++) {
-      const a = (i / 9) * Math.PI * 2 + signedNoise(building.pos.x, building.pos.y, i) * 0.5
-      const dist = r * (0.25 + Math.abs(signedNoise(building.pos.y, building.pos.x, i + 8)) * 0.9)
-      const x = cx + Math.cos(a) * dist
-      const y = cy + Math.sin(a) * dist * 0.45
-      const size = Math.max(2, r * (0.12 + Math.abs(signedNoise(building.pos.x, building.pos.y, i + 14)) * 0.14))
-      ctx.fillStyle = i % 2 === 0 ? '#57534e' : '#292524'
-      ctx.fillRect(x - size / 2, y - size / 2, size, size)
+    const bx = building.pos.x, by = building.pos.y
+    // The takeoff simulation uses the same runway axis and thresholds.
+    this.drawIsoBox(bx, by, 380, 46, 1, '#4d5350', '#373d39')
+    ctx.strokeStyle = '#d5d2b4'
+    ctx.lineWidth = Math.max(1, 4 * iso.scale)
+    for (let x = -155; x < 170; x += 32) {
+      const a = this.w2s(bx + x, by), b = this.w2s(bx + x + 14, by)
+      ctx.beginPath(); ctx.moveTo(...a); ctx.lineTo(...b); ctx.stroke()
     }
+    for (const end of [-160, 160]) for (let lane = -1; lane <= 1; lane++) {
+      const a = this.w2s(bx + end - 9, by + lane * 10), b = this.w2s(bx + end + 9, by + lane * 10)
+      ctx.beginPath(); ctx.moveTo(...a); ctx.lineTo(...b); ctx.stroke()
+    }
+    for (const x of [-90, 15]) {
+      this.drawIsoBox(bx + x, by + 65, 80, 55, 34, '#72796b', '#454e46')
+      const [doorX, doorY] = this.w2s(bx + x + 40, by + 65)
+      ctx.fillStyle = '#17211e'
+      ctx.fillRect(doorX - 2, doorY - 25 * iso.scale, 4, 23 * iso.scale)
+      const a = this.w2s(bx + x - 42, by + 65), b = this.w2s(bx + x + 42, by + 65)
+      ctx.beginPath(); ctx.moveTo(a[0], a[1] - 43 * iso.scale); ctx.lineTo(b[0], b[1] - 43 * iso.scale)
+      ctx.strokeStyle = '#a6aa98'; ctx.stroke()
+    }
+    this.drawIsoBox(bx + 110, by + 65, 27, 27, 70, '#929b8c', '#555f55')
+    this.drawIsoBox(bx + 110, by + 65, 42, 38, 76, '#9da694', '#465e60')
+    const [x, y] = this.w2s(bx + 110, by + 65)
+    ctx.fillStyle = '#364e53'; ctx.fillRect(x - 3, y - 72 * iso.scale, 6, 6 * iso.scale)
+    ctx.font = '10px sans-serif'; ctx.fillStyle = '#e6dba8'; ctx.textAlign = 'center'
+    ctx.fillText('敵航空基地', ...this.w2s(bx, by - 95))
+    ctx.textAlign = 'left'
+  }
+
+  private renderBuildingFire(building: BuildingEntity, tick: number): void {
+    const { ctx, iso } = this
+    const sites = building.templateId.includes('airfield')
+      ? [[-90, 65, 30], [15, 65, 30], [110, 65, 65]]
+      : building.templateId.includes('depot') ? [[-38, 0, 50], [38, 0, 50], [0, 90, 30]]
+      : [[-22, 0, 42], [22, 0, 42]]
+    ctx.save()
+    ctx.globalCompositeOperation = 'screen'
+    for (let i = 0; i < sites.length; i++) {
+      const site = sites[i]!
+      const [x, y0] = this.w2s(building.pos.x + site[0]!, building.pos.y + site[1]!)
+      const y = y0 - site[2]! * iso.scale
+      const radius = Math.max(5, building.radius * iso.scale * .4)
+      const pulse = .8 + Math.sin(tick * .22 + i * 2) * .18
+      const height = radius * (2.8 + pulse)
+      const fire = ctx.createRadialGradient(x, y, 0, x, y - radius, height)
+      fire.addColorStop(0, 'rgba(255,233,150,0.96)')
+      fire.addColorStop(.3, 'rgba(255,140,27,0.87)')
+      fire.addColorStop(.7, 'rgba(204,47,12,0.48)')
+      fire.addColorStop(1, 'rgba(130,20,7,0)')
+      ctx.fillStyle = fire
+      ctx.beginPath()
+      ctx.moveTo(x - radius, y)
+      ctx.bezierCurveTo(x - radius * .7, y - height * .6, x + radius * .4, y - height * .6, x + Math.sin(tick * .13 + i) * radius * .45, y - height)
+      ctx.bezierCurveTo(x + radius, y - height * .7, x + radius * .6, y - height * .2, x + radius, y)
+      ctx.closePath(); ctx.fill()
+    }
+    ctx.restore()
+    const [x, y] = this.w2s(building.pos.x, building.pos.y)
+    ctx.save()
+    ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'center'
+    ctx.strokeStyle = '#17120e'; ctx.lineWidth = 3
+    ctx.strokeText('破壊済', x, y + 17)
+    ctx.fillStyle = '#ffc789'; ctx.fillText('破壊済', x, y + 17)
+    ctx.restore()
   }
 
   private drawIsoBox(wx: number, wy: number, w: number, d: number, h: number, top: string, side: string): void {
@@ -1921,18 +1844,7 @@ export class CanvasRenderer {
         ctx.fill()
         ctx.restore()
 
-        for (let j = 0; j < 4; j++) {
-          const n = Math.abs(signedNoise(ship.pos.x + i * 17, ship.pos.y - j * 9, tick * 0.02 + j))
-          const drift = (tick * 0.8 + j * 23) % 80
-          const px = sx + signedNoise(i, j, 1160) * dim.w * this.iso.scale * 1.5 + drift * 0.10
-          const py = sy - lift - drift * (0.22 + n * 0.18)
-          const r = baseR * (1.4 + n * 2.1)
-          const alpha = Math.max(0, (1 - drift / 80) * damage * (0.16 + n * 0.16))
-          ctx.beginPath()
-          ctx.arc(px, py, r, 0, Math.PI * 2)
-          ctx.fillStyle = j % 3 === 0 ? `rgba(26,24,23,${alpha})` : `rgba(68,60,51,${alpha})`
-          ctx.fill()
-        }
+
       }
     }
   }

@@ -1,3 +1,5 @@
+import { DESIGN_CELL_METERS, normalizedMountHeight } from '../game/data/gun-mount-geometry'
+import { barrelsInterfere, gunClearance, componentGunGeometry } from './gun-clearance'
 import type { HullCatalogEntry } from '../game/data/hull-catalog'
 import type { PlayerShipType, WeaponTemplate } from '../game/data/masterdata'
 import { MAX_WEAPON_SLOTS, type WeaponType } from '../game/simulation/types'
@@ -41,6 +43,7 @@ export interface HLGComponentInstance {
   rotation: HLGRotation
   barrels?: number
   weaponSlot?: number
+  mountHeight?: number
 }
 
 export interface HLGDesign {
@@ -99,7 +102,7 @@ export interface ArmorDefenseOption {
   weightAtFullVp: number
 }
 
-const GRID_CELL_METERS = 1.25
+const GRID_CELL_METERS = DESIGN_CELL_METERS
 const GRID_MARGIN_CELLS = 2
 const HLG_GRID_VERSION = 3
 const FOOTPRINT_SCALE = 2
@@ -273,6 +276,7 @@ export function cloneHLGDesign(design: HLGDesign): HLGDesign {
 
 export function normalizeHLGDesign(hull: HullCatalogEntry, design: HLGDesign): HLGDesign {
   const cloned = cloneHLGDesign(design)
+  cloned.components = cloned.components.map(component => component.mountHeight === undefined ? component : ({ ...component, mountHeight: normalizedMountHeight(component.mountHeight) }))
   cloned.armorPlan = normalizeArmorPlan(cloned.armorPlan)
   if (cloned.gridVersion === HLG_GRID_VERSION) return { ...cloned, components: normalizeWeaponSlots(cloned.components) }
   const spec = hlgGridSpec(hull)
@@ -401,11 +405,16 @@ export function validateHLGDesign(hull: HullCatalogEntry, design: HLGDesign): st
     if (!isPlacementInsideHull(hull, component, part)) warnings.push(`${part.name}が船体外にはみ出しています`)
     if (!isZoneAllowed(hull, component, part)) warnings.push(`${part.name}の配置区画が不正です`)
   }
+  const clearances = placements.map(({ component, part }) => gunClearance(component, part))
   for (let i = 0; i < placements.length; i++) {
     const a = placements[i]!
     const aRect = componentRect(a.component, a.part)
+    const aClearance = clearances[i]!
     for (let j = i + 1; j < placements.length; j++) {
       const b = placements[j]!
+      if (barrelsInterfere(aClearance, clearances[j]!)) {
+        warnings.push(`${a.part.name}と${b.part.name}の砲身が干渉しています（砲台高・向き・位置を変更）`)
+      }
       if (componentsBlockEachOther(a.component, b.component) && rectsOverlap(aRect, componentRect(b.component, b.part))) {
         warnings.push(`${a.part.name}と${b.part.name}が重なっています`)
       }
@@ -414,8 +423,8 @@ export function validateHLGDesign(hull: HullCatalogEntry, design: HLGDesign): st
   return [...new Set(warnings)]
 }
 
-export function canPlaceHLGPart(hull: HullCatalogEntry, design: HLGDesign, part: HLGPartDefinition, cell: HLGCell, rotation: HLGRotation, weaponSlot?: number): boolean {
-  const component = makeComponent(part, cell, rotation, weaponSlot)
+export function canPlaceHLGPart(hull: HullCatalogEntry, design: HLGDesign, part: HLGPartDefinition, cell: HLGCell, rotation: HLGRotation, weaponSlot?: number, mountHeight = 0, barrels = part.barrels): boolean {
+  const component = { ...makeComponent(part, cell, rotation, weaponSlot), mountHeight, barrels }
   const temp = { ...design, components: [...design.components, component] }
   return validateHLGDesign(hull, temp).length === 0 && calculateWeight(hull, temp) <= MAX_WEIGHT[hull.shipType]
 }
@@ -434,6 +443,7 @@ export function hlgDesignToLoadout(hull: HullCatalogEntry, design: HLGDesign): W
         mount,
         firingArc: firingArcForWeapon(part.type!, mount),
         barrels: component.barrels ?? part.barrels,
+        mountHeight: normalizedMountHeight(component.mountHeight),
       }
     })
     return [{
@@ -462,6 +472,9 @@ export function previewWeaponsFromHLG(hull: HullCatalogEntry, design: HLGDesign)
       mount: cellToMount(component.cell.c, component.cell.r, spec),
       instanceId: component.instanceId,
       rotation: component.rotation,
+      mountHeight: normalizedMountHeight(component.mountHeight),
+      gunGeometry: componentGunGeometry(part),
+      designDimensions: { length: spec.lengthM, beam: spec.beamM },
       barrels: component.barrels ?? part.barrels,
       selected: false,
     }]
@@ -632,7 +645,7 @@ function defaultPartsForClass(shipClass: PlayerShipType): Array<{ partId: string
   ]
 }
 
-export function findNearestValidCell(hull: HullCatalogEntry, design: HLGDesign, part: HLGPartDefinition, preferred: HLGCell, rotation: HLGRotation = 0, weaponSlot = nextAvailableWeaponSlot(design.components)): HLGCell | null {
+export function findNearestValidCell(hull: HullCatalogEntry, design: HLGDesign, part: HLGPartDefinition, preferred: HLGCell, rotation: HLGRotation = 0, weaponSlot = nextAvailableWeaponSlot(design.components), mountHeight = 0): HLGCell | null {
   const spec = hlgGridSpec(hull)
   const clamped = { c: clamp(preferred.c, 0, spec.cols - 1), r: clamp(preferred.r, 0, spec.rows - 1) }
   const candidates: HLGCell[] = [clamped]
@@ -644,7 +657,7 @@ export function findNearestValidCell(hull: HullCatalogEntry, design: HLGDesign, 
       }
     }
   }
-  return candidates.find(cell => canPlaceHLGPart(hull, design, part, cell, rotation, weaponSlot)) ?? null
+  return candidates.find(cell => canPlaceHLGPart(hull, design, part, cell, rotation, weaponSlot, mountHeight)) ?? null
 }
 
 function blankDesign(hull: HullCatalogEntry): HLGDesign {
@@ -843,7 +856,7 @@ function normalizeArmorPlan(armorPlan: HLGDesign['armorPlan']): HLGDesign['armor
   }
 }
 
-function hlgHullHalfWidth(ny: number, shipClass: PlayerShipType): number {
+export function hlgHullHalfWidth(ny: number, shipClass: PlayerShipType): number {
   const fine = shipClass === 'destroyer' ? 0.82 : shipClass === 'cruiser' ? 0.92 : 1
   if (ny < -0.84) return Math.max(0.02, (ny + 1) / 0.16 * 0.34 * fine)
   if (ny < -0.48) return (0.34 + (ny + 0.84) / 0.36 * 0.66) * fine

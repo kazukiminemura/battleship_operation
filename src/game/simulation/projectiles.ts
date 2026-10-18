@@ -35,7 +35,7 @@ export function stepProjectiles(state: CombatState, _rng: SeededRandom): CombatS
     const strategy = getWeaponStrategy(proj.weaponType)
     const config = getWeaponConfig(proj.weaponId ?? proj.weaponType, proj.weaponType)
     const owner = entities.get(proj.ownerId)
-    const ownerTeam = owner?.kind === 'ship' ? owner.team : undefined
+    const ownerTeam = owner && (owner.kind === 'ship' || owner.kind === 'aircraft') ? owner.team : undefined
     let hit = false
 
     if (proj.weaponType === 'aa') {
@@ -63,6 +63,24 @@ export function stepProjectiles(state: CombatState, _rng: SeededRandom): CombatS
           hit = true
           break
         }
+      }
+    }
+
+    if (!hit && proj.weaponType === 'aa') {
+      for (const plane of entities.values()) {
+        if (plane.kind !== 'aircraft' || plane.destroyed || plane.team === ownerTeam) continue
+        const impact = segmentCircleImpact(prevProj.pos, proj.pos, plane.pos, config.hitRadius + 22)
+        if (!impact) continue
+        const hp = Math.max(0, plane.hp - proj.damage)
+        entities.set(plane.id, hp === 0
+          ? { ...plane, hp, destroyed: true, phase: 'crashing', crashTick: state.tick, vel: { ...plane.vel, z: -.4 } }
+          : { ...plane, hp })
+        events.push(makeHitEvent(state.tick, proj, plane.id))
+        metrics = recordWeaponHit(metrics, proj.weaponType, proj.damage)
+        if (hp === 0) events.push({ tick: state.tick, type: 'entity.destroyed', targetId: plane.id, position: { ...plane.pos } })
+        proj = { ...proj, destroyed: true }
+        hit = true
+        break
       }
     }
 
