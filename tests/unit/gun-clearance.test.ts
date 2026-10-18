@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import * as THREE from 'three'
 import { HULL_CATALOG } from '../../src/game/data/hull-catalog'
-import { DESIGN_CELL_METERS, normalizedMountHeight } from '../../src/game/data/gun-mount-geometry'
+import { DESIGN_CELL_METERS, gunMountGeometry, normalizedMountHeight } from '../../src/game/data/gun-mount-geometry'
 import { barrelsInterfere, gunClearance } from '../../src/designer/gun-clearance'
 import { canPlaceHLGPart, defaultHLGDesign, designLayoutFromHLG, hlgDesignToLoadout, hlgGridSpec, HLG_PART_BY_ID, makeComponent, normalizeHLGDesign, validateHLGDesign } from '../../src/designer/hlg-system'
 import { makePlacementComponents } from '../../src/designer/design-placement'
@@ -14,10 +14,25 @@ const hull = HULL_CATALOG.find(h => h.templateId === 'hull.battleship.basic')!
 const gun = HLG_PART_BY_ID['part.weapon.weapon.gun.406mm.twin']!
 const spec = hlgGridSpec(hull)
 const front = makeComponent(gun, { c: spec.centerC, r: 70 }, 0, 0)
-const rear = makeComponent(gun, { c: spec.centerC, r: 88 }, 0, 0)
+const rear = makeComponent(gun, { c: spec.centerC, r: 80 }, 0, 0)
 const blank = { ...defaultHLGDesign(hull), components: [] }
 
 describe('height-aware gun clearance', () => {
+  it('keeps standard and oversized gun tubes in proportion to their turret housings', () => {
+    const small = gunMountGeometry('weapon.gun.127mm.twin', 'gun', 3.75, 3.75)
+    const large = gunMountGeometry('weapon.gun.406mm.twin', 'gun', 6.25, 8.75)
+    const hyper = gunMountGeometry('weapon.gun.1000mm.hyper', 'gun', 11.25, 18.75)
+    const aa = gunMountGeometry('weapon.aa.20mm.dd', 'aa', 1.25, 1.25)
+    for (const g of [small, large, hyper, aa]) {
+      expect(g.barrelLength).toBeGreaterThan(0)
+      expect(g.barrelRoot).toBeLessThan(g.bodyLength / 2)
+      expect(g.barrelRoot + g.barrelLength).toBeLessThanOrEqual(g.bodyLength * 1.8)
+    }
+    expect(large.barrelLength).toBeGreaterThan(small.barrelLength)
+    expect(hyper.barrelLength).toBeGreaterThan(large.barrelLength)
+    expect(aa.barrelLength).toBeLessThan(small.barrelLength)
+  })
+
   it('rejects barrel contact beyond a non-overlapping turret footprint and accepts superfiring clearance', () => {
     const design = { ...blank, components: [front] }
     expect(canPlaceHLGPart(hull, blank, gun, front.cell, 0, 0)).toBe(true)
@@ -33,12 +48,12 @@ describe('height-aware gun clearance', () => {
   it('detects crossing barrels, and respects all four placement directions', () => {
     const small = { ...gun, footprint: { w: 1, h: 1 }, barrels: 1 }
     const a = makeComponent(small, { c: 10, r: 20 }, 0, 0)
-    const b = makeComponent(small, { c: 4, r: 14 }, 90, 0)
+    const b = makeComponent(small, { c: 9, r: 19 }, 90, 0)
     const ca = gunClearance(a, small), cb = gunClearance(b, small)
     expect(barrelsInterfere({ body: null, barrels: ca.barrels }, { body: null, barrels: cb.barrels })).toBe(true)
     expect(barrelsInterfere(gunClearance({ ...a, mountHeight: 4 }, small), cb)).toBe(false)
     for (const rotation of [0, 90, 180, 270] as const) {
-      const delta = rotation === 0 ? { c: 0, r: -10 } : rotation === 90 ? { c: 10, r: 0 } : rotation === 180 ? { c: 0, r: 10 } : { c: -10, r: 0 }
+      const delta = rotation === 0 ? { c: 0, r: -1 } : rotation === 90 ? { c: 1, r: 0 } : rotation === 180 ? { c: 0, r: 1 } : { c: -1, r: 0 }
       const target = makeComponent(small, { c: a.cell.c + delta.c, r: a.cell.r + delta.r }, rotation, 0)
       expect(barrelsInterfere(gunClearance({ ...a, rotation }, small), gunClearance(target, small))).toBe(true)
     }
@@ -79,6 +94,8 @@ describe('height-aware gun clearance', () => {
     const g = config.weapons[1]!.gunGeometry!
     expect(-barrel.position.z).toBeCloseTo((g.barrelRoot + g.barrelLength / 2) * lengthUnits)
     expect(barrel.position.y).toBeCloseTo(g.barrelHeight * lengthUnits)
-    expect(g.barrelLength).toBeCloseTo(.406 * 45)
+    // The full L/45 bore is not an additional 18 m outside a compact turret.
+    expect(g.barrelLength).toBeLessThan(.406 * 45 * .8)
+    expect(g.barrelRoot + g.barrelLength).toBeLessThanOrEqual(g.bodyLength * 1.8)
   })
 })

@@ -16,8 +16,12 @@ export function gunMountGeometry(weaponId: string, type: WeaponType, length: num
   const profile = GUN_PROFILES[weaponId]
   const caliber = profile?.caliber ?? (Number(weaponId.match(/(\d+)mm/)?.[1]) || (type === 'aa' ? 40 : 127))
   const bodyHeight = Math.max(1.3, caliber * .0075)
+  const tubeLength = caliber / 1000 * (profile?.barrelLength ?? 40)
+  // The bore-length profile includes the portion inside the turret. Draw only the
+  // forward tube, and bound its projection for the compact designer housings.
+  const visibleLength = Math.max(.45, Math.min(tubeLength * .62, length * 1.35))
   return { bodyLength: length, bodyWidth: width, bodyHeight,
-    barrelRoot: length * .2, barrelLength: Math.max(1.2, caliber / 1000 * (profile?.barrelLength ?? 40)),
+    barrelRoot: length * .38, barrelLength: visibleLength,
     barrelHeight: bodyHeight * .7, barrelRadius: caliber / 2000 + .04, barrelSpacing: width * .18,
   }
 }
