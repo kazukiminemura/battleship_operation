@@ -1,19 +1,11 @@
+import { PartElevation } from './PartDrawing'
 import { normalizedMountHeight, DESIGN_CELL_METERS } from '../game/data/gun-mount-geometry'
 import { componentGunGeometry } from './gun-clearance'
 import type { HullCatalogEntry } from '../game/data/hull-catalog'
-import { HLG_PART_BY_ID, hlgGridSpec, rotateFootprint, type HLGDesign, type HLGPartDefinition } from './hlg-system'
+import { HLG_PART_BY_ID, hlgGridSpec, rotateFootprint, type HLGDesign } from './hlg-system'
 import { designerLayerForPart } from './design-placement'
 
-export function PartSymbol({ part }: { part: HLGPartDefinition }) {
-  return <svg className="sd-part-symbol" viewBox="0 0 72 48" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.4">
-    {part.category === 'weapon' ? <><path d="M16 37h40l-5-20H23zM22 17v-4h28v4" />{Array.from({ length: Math.min(4, part.barrels ?? 2) }, (_, i) => <path key={i} d={`M${29 + i * 6} 15V3`} />)}</>
-      : part.category === 'bridge' ? <><path d="M16 42V30h8V19h7V10h11v9h7v11h7v12zM36 10V2M24 24h24M16 34h40M31 14h11" /></>
-        : part.category === 'funnel' ? <><path d="M22 40V13h29v27M19 40h35M20 13V8h33v5zM25 6l-4-3M36 6V1M47 6l4-3" /></>
-          : part.category === 'boiler' || part.category === 'turbine' ? <><rect x="12" y="12" width="48" height="27" rx="5" /><path d="M20 13v25M29 13v25M38 13v25M47 13v25M60 25h10M2 25h10" /></>
-            : <><path d="M16 40V18h40v22zM24 18V9h24v9M24 27h24M36 9V1M26 3h20" /></>}
-    <path d="M6 45h60" opacity=".4" />
-  </svg>
-}
+export { PartSymbol } from './PartDrawing'
 
 /** A longitudinal projection of the same component cells edited in the plan. */
 export function ShipBlueprint({ hull, design, selectedId, onSelect }: {
@@ -25,7 +17,6 @@ export function ShipBlueprint({ hull, design, selectedId, onSelect }: {
   return <section className="sd-blueprint" aria-label="艦船側面図">
     <div className="sd-drawing-caption"><span>SIDE ELEVATION / 側面図</span><span>← 艦首　　艦尾 →</span></div>
     <svg viewBox="0 0 1000 175" role="group" aria-label={`${hull.name}の側面配置図`}>
-      <defs><pattern id="sd-engine-hatch" width="6" height="6" patternUnits="userSpaceOnUse"><path d="M0 6L6 0" stroke="#d16f61" strokeWidth=".8" /></pattern></defs>
       <path d={`M${bow} 113 Q${bow + 18} 145 ${bow + 65} 146 L${stern - 16} 146 L${stern} 118 L${stern} 106 L${bow} 106Z`} fill="rgba(160,210,217,.04)" stroke="#b3c8c6" strokeWidth="1.2" />
       <path d={`M${bow + 5} 119 H${stern - 5}M${bow + 50} 139H${stern - 20}`} stroke="#638c90" strokeDasharray="5 4" fill="none" />
       {design.components.map(component => {
@@ -45,10 +36,10 @@ export function ShipBlueprint({ hull, design, selectedId, onSelect }: {
           stroke={selected ? '#fff6b2' : internal ? '#cd8375' : '#d7bf62'} strokeWidth={selected ? 2.2 : 1}>
           <title>{`${part.name} / ${part.weight}t / 砲台高 ${mountHeight}m`}</title>
           {mountHeight > 0 && <><rect x={x - width * .3} y={106 - mountHeight * 5} width={width * .6} height={mountHeight * 5} fill="rgba(100,140,145,.3)" /><text x={x} y={y - 4} textAnchor="middle" stroke="none" fill="currentColor" fontSize="9">+{mountHeight}m</text></>}
-          <rect x={x - width / 2} y={y} width={width} height={height} fill={internal ? 'url(#sd-engine-hatch)' : selected ? 'rgba(234,198,95,.2)' : 'rgba(5,27,33,.75)'} />
-          {geometry && <path d={`M${x + direction * geometry.barrelRoot * units} ${106 - (mountHeight + geometry.barrelHeight) * 5}h${direction * geometry.barrelLength * units}`} strokeWidth={Math.max(1.2, geometry.barrelRadius * 10)} />}
-          {part.category === 'bridge' && <path d={`M${x - width * .6} ${y + height * .35}h${width * 1.2}M${x} ${y}v-12M${x - 9} ${y - 8}h18`} />}
-          {part.category === 'funnel' && <path d={`M${x - width / 2 - 2} ${y + 6}h${width + 4}`} />}
+          <g transform={`translate(${x - width / 2} ${y}) scale(${width / 100} ${height / 100})`} className="sd-part-elevation">
+            <g transform={component.rotation === 180 ? 'translate(100 0) scale(-1 1)' : undefined}><PartElevation part={part} /></g>
+          </g>
+          {geometry && <path d={`M${x + direction * geometry.barrelRoot * units} ${106 - (mountHeight + geometry.barrelHeight) * 5}h${direction * geometry.barrelLength * units}`} strokeWidth={Math.max(1.2, geometry.barrelRadius * 10)} strokeLinecap="round" stroke="#cbd0b9" />}
         </g>
       })}
       <path d={`M${bow} 156v10m0-5H${stern}m0-5v10`} stroke="#638c90" fill="none" />

@@ -1,3 +1,4 @@
+import { PartPlanDrawing } from './PartDrawing'
 import { GUN_MOUNT_HEIGHTS, isGunMount, normalizedMountHeight } from '../game/data/gun-mount-geometry'
 import { barrelsInterfere, gunClearance } from './gun-clearance'
 import { GunBarrelOverlay } from './GunBarrelOverlay'
@@ -1017,7 +1018,7 @@ function HLGGrid({
                   gridRow: `${Math.floor(rect.left) + 1} / span ${Math.ceil(footprint.w)}`,
                 }}
               >
-                <span>{shortPartName(selectedPart)}</span>
+                <PartPlanDrawing part={selectedPart} /><span className="sd-plan-part-label">{shortPartName(selectedPart)}</span>
               </div>
               {mirrorPreview && (
                 <div
@@ -1027,7 +1028,7 @@ function HLGGrid({
                     gridRow: `${Math.floor(mirrorPreview.rect.left) + 1} / span ${Math.ceil(footprint.w)}`,
                   }}
                 >
-                  <span>対称</span>
+                  <PartPlanDrawing part={selectedPart} /><span className="sd-plan-part-label">対称</span>
                 </div>
               )}
             </>
@@ -1057,8 +1058,10 @@ function HLGGrid({
                 onSelectComponent(component.instanceId)
               }}
               type="button"
+              aria-label={`${part.name}、砲台高${normalizedMountHeight(component.mountHeight)}m、${component.rotation}度`}
+              title={`${part.name} / ${component.rotation}°${isGunMount(part.type) ? ` / 砲台高 ${normalizedMountHeight(component.mountHeight)}m` : ''}`}
             >
-              <span>{shortPartName(part)}</span>
+              <PartPlanDrawing part={part} rotation={component.rotation} barrels={component.barrels} /><span className="sd-plan-part-label">{shortPartName(part)}</span>
             </button>
           )
         })}
@@ -1076,7 +1079,7 @@ function HLGGrid({
                 gridRow: `${Math.floor(rect.left) + 1} / span ${Math.ceil(footprint.w)}`,
               }}
             >
-              <span>コピー</span>
+              <PartPlanDrawing part={part} rotation={source.rotation} barrels={source.barrels} /><span className="sd-plan-part-label">コピー</span>
             </div>
           )
         })()}
