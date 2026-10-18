@@ -6,7 +6,7 @@
   --sd-text:     #8fc8a0;
   --sd-dim:      #3a5840;
   --sd-accent:   #16a34a;
-  --sd-header-h: 34px;
+  --sd-header-h: 56px;
   --sd-panel-left-w: 190px;
   --sd-panel-right-w: 230px;
   --sd-browser-center-offset: calc((var(--sd-panel-right-w) - var(--sd-panel-left-w)) / 2);

@@ -71,7 +71,7 @@ function main(): void {
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 34 // Keep in sync with ShipDesigner.css.
   })()
   const audioPanelTop = (mode: GameMode): number =>
-    mode === 'combat' ? 146 : mode === 'designer' ? designerHeaderPx + 12 : 12
+    mode === 'combat' ? 146 : mode === 'designer' ? designerHeaderPx + 6 : 12
   // Media playback must be unlocked in a real user gesture, including after autoplay rejection.
   const unlockAudio = (): void => {
     sound.unlock()

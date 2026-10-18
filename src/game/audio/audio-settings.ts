@@ -26,10 +26,10 @@ export function createAudioSettings(callbacks: AudioSettingsCallbacks): {
 
   const element = document.createElement('details')
   element.dataset.testid = 'audio-settings'
-  element.style.cssText = 'position:fixed;top:12px;right:12px;z-index:110;color:#edf6ff;background:#102232ed;border:1px solid #63839a;border-radius:8px;padding:9px 12px;font:14px sans-serif;max-width:calc(100vw - 24px);box-sizing:border-box'
+  element.style.cssText = 'position:fixed;top:12px;right:12px;z-index:110;color:#e6eff6;background:#111e2df5;border:1px solid #30485d;border-radius:10px;padding:10px 14px;font:13px "Segoe UI",sans-serif;box-shadow:0 8px 32px #0005;max-width:calc(100vw - 24px);box-sizing:border-box'
   const summary = document.createElement('summary')
   summary.textContent = '音設定'
-  summary.style.cursor = 'pointer'
+  summary.style.cssText = 'cursor:pointer;font-weight:600;letter-spacing:.03em'
   element.append(summary)
   const panel = document.createElement('div')
   panel.style.cssText = 'display:grid;gap:12px;margin-top:14px;width:220px;max-width:100%'

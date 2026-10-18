@@ -2,6 +2,7 @@ import type { CombatState, Metrics } from '../simulation/types'
 import { displayWeaponName } from '../data/weapon-names'
 import { drawAccessKeyHint, isAccessKey } from './accesskeys'
 import { roundRect } from '../rendering/canvas-utils'
+import { UI_THEME, drawScreenBackground, drawScreenPanel } from './ui-theme'
 
 export type ResultAction = 'next' | 'retry' | 'title'
 
@@ -104,33 +105,18 @@ export class ResultsScreen {
     this.ensureSelected(actions)
 
     // Background
-    const bg = ctx.createLinearGradient(0, 0, 0, H)
-    bg.addColorStop(0, '#020d1a')
-    bg.addColorStop(1, '#051e38')
-    ctx.fillStyle = bg
-    ctx.fillRect(0, 0, W, H)
-
-    ctx.strokeStyle = 'rgba(30,80,130,0.12)'
-    ctx.lineWidth = 1
-    for (let y = 60; y < H; y += 40) {
-      ctx.beginPath()
-      for (let x = 0; x <= W; x += 8) {
-        const wy = y + Math.sin(x * 0.018) * 4
-        x === 0 ? ctx.moveTo(x, wy) : ctx.lineTo(x, wy)
-      }
-      ctx.stroke()
-    }
+    drawScreenBackground(ctx, W, H)
 
     // Result header
     const headline = allClear ? 'ALL STAGES CLEAR' : completed ? 'MISSION COMPLETE' : 'MISSION FAILED'
     const headColor = allClear ? '#fbbf24' : completed ? '#22c55e' : '#ef4444'
     ctx.textAlign = 'center'
     ctx.fillStyle = headColor
-    ctx.font = `bold ${Math.round(H * 0.072)}px monospace`
+    ctx.font = `bold ${Math.round(H * 0.064)}px ${UI_THEME.font}`
     ctx.fillText(headline, cx, H * 0.115)
 
-    ctx.fillStyle = '#475569'
-    ctx.font = `${Math.round(H * 0.028)}px sans-serif`
+    ctx.fillStyle = UI_THEME.muted
+    ctx.font = `${Math.round(H * 0.028)}px ${UI_THEME.font}`
     ctx.fillText(`STAGE ${state.stage}  ·  ${state.stageName}`, cx, H * 0.17)
 
     // Divider
@@ -152,18 +138,22 @@ export class ResultsScreen {
     this.drawWeaponPanel(ctx, rightX, statsY, colW, statsH, m, H)
 
     // Action buttons
+    ctx.textAlign = 'center'
+    ctx.fillStyle = UI_THEME.muted
+    ctx.font = `${Math.round(H * .022)}px ${UI_THEME.font}`
+    ctx.fillText(allClear ? '全作戦終了' : '次のステージ・リトライは、艦船整備を経て出撃します', cx, H * .905)
     this.regions = []
     const btnY = statsY + statsH + H * 0.048
     const btnH = H * 0.075
 
     if (completed && !allClear) {
-      this.drawBtn(ctx, 'next',  cx - W * 0.24, btnY, W * 0.20, btnH, H, '次のステージへ', headColor, showAccessKeys)
-      this.drawBtn(ctx, 'title', cx + W * 0.04,  btnY, W * 0.20, btnH, H, 'タイトルへ',     '#475569', showAccessKeys)
+      this.drawBtn(ctx, 'next',  cx - W * 0.24, btnY, W * 0.20, btnH, H, '次のステージへ', showAccessKeys)
+      this.drawBtn(ctx, 'title', cx + W * 0.04,  btnY, W * 0.20, btnH, H, 'タイトルへ',     showAccessKeys)
     } else if (allClear) {
-      this.drawBtn(ctx, 'title', cx - W * 0.10, btnY, W * 0.20, btnH, H, 'タイトルへ', '#fbbf24', showAccessKeys)
+      this.drawBtn(ctx, 'title', cx - W * 0.10, btnY, W * 0.20, btnH, H, 'タイトルへ', showAccessKeys)
     } else {
-      this.drawBtn(ctx, 'retry', cx - W * 0.24, btnY, W * 0.20, btnH, H, 'リトライ',  headColor, showAccessKeys)
-      this.drawBtn(ctx, 'title', cx + W * 0.04,  btnY, W * 0.20, btnH, H, 'タイトルへ', '#475569', showAccessKeys)
+      this.drawBtn(ctx, 'retry', cx - W * 0.24, btnY, W * 0.20, btnH, H, 'リトライ', showAccessKeys)
+      this.drawBtn(ctx, 'title', cx + W * 0.04,  btnY, W * 0.20, btnH, H, 'タイトルへ', showAccessKeys)
     }
   }
 
@@ -172,17 +162,11 @@ export class ResultsScreen {
     x: number, y: number, w: number, h: number,
     m: Metrics, H: number,
   ): void {
-    ctx.fillStyle = 'rgba(10,24,46,0.85)'
-    roundRect(ctx, x, y, w, h, 12)
-    ctx.fill()
-    ctx.strokeStyle = '#1e3a5f'
-    ctx.lineWidth = 1
-    roundRect(ctx, x, y, w, h, 12)
-    ctx.stroke()
+    drawScreenPanel(ctx, x, y, w, h)
 
     ctx.textAlign = 'left'
-    ctx.fillStyle = '#475569'
-    ctx.font = `${Math.round(H * 0.028)}px sans-serif`
+    ctx.fillStyle = UI_THEME.muted
+    ctx.font = `${Math.round(H * 0.028)}px ${UI_THEME.font}`
     ctx.fillText('戦果サマリー', x + w * 0.08, y + h * 0.115)
     divider(ctx, x + w * 0.06, y + h * 0.165, w * 0.88)
 
@@ -199,10 +183,10 @@ export class ResultsScreen {
 
     const rows: [string, string, string][] = [
       ['撃破数',   `${m.enemiesDestroyed} 隻`,  '#22c55e'],
-      ['作戦時間', duration,                      '#7dd3fc'],
+      ['作戦時間', duration,                      UI_THEME.text],
       ['被弾ダメージ', `${Math.round(m.playerDamageTaken)}`, '#f97316'],
       ['弾薬消費', `${m.playerAmmoSpent} 発`,    '#a78bfa'],
-      ['総命中率', `${hitRate}%`,                '#38bdf8'],
+      ['総命中率', `${hitRate}%`,                UI_THEME.cyan],
     ]
 
     const rowH = h * 0.135
@@ -210,8 +194,8 @@ export class ResultsScreen {
       const [label, value, color] = rows[i]!
       const ry = y + h * 0.235 + i * rowH
       ctx.textAlign = 'left'
-      ctx.fillStyle = '#64748b'
-      ctx.font = `${Math.round(H * 0.026)}px sans-serif`
+      ctx.fillStyle = UI_THEME.muted
+      ctx.font = `${Math.round(H * 0.026)}px ${UI_THEME.font}`
       ctx.fillText(label, x + w * 0.08, ry)
       ctx.textAlign = 'right'
       ctx.fillStyle = color
@@ -225,38 +209,32 @@ export class ResultsScreen {
     x: number, y: number, w: number, h: number,
     m: Metrics, H: number,
   ): void {
-    ctx.fillStyle = 'rgba(10,24,46,0.85)'
-    roundRect(ctx, x, y, w, h, 12)
-    ctx.fill()
-    ctx.strokeStyle = '#1e3a5f'
-    ctx.lineWidth = 1
-    roundRect(ctx, x, y, w, h, 12)
-    ctx.stroke()
+    drawScreenPanel(ctx, x, y, w, h)
 
     ctx.textAlign = 'left'
-    ctx.fillStyle = '#475569'
-    ctx.font = `${Math.round(H * 0.028)}px sans-serif`
+    ctx.fillStyle = UI_THEME.muted
+    ctx.font = `${Math.round(H * 0.028)}px ${UI_THEME.font}`
     ctx.fillText('兵装別戦果', x + w * 0.08, y + h * 0.115)
     divider(ctx, x + w * 0.06, y + h * 0.165, w * 0.88)
 
     const weaponIds = Object.keys(m.shotCountByWeapon)
     if (weaponIds.length === 0) {
       ctx.textAlign = 'center'
-      ctx.fillStyle = '#334155'
-      ctx.font = `${Math.round(H * 0.026)}px sans-serif`
+      ctx.fillStyle = UI_THEME.muted
+      ctx.font = `${Math.round(H * 0.026)}px ${UI_THEME.font}`
       ctx.fillText('データなし', x + w / 2, y + h * 0.5)
       return
     }
 
     const maxRows = Math.min(weaponIds.length, 5)
     const rowH = h * (0.76 / maxRows)
-    const colShots = x + w * 0.52
-    const colHits  = x + w * 0.72
-    const colDmg   = x + w * 0.92
+    const colShots = x + w * 0.51
+    const colHits  = x + w * 0.69
+    const colDmg   = x + w * 0.86
 
     ctx.textAlign = 'center'
-    ctx.fillStyle = '#334155'
-    ctx.font = `${Math.round(H * 0.022)}px sans-serif`
+    ctx.fillStyle = UI_THEME.muted
+    ctx.font = `${Math.round(H * 0.022)}px ${UI_THEME.font}`
     ctx.fillText('発数', colShots, y + h * 0.225)
     ctx.fillText('命中', colHits,  y + h * 0.225)
     ctx.fillText('ダメージ', colDmg, y + h * 0.225)
@@ -271,17 +249,17 @@ export class ResultsScreen {
       const ry = y + h * 0.295 + i * rowH
 
       ctx.textAlign = 'left'
-      ctx.fillStyle = '#64748b'
-      ctx.font = `${Math.round(H * 0.026)}px sans-serif`
-      ctx.fillText(fitText(ctx, label, w * 0.40), x + w * 0.08, ry)
+      ctx.fillStyle = UI_THEME.muted
+      ctx.font = `${Math.round(H * 0.026)}px ${UI_THEME.font}`
+      ctx.fillText(fitText(ctx, label, w * 0.34), x + w * 0.08, ry)
 
       ctx.textAlign = 'center'
       ctx.fillStyle = '#94a3b8'
       ctx.font = `${Math.round(H * 0.026)}px monospace`
       ctx.fillText(String(shots),  colShots, ry)
-      ctx.fillStyle = hits > 0 ? '#38bdf8' : '#334155'
+      ctx.fillStyle = hits > 0 ? UI_THEME.cyan : UI_THEME.muted
       ctx.fillText(String(hits),   colHits,  ry)
-      ctx.fillStyle = damage > 0 ? '#f97316' : '#334155'
+      ctx.fillStyle = damage > 0 ? '#f97316' : UI_THEME.muted
       ctx.fillText(String(damage), colDmg,   ry)
     }
   }
@@ -292,20 +270,20 @@ export class ResultsScreen {
     x: number, y: number, w: number, h: number,
     H: number,
     label: string,
-    accentColor: string,
     showAccessKeys: boolean,
   ): void {
     const active = this.hovered === id || this.selected === id
-    ctx.fillStyle = active ? `${accentColor}30` : 'rgba(10,24,46,0.88)'
+    const primary = id !== 'title'
+    ctx.fillStyle = primary ? (active ? '#ffe0a2' : UI_THEME.amber) : UI_THEME.panel
     roundRect(ctx, x, y, w, h, 10)
     ctx.fill()
-    ctx.strokeStyle = active ? accentColor : '#1e3a5f'
+    ctx.strokeStyle = active ? UI_THEME.cyan : UI_THEME.border
     ctx.lineWidth = active ? 2 : 1
     roundRect(ctx, x, y, w, h, 10)
     ctx.stroke()
-    ctx.fillStyle = active ? '#ffffff' : accentColor
+    ctx.fillStyle = primary ? UI_THEME.background : UI_THEME.text
     ctx.textAlign = 'center'
-    ctx.font = `bold ${Math.round(H * 0.030)}px sans-serif`
+    ctx.font = `bold ${Math.round(H * 0.030)}px ${UI_THEME.font}`
     ctx.fillText(label, x + w / 2, y + h * 0.66)
     if (showAccessKeys) drawAccessKeyHint(ctx, accessKeyForAction(id), x + 8, y + 8)
     this.regions.push({ id, x, y, w, h })

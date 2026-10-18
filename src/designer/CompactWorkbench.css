@@ -1,15 +1,15 @@
 /* One workspace with a single scrolling inspector. */
 .sd-root--design { max-height: 100dvh; min-height: 0; }
-.sd-root--design .sd-header { min-height: 34px; padding: 4px 8px; gap: 4px; }
-.sd-root--design .sd-header-title { font-size: 11px; letter-spacing: 0; }
-.sd-root--design .sd-workshop-nav { padding: 4px 8px; }
-.sd-root--design .sd-workshop-nav button { padding: 4px 10px; font-size: 11px; }
-.sd-root--design .sd-workbench { display: grid; grid-template-columns: minmax(0, 1fr) clamp(240px, 25vw, 310px); grid-template-rows: minmax(0, 1fr); grid-template-areas: 'drawing inspector'; flex: 1 1 0; min-height: 0; overflow: hidden; }
-.sd-root--design .sd-center { display: flex; flex-direction: column; width: auto; min-height: 0; padding: 6px 12px; overflow: hidden; }
+.sd-root--design .sd-header { min-height: var(--sd-header-h); padding: 8px 16px; gap: 4px; }
+.sd-root--design .sd-header-title { font-size: 15px; letter-spacing: .06em; }
+.sd-root--design .sd-workshop-nav { padding: 6px 16px; }
+.sd-root--design .sd-workshop-nav button { padding: 7px 14px; font-size: 12px; }
+.sd-root--design .sd-workbench { display: grid; grid-template-columns: minmax(0, 1fr) clamp(280px, 26vw, 360px); grid-template-rows: minmax(0, 1fr); grid-template-areas: 'drawing inspector'; flex: 1 1 0; min-height: 0; overflow: hidden; }
+.sd-root--design .sd-center { display: flex; flex-direction: column; width: auto; min-height: 0; padding: 10px 16px; overflow: hidden; }
 .sd-root--design .sd-hull-tabs { margin: 0 0 3px; overflow-x: auto; gap: 4px; }
-.sd-root--design .sd-hull-tab { padding: 3px 7px; font-size: 10px; white-space: nowrap; }
-.sd-root--design .sd-drawing-toolbar { gap: 4px 8px; padding: 0 0 5px; font-size: 10px; }
-.sd-root--design .sd-drawing-toolbar button { padding: 3px 6px; font-size: 10px; }
+.sd-root--design .sd-hull-tab { padding: 5px 10px; font-size: 12px; white-space: nowrap; }
+.sd-root--design .sd-drawing-toolbar { gap: 4px 8px; padding: 0 0 8px; font-size: 12px; }
+.sd-root--design .sd-drawing-toolbar button { padding: 6px 10px; font-size: 12px; }
 .sd-selection-toolbar { display: flex; flex: 0 0 auto; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 5px 10px; padding: 6px 8px; border: 1px solid #526f79; background: #092630; color: #afc5c8; font-size: 11px; }
 .sd-selection-toolbar strong { color: #e8d67c; font-size: 11px; }
 .sd-selection-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
@@ -19,34 +19,34 @@
 .sd-root--design .sd-hlg-stage { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto minmax(0, 1fr); flex: 1 1 0; width: 100%; min-height: 0; margin: 4px 0 0; align-items: stretch; }
 .sd-root--design .sd-blueprint { display: flex; flex-direction: column; height: 100%; min-height: 0; }
 .sd-root--design .sd-blueprint > svg { flex: 1 1 0; height: 0; min-height: 0; width: 100%; overflow: hidden; }
-.sd-root--design .sd-drawing-caption { flex: 0 0 auto; padding: 3px 2px; font-size: 9px; }
+.sd-root--design .sd-drawing-caption { flex: 0 0 auto; padding: 5px 2px; font-size: 11px; }
 .sd-plan-viewport { container-type: size; display: flex; align-items: center; justify-content: center; width: 100%; min-height: 0; min-width: 0; padding: 5px 14px 14px; box-sizing: border-box; }
 .sd-root--design .sd-hlg-grid-wrap { flex: 0 1 auto; max-width: 100%; min-width: 0; min-height: 0; }
 .sd-root--design .sd-3d-preview { display: flex; flex-direction: column; min-height: 0; height: 100%; padding: 0; }
 .sd-root--design .sd-3d-preview-header { padding: 3px 6px; flex: 0 0 auto; }
-.sd-root--design .sd-3d-preview-title { font-size: 10px; }
+.sd-root--design .sd-3d-preview-title { font-size: 12px; }
 .sd-root--design .sd-3d-preview-subtitle { display: none; }
 .sd-root--design .sd-3d-preview-stage { flex: 1 1 0; height: 0; min-height: 0; }
-.sd-root--design .sd-hull-hint { margin-top: 3px; font-size: 9px; }
-.sd-inspector { grid-area: inspector; display: flex; flex-direction: column; min-height: 0; min-width: 0; background: #15232b; border-left: 2px solid #627377; overflow: hidden; }
-.sd-inspector-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3px; flex: 0 0 auto; padding: 5px; background: #0d1b23; }
-.sd-inspector-tabs button { padding: 7px 2px; border: 1px solid #526c73; border-radius: 3px; background: #203842; color: #cbd7cd; font-size: 11px; cursor: pointer; }
-.sd-inspector-tabs button[aria-pressed='true'] { color: #ffe5a0; background: #544b32; border-color: #c6ad68; }
-.sd-inspector-content { flex: 1 1 0; min-height: 0; overflow: auto; padding: 8px; scrollbar-width: thin; scrollbar-color: #59757b #10232c; }
+.sd-root--design .sd-hull-hint { margin-top: 6px; font-size: 11px; }
+.sd-inspector { grid-area: inspector; display: flex; flex-direction: column; min-height: 0; min-width: 0; background: #111e2d; border-left: 1px solid #2b4154; overflow: hidden; }
+.sd-inspector-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3px; flex: 0 0 auto; padding: 10px; background: #0b1523; }
+.sd-inspector-tabs button { padding: 10px 2px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: #a0b3c5; font-size: 13px; cursor: pointer; }
+.sd-inspector-tabs button[aria-pressed='true'] { color: #8be9f5; background: #163247; border-color: #368197; }
+.sd-inspector-content { flex: 1 1 0; min-height: 0; overflow: auto; padding: 12px; scrollbar-width: thin; scrollbar-color: #59757b #10232c; }
 .sd-parts-pane { display: flex; flex-direction: column; gap: 6px; }
-.sd-part-search { display: flex; flex-direction: column; gap: 4px; color: #bed1cf; font-size: 10px; }
-.sd-part-search input { width: 100%; box-sizing: border-box; padding: 7px 8px; border: 1px solid #5a777f; border-radius: 3px; background: #0b1b24; color: #e1e7d6; font-size: 12px; }
+.sd-part-search { display: flex; flex-direction: column; gap: 4px; color: #bed1cf; font-size: 12px; }
+.sd-part-search input { width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid #2b4154; border-radius: 8px; background: #091421; color: #e6eff6; font-size: 14px; }
 .sd-root--design .sd-hlg-filter { margin: 0; gap: 3px; }
 .sd-root--design .sd-hlg-part-list { overflow: visible; flex: none; max-height: none; }
-.sd-root--design .sd-hlg-part { min-height: 58px; padding: 5px 5px 5px 49px; margin-bottom: 4px; }
+.sd-root--design .sd-hlg-part { min-height: 76px; padding: 10px 10px 10px 60px; margin-bottom: 4px; }
 .sd-root--design .sd-hlg-part > .sd-part-symbol { width: 38px; height: 36px; left: 5px; top: 11px; }
-.sd-root--design .sd-hlg-part-name { font-size: 11px; }
-.sd-root--design .sd-hlg-part-meta { font-size: 9px; line-height: 1.4; }
+.sd-root--design .sd-hlg-part-name { font-size: 14px; }
+.sd-root--design .sd-hlg-part-meta { font-size: 12px; line-height: 1.5; }
 .sd-root--design .sd-equipment-dock { padding: 0; border: 0; overflow: visible; max-height: none; width: auto; }
 .sd-root--design .sd-equipment-heading { font-size: 10px; gap: 4px; }
 .sd-root--design .sd-loadout-slot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .sd-root--design .sd-loadout-groups { grid-template-columns: minmax(0, 1fr); }
-.sd-design-status { display: flex; flex: 0 0 auto; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 10px; padding: 5px 8px; background: #0a1820; border-top: 1px solid #506b71; color: #b9ccc6; font-size: 10px; }
+.sd-design-status { display: flex; flex: 0 0 auto; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 10px; padding: 5px 8px; background: #0a1820; border-top: 1px solid #506b71; color: #b9ccc6; font-size: 12px; }
 .sd-design-status button { border: 1px solid #526e70; border-radius: 3px; background: #18342f; padding: 3px 8px; color: #aee1ab; font: inherit; cursor: pointer; }
 .sd-design-status .has-warning { color: #ffbf8c; background: #49382a; border-color: #af815b; }
 @media (max-width: 760px) {
@@ -63,7 +63,7 @@
  .sd-inspector-content { padding: 5px 7px; }
  .sd-selection-toolbar { padding: 4px; }
  .sd-selection-toolbar > span { display: none; }
- .sd-selection-toolbar button, .sd-selection-toolbar select { padding: 3px 5px; font-size: 10px; }
+ .sd-selection-toolbar button, .sd-selection-toolbar select { padding: 3px 5px; font-size: 12px; }
  .sd-root--design .sd-hull-hint { display: none; }
  .sd-design-status { padding: 3px 5px; font-size: 9px; }
 }
@@ -92,3 +92,69 @@
 .sd-root--design .sd-blueprint-part[data-selected='true'] .sd-part-elevation { color: #fff0a1; }
 .sd-root--design .sd-fitting-outline { stroke-width: .95px; }
 .sd-root--design .sd-drawing-detail, .sd-root--design .sd-drawing-detail * { stroke-width: .4px; opacity: .8; }
+.sd-gun-height { display: grid; gap: 2px; font-size: 12px; }
+.sd-gun-height output { color: #fff0a1; font-weight: bold; }
+.sd-gun-height-track, .sd-gun-height-track label { display: flex; align-items: center; gap: 5px; }
+.sd-gun-height-track input[type='range'] { width: 90px; min-height: 24px; margin: 0; accent-color: #e6ce74; cursor: pointer; }
+.sd-gun-height-track button { min-width: 32px; min-height: 32px; }
+.sd-gun-height-track button:disabled { opacity: .35; cursor: default; }
+.sd-gun-height-track input:focus-visible { outline: 2px solid #fff0a1; outline-offset: 2px; }
+
+/* Tactical workstation: readable controls around a quiet, continuous drawing area. */
+.sd-root .sd-save-slots { background: #091421; border-color: #2b4154; padding: 3px; gap: 3px; }
+.sd-root .sd-save-slot { width: 28px; height: 28px; color: #a0b3c5; background: transparent; }
+.sd-root .sd-save-slot--active { background: #16384a; color: #9bf3ff; border-color: #368197; }
+.sd-root--design .sd-workshop-nav { background: #0d1828; border-bottom: 1px solid #2b4154; gap: 6px; padding-right: 112px; }
+.sd-root--design .sd-workshop-nav button { min-height: 32px; }
+.sd-root--design .sd-center { background-color: #0b1929; background-image: linear-gradient(#6cb0ce08 1px, transparent 1px), linear-gradient(90deg, #6cb0ce08 1px, transparent 1px); background-size: 32px 32px; }
+.sd-root--design .sd-hull-tab { background: transparent; border-color: #2b4154; color: #a0b3c5; border-radius: 5px; }
+.sd-root--design .sd-hull-tab--active { background: #163247; border-color: #368197; color: #b1f1fc; }
+.sd-root--design .sd-drawing-toolbar button { min-height: 32px; }
+.sd-root--design .sd-drawing-toolbar label { color: #a0b3c5; }
+.sd-root--design .sd-selection-toolbar { min-height: 64px; padding: 8px 12px; border: 1px solid #2b4154; border-left: 3px solid #58c6dc; border-radius: 8px; background: #112337; color: #a0b3c5; font-size: 12px; }
+.sd-root--design .sd-selection-toolbar strong { color: #e6eff6; font-size: 13px; }
+.sd-root--design .sd-selection-toolbar button { min-height: 32px; background: #192f43; border-color: #345069; border-radius: 5px; font-size: 12px; }
+.sd-root--design .sd-selection-toolbar button:hover:not(:disabled) { border-color: #67e8f9; background: #244458; }
+.sd-root--design .sd-selection-toolbar .sd-selection-delete { color: #ffadac; background: #36232f; border-color: #6c3b4c; margin-left: 8px; }
+.sd-root--design .sd-drawing-caption { color: #92adbf; letter-spacing: .05em; }
+.sd-root--design .sd-hlg-part { transition: background .15s, border-color .15s; }
+.sd-root--design .sd-hlg-part:hover { background: #1b3348; border-color: #4a8ba2; }
+.sd-root--design .sd-hlg-part-group-title { font-size: 12px; padding: 8px; border-radius: 5px; }
+.sd-root--design .sd-hlg-chip { height: 30px; background: #122235; border-color: #2b4154; color: #b8c9d8; border-radius: 5px; font-size: 12px; }
+.sd-root--design .sd-hlg-chip--active { background: #16384a; color: #9bf3ff; border-color: #4cb5c9; }
+.sd-root .sd-design-status { padding: 8px 16px; gap: 8px 20px; background: #0d1828; border-top: 1px solid #2b4154; color: #b8c9d8; font-size: 12px; }
+.sd-root .sd-design-status button { padding: 6px 12px; border-color: #327a6d; background: #113c37; border-radius: 6px; color: #9fefcd; }
+.sd-root .sd-design-status .has-warning { color: #ffd891; background: #463720; border-color: #9c7839; }
+.sd-root .sd-design-menu > div { background: #111e2d; border-color: #345069; border-radius: 8px; padding: 10px; width: 190px; }
+.sd-root .sd-ship-select { background: radial-gradient(ellipse at 50% 25%, #173049 0, transparent 65%), #09111d; gap: 28px; }
+.sd-root .sd-ship-select-heading { text-align: center; }
+.sd-root .sd-ship-select-heading > span { color: #67e8f9; font-size: 12px; letter-spacing: .2em; }
+.sd-root .sd-ship-select-title { color: #e6eff6; letter-spacing: .03em; margin: 12px 0; font-size: clamp(26px, 3vw, 42px); }
+.sd-root .sd-ship-select-heading p { color: #a0b3c5; font-size: 14px; }
+.sd-root .sd-ship-cards { gap: 20px; max-width: 1160px; }
+.sd-root .sd-ship-card { position: relative; min-height: 340px; padding: 28px; text-align: left; align-items: stretch; gap: 16px; background: linear-gradient(150deg, #172b40, #0f1b2b); border: 1px solid #30485d; border-radius: 14px; box-shadow: 0 16px 40px #0003; }
+.sd-root .sd-ship-card:hover { border-color: #67e8f9; background: linear-gradient(150deg, #1e3c52, #111e2d); box-shadow: 0 12px 40px #0004, inset 0 2px #67e8f9; }
+.sd-ship-card-code { font-size: 12px; letter-spacing: .15em; color: #79cbdc; }
+.sd-ship-card-art { width: 100%; height: 76px; color: #a6d8eb; }
+.sd-root .sd-ship-card-class { color: #e6eff6; font-size: 28px; }
+.sd-root .sd-ship-card-desc { color: #a0b3c5; font-size: 14px; line-height: 1.7; }
+.sd-root .sd-ship-card-badges { justify-content: flex-start; }
+.sd-root .sd-ship-badge { background: #0c1828; border-color: #30485d; color: #c4dae8; border-radius: 5px; font-size: 12px; }
+.sd-ship-card-cta { color: #80e5f5; padding-top: 16px; border-top: 1px solid #2b4154; margin-top: auto; font-weight: 600; font-size: 14px; }
+@media (max-width: 1100px) {
+  .sd-root--design .sd-selection-toolbar { justify-content: flex-start; gap: 8px; }
+  .sd-root--design .sd-header-actions .sd-btn { padding-inline: 8px; }
+}
+@media (max-width: 760px) {
+  .sd-root--design .sd-header { padding: 6px 10px; }
+  .sd-root--design .sd-header-actions { flex-wrap: nowrap; overflow-x: auto; }
+  .sd-root--design .sd-selection-toolbar { min-height: 54px; padding: 5px 8px; }
+  .sd-root--design .sd-selection-toolbar > strong { font-size: 12px; }
+  .sd-root--design .sd-hull-hint { display: none; }
+  .sd-root .sd-ship-card { min-height: 260px; padding: 22px; }
+  .sd-root .sd-ship-select { padding: 24px 18px; }
+  .sd-root .sd-design-status { padding: 5px 8px; font-size: 11px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sd-root *, .sd-root *::before, .sd-root *::after { transition: none !important; animation: none !important; }
+}

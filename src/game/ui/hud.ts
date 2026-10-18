@@ -103,7 +103,7 @@ export class HUD {
     ctx.fillStyle = '#020c1a'
     roundRect(ctx, bx, by, boxW, boxH, 6)
     ctx.fill()
-    ctx.strokeStyle = '#2563a8'
+    ctx.strokeStyle = '#34516b'
     ctx.lineWidth = 1.5
     roundRect(ctx, bx, by, boxW, boxH, 6)
     ctx.stroke()
@@ -123,18 +123,18 @@ export class HUD {
     const coverH = barH + 8
     const pad = 12
 
-    this.renderSteelPanel(0, 0, canvas.width, coverH)
+    this.renderPanel(0, 0, canvas.width, coverH)
 
     // HP
     ctx.font = 'bold 12px monospace'
-    ctx.fillStyle = '#94a3b8'
+    ctx.fillStyle = '#b3c5da'
     ctx.fillText('艦体耐久 / HULL', pad, 16)
     const hpRatio = player.hp / player.maxHp
     ctx.fillStyle = '#1e293b'
     ctx.fillRect(pad, 20, 140, 10)
     ctx.fillStyle = hpRatio > 0.5 ? '#22c55e' : hpRatio > 0.25 ? '#eab308' : '#ef4444'
     ctx.fillRect(pad, 20, 140 * hpRatio, 10)
-    ctx.fillStyle = '#94a3b8'
+    ctx.fillStyle = '#edf4ff'
     ctx.font = '11px monospace'
     ctx.fillText(`${Math.ceil(player.hp)} / ${player.maxHp}`, pad, 42)
 
@@ -170,19 +170,19 @@ export class HUD {
       const wType = weapon?.type
 
       // slot bg
-      ctx.fillStyle = isSelected ? '#42463b' : '#20282a'
-      ctx.strokeStyle = isSelected ? '#d0b46f' : '#626d6b'
-      ctx.lineWidth = 1.5
+      ctx.fillStyle = isSelected ? '#123047' : '#111e30'
+      ctx.strokeStyle = isSelected ? '#67e8f9' : '#293d55'
+      ctx.lineWidth = isSelected ? 2 : 1
       roundRect(ctx, x, slotY, slotW, barH - 6, 5)
       ctx.fill(); ctx.stroke()
 
       // label
       ctx.font = 'bold 12px monospace'
-      ctx.fillStyle = weapon ? (isSelected ? '#fbbf24' : '#94a3b8') : '#475569'
+      ctx.fillStyle = weapon ? (isSelected ? '#67e8f9' : '#edf4ff') : '#64748b'
       ctx.fillText(`[${i + 1}] ${wType ? WEAPON_LABELS[wType] : '空'}`, x + 6, slotY + 17)
 
-      ctx.font = '10px monospace'
-      ctx.fillStyle = weapon ? '#cbd5e1' : '#475569'
+      ctx.font = '11px sans-serif'
+      ctx.fillStyle = weapon ? '#b3c5da' : '#64748b'
       ctx.fillText(fitText(ctx, weapon?.name ?? '未装備', slotW - 12), x + 6, slotY + 31)
 
       // ammo
@@ -203,24 +203,24 @@ export class HUD {
       const btnY = slotY + 57
       const btnW = slotW - 12
       const btnH = 16
-      ctx.fillStyle = !weapon ? '#111827' : isAuto ? '#064e2d' : '#172033'
-      ctx.strokeStyle = !weapon ? '#334155' : isAuto ? '#22c55e' : '#475569'
+      ctx.fillStyle = !weapon ? '#0b1424' : isAuto ? '#10352c' : '#18283d'
+      ctx.strokeStyle = !weapon ? '#293d55' : isAuto ? '#4ade80' : '#496078'
       ctx.lineWidth = 1
       roundRect(ctx, btnX, btnY, btnW, btnH, 3)
       ctx.fill(); ctx.stroke()
 
       ctx.font = 'bold 10px monospace'
-      ctx.fillStyle = !weapon ? '#475569' : isAuto ? '#4ade80' : '#64748b'
+      ctx.fillStyle = !weapon ? '#64748b' : isAuto ? '#86efac' : '#b3c5da'
       ctx.textAlign = 'center'
       ctx.fillText(!weapon ? 'EMPTY' : isAuto ? '● AUTO' : '○ MAN', btnX + btnW / 2, btnY + 11)
       ctx.textAlign = 'left'
 
       ctx.font = 'bold 10px monospace'
-      ctx.fillStyle = !weapon ? '#63706b' : weapon.ammo === 0 ? '#f87171' : cdRatio > 0 ? '#e9bd69' : '#b9d78d'
+      ctx.fillStyle = !weapon ? '#64748b' : weapon.ammo === 0 ? '#f87171' : cdRatio > 0 ? '#fbbf24' : '#86efac'
       ctx.fillText(!weapon ? '—' : weapon.ammo === 0 ? '弾薬なし' : cdRatio > 0 ? '装填中' : '射撃準備完了', x + 6, slotY + 91)
       // A simple original equipment silhouette, rather than a borrowed icon.
       if (weapon) {
-        ctx.fillStyle = isSelected ? '#d0b46f' : '#7c8985'
+        ctx.fillStyle = isSelected ? '#67e8f9' : '#8ba6c2'
         ctx.fillRect(x + 10, slotY + 108, 20, 7)
         ctx.fillRect(x + 24, slotY + 105, Math.min(30, slotW - 34), 3)
       }
@@ -242,14 +242,14 @@ export class HUD {
     const allBtnH = 24
     const allAuto = player.weapons.length > 0 && player.weapons.every(w => w.autoFire)
 
-    ctx.fillStyle = allAuto ? '#064e2d' : '#3b1118'
-    ctx.strokeStyle = allAuto ? '#22c55e' : '#ef4444'
+    ctx.fillStyle = allAuto ? '#10352c' : '#18283d'
+    ctx.strokeStyle = allAuto ? '#4ade80' : '#496078'
     ctx.lineWidth = 1.5
     roundRect(ctx, allBtnX, allBtnY, allBtnW, allBtnH, 4)
     ctx.fill(); ctx.stroke()
 
     ctx.font = 'bold 11px monospace'
-    ctx.fillStyle = allAuto ? '#4ade80' : '#f87171'
+    ctx.fillStyle = allAuto ? '#86efac' : '#b3c5da'
     ctx.textAlign = 'center'
     ctx.fillText(allAuto ? 'ALL AUTO' : 'ALL MAN', allBtnX + allBtnW / 2, allBtnY + 16)
     ctx.textAlign = 'left'
@@ -261,14 +261,14 @@ export class HUD {
     this.clickRegions.push(allRegion)
 
     const bgmBtnY = allBtnY + 32
-    ctx.fillStyle = bgmEnabled ? '#12356b' : '#172033'
-    ctx.strokeStyle = bgmEnabled ? '#60a5fa' : '#475569'
+    ctx.fillStyle = bgmEnabled ? '#123047' : '#18283d'
+    ctx.strokeStyle = bgmEnabled ? '#67e8f9' : '#496078'
     ctx.lineWidth = 1.5
     roundRect(ctx, allBtnX, bgmBtnY, allBtnW, allBtnH, 4)
     ctx.fill(); ctx.stroke()
 
     ctx.font = 'bold 11px monospace'
-    ctx.fillStyle = bgmEnabled ? '#93c5fd' : '#94a3b8'
+    ctx.fillStyle = bgmEnabled ? '#a5f3fc' : '#b3c5da'
     ctx.textAlign = 'center'
     ctx.fillText(bgmEnabled ? 'BGM ON' : 'BGM OFF', allBtnX + allBtnW / 2, bgmBtnY + 16)
     ctx.textAlign = 'left'
@@ -280,13 +280,13 @@ export class HUD {
     this.clickRegions.push(bgmRegion)
 
     const navBtnY = bgmBtnY + 32
-    ctx.fillStyle = autoPilot ? '#12235a' : '#172033'
-    ctx.strokeStyle = autoPilot ? '#818cf8' : '#475569'
+    ctx.fillStyle = autoPilot ? '#123047' : '#18283d'
+    ctx.strokeStyle = autoPilot ? '#67e8f9' : '#496078'
     ctx.lineWidth = 1.5
     roundRect(ctx, allBtnX, navBtnY, allBtnW, allBtnH, 4)
     ctx.fill(); ctx.stroke()
     ctx.font = 'bold 11px monospace'
-    ctx.fillStyle = autoPilot ? '#a5b4fc' : '#94a3b8'
+    ctx.fillStyle = autoPilot ? '#a5f3fc' : '#b3c5da'
     ctx.textAlign = 'center'
     ctx.fillText(autoPilot ? '● AUTO NAV' : '○ MAN NAV', allBtnX + allBtnW / 2, navBtnY + 16)
     ctx.textAlign = 'left'
@@ -297,9 +297,9 @@ export class HUD {
     }
     this.clickRegions.push(navRegion)
 
-    ctx.fillStyle = '#69736d'
+    ctx.fillStyle = '#0b1424'
     ctx.fillRect(0, barH, canvas.width, coverH - barH)
-    ctx.strokeStyle = '#0f3d64'
+    ctx.strokeStyle = '#293d55'
     ctx.lineWidth = 2
     ctx.beginPath()
     ctx.moveTo(0, barH + 0.5)
@@ -315,8 +315,8 @@ export class HUD {
     const center = x + w / 2
 
     ctx.save()
-    ctx.fillStyle = 'rgba(1,5,10,0.86)'
-    ctx.strokeStyle = 'rgba(71,85,105,0.90)'
+    ctx.fillStyle = '#0b1424'
+    ctx.strokeStyle = '#34516b'
     ctx.lineWidth = 1.2
     roundRect(ctx, x, y, w, h, 4)
     ctx.fill()
@@ -443,8 +443,8 @@ export class HUD {
     const rY = canvas.height - rSize - commandLayout(canvas.width).height - 2 - RADAR_PAD
 
     // background
-    ctx.fillStyle = '#020812'
-    ctx.strokeStyle = '#1e4a6a'
+    ctx.fillStyle = '#0b1424'
+    ctx.strokeStyle = '#34516b'
     ctx.lineWidth = 1.5
     roundRect(ctx, rX, rY, rSize, rSize, 6)
     ctx.fill(); ctx.stroke()
@@ -715,8 +715,8 @@ export class HUD {
     ctx.restore()
 
     // label
-    ctx.fillStyle = 'rgba(0,200,80,0.6)'
-    ctx.font = '9px monospace'
+    ctx.fillStyle = '#b3c5da'
+    ctx.font = 'bold 10px monospace'
     ctx.textAlign = 'right'
     ctx.fillText('RADAR', rX + rSize - 4, rY + 12)
     ctx.fillStyle = 'rgba(148,225,180,0.55)'
@@ -731,8 +731,8 @@ export class HUD {
     const mX = Math.max(RADAR_PAD, canvas.width - RADAR_PAD * 2 - RADAR_SIZE * 2)
     const mY = canvas.height - mSize - commandLayout(canvas.width).height - 2 - RADAR_PAD
 
-    ctx.fillStyle = '#020812'
-    ctx.strokeStyle = '#1e4a6a'
+    ctx.fillStyle = '#0b1424'
+    ctx.strokeStyle = '#34516b'
     ctx.lineWidth = 1.5
     roundRect(ctx, mX, mY, mSize, mSize, 6)
     ctx.fill(); ctx.stroke()
@@ -804,53 +804,40 @@ export class HUD {
 
     ctx.restore()
 
-    ctx.fillStyle = 'rgba(0,200,80,0.6)'
-    ctx.font = '9px monospace'
+    ctx.fillStyle = '#b3c5da'
+    ctx.font = 'bold 10px monospace'
     ctx.textAlign = 'right'
     ctx.fillText('MAP', mX + mSize - 4, mY + 12)
     ctx.textAlign = 'left'
   }
 
-  private renderSteelPanel(x: number, y: number, w: number, h: number): void {
+  private renderPanel(x: number, y: number, w: number, h: number): void {
     const { ctx } = this
-    const steel = ctx.createLinearGradient(0, y, 0, y + h)
-    steel.addColorStop(0, '#59615c')
-    steel.addColorStop(0.06, '#313a37')
-    steel.addColorStop(0.94, '#1b2322')
-    steel.addColorStop(1, '#0b100f')
-    ctx.fillStyle = steel
+    ctx.fillStyle = '#0b1424'
     ctx.fillRect(x, y, w, h)
-    ctx.strokeStyle = '#778078'
+    ctx.strokeStyle = '#293d55'
     ctx.lineWidth = 1
     ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1)
-    for (const bx of [x + 5, x + w - 6]) {
-      for (const by of [y + 5, y + h - 6]) {
-        ctx.fillStyle = '#98a095'
-        ctx.fillRect(bx, by, 3, 3)
-        ctx.fillStyle = '#111714'
-        ctx.fillRect(bx, by + 1, 3, 1)
-      }
-    }
   }
 
   private renderBridgeInstruments(player: ShipEntity): void {
     const { ctx, canvas } = this
     if (canvas.width < 1000 || canvas.height < 500) return
     const y = canvas.height - commandLayout(canvas.width).height - RADAR_SIZE - RADAR_PAD - 2
-    this.renderSteelPanel(12, y, 340, RADAR_SIZE)
+    this.renderPanel(12, y, 340, RADAR_SIZE)
     ctx.save()
     ctx.textAlign = 'left'
     ctx.font = 'bold 10px monospace'
-    ctx.fillStyle = '#d0b46f'
+    ctx.fillStyle = '#b3c5da'
     ctx.fillText('操艦計器 / BRIDGE', 26, y + 19)
     const cx = 88
     const cy = y + 90
     const radius = 51
     ctx.beginPath()
     ctx.arc(cx, cy, radius, 0, Math.PI * 2)
-    ctx.fillStyle = '#0b1513'
+    ctx.fillStyle = '#111e30'
     ctx.fill()
-    ctx.strokeStyle = '#889181'
+    ctx.strokeStyle = '#34516b'
     ctx.lineWidth = 2
     ctx.stroke()
     const speedRatio = Math.min(1, Math.abs(player.speed) / Math.max(0.001, player.maxSpeed))
@@ -859,7 +846,7 @@ export class HUD {
       ctx.beginPath()
       ctx.moveTo(cx + Math.cos(a) * 41, cy + Math.sin(a) * 41)
       ctx.lineTo(cx + Math.cos(a) * 47, cy + Math.sin(a) * 47)
-      ctx.strokeStyle = i > 8 ? '#df9b75' : '#a0b49e'
+      ctx.strokeStyle = i > 8 ? '#fbbf24' : '#8ba6c2'
       ctx.lineWidth = 1
       ctx.stroke()
     }
@@ -867,24 +854,24 @@ export class HUD {
     ctx.beginPath()
     ctx.moveTo(cx, cy)
     ctx.lineTo(cx + Math.cos(a) * 37, cy + Math.sin(a) * 37)
-    ctx.strokeStyle = '#e4c275'
+    ctx.strokeStyle = '#67e8f9'
     ctx.lineWidth = 2
     ctx.stroke()
     ctx.textAlign = 'center'
-    ctx.fillStyle = '#e3e9cf'
+    ctx.fillStyle = '#edf4ff'
     ctx.font = 'bold 18px monospace'
     ctx.fillText(`${Math.abs(player.speed * KNOTS_PER_UNIT).toFixed(1)}`, cx, cy + 20)
     ctx.font = '9px monospace'
     ctx.fillText('KNOTS', cx, cy + 33)
     ctx.textAlign = 'left'
     const heading = ((player.angle * 180 / Math.PI) % 360 + 360) % 360
-    ctx.fillStyle = '#e4c275'
+    ctx.fillStyle = '#edf4ff'
     ctx.font = 'bold 22px monospace'
     ctx.fillText(`${Math.round(heading) % 360}°`, 164, y + 52)
     ctx.font = '10px monospace'
-    ctx.fillStyle = '#a6b5a5'
+    ctx.fillStyle = '#b3c5da'
     ctx.fillText('針路 / HEADING', 164, y + 69)
-    ctx.fillStyle = '#dce5d0'
+    ctx.fillStyle = '#edf4ff'
     ctx.font = 'bold 12px sans-serif'
     ctx.fillText(SPEED_LEVEL_LABEL[player.speedLevel], 164, y + 92)
     this.renderHullSectionStatus(player, 164, y + 108)
@@ -897,8 +884,8 @@ export class HUD {
     const barH = layout.height
     const y = canvas.height - barH
 
-    this.renderSteelPanel(0, y, canvas.width, barH)
-    ctx.strokeStyle = '#172033'
+    this.renderPanel(0, y, canvas.width, barH)
+    ctx.strokeStyle = '#293d55'
     ctx.lineWidth = 1.5
     ctx.beginPath()
     ctx.moveTo(0, y + 0.5)
@@ -908,10 +895,10 @@ export class HUD {
     ctx.textBaseline = 'middle'
     for (const button of layout.buttons) {
       const region = { ...button, y: y + button.y }
-      ctx.fillStyle = '#29312f'
+      ctx.fillStyle = '#18283d'
       roundRect(ctx, region.x, region.y, region.w, region.h, 4)
       ctx.fill()
-      ctx.strokeStyle = '#334155'
+      ctx.strokeStyle = '#34516b'
       ctx.lineWidth = 1
       ctx.stroke()
       ctx.font = 'bold 12px sans-serif'

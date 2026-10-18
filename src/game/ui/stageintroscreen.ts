@@ -2,6 +2,7 @@ import type { StageDefinition } from '../data/masterdata'
 import type { PlayerShipType } from '../data/masterdata'
 import { drawAccessKeyHint, isAccessKey } from './accesskeys'
 import { roundRect } from '../rendering/canvas-utils'
+import { UI_THEME, drawScreenBackground, drawScreenPanel } from './ui-theme'
 
 const SORTIE_KEY = 'SPACE'
 
@@ -78,39 +79,24 @@ export class StageIntroScreen {
     const H = canvas.height
     const briefing = makeBriefing(stage, shipType)
 
-    const bg = ctx.createLinearGradient(0, 0, 0, H)
-    bg.addColorStop(0, '#020d1a')
-    bg.addColorStop(1, '#051e38')
-    ctx.fillStyle = bg
-    ctx.fillRect(0, 0, W, H)
-
-    ctx.strokeStyle = 'rgba(30,80,130,0.15)'
-    ctx.lineWidth = 1
-    for (let y = 60; y < H; y += 40) {
-      ctx.beginPath()
-      for (let x = 0; x <= W; x += 8) {
-        const wy = y + Math.sin(x * 0.018) * 4
-        x === 0 ? ctx.moveTo(x, wy) : ctx.lineTo(x, wy)
-      }
-      ctx.stroke()
-    }
+    drawScreenBackground(ctx, W, H)
 
     const isBoss = stage.boss === true
     const cx = W / 2
 
     // Header
     ctx.textAlign = 'center'
-    ctx.fillStyle = isBoss ? '#fbbf24' : '#475569'
+    ctx.fillStyle = isBoss ? '#fbbf24' : UI_THEME.muted
     ctx.font = `${Math.round(H * 0.025)}px monospace`
     ctx.fillText(`STAGE ${stage.stage}  /  OPERATION BRIEFING`, cx, H * 0.072)
 
-    ctx.fillStyle = isBoss ? '#fde68a' : '#7dd3fc'
-    ctx.font = `bold ${Math.round(H * 0.062)}px sans-serif`
+    ctx.fillStyle = isBoss ? '#fde68a' : UI_THEME.text
+    ctx.font = `bold ${Math.round(H * 0.062)}px ${UI_THEME.font}`
     ctx.fillText(stage.name, cx, H * 0.145)
 
     if (isBoss) {
       ctx.fillStyle = '#ef4444'
-      ctx.font = `bold ${Math.round(H * 0.027)}px sans-serif`
+      ctx.font = `bold ${Math.round(H * 0.027)}px ${UI_THEME.font}`
       ctx.fillText('BOSS STAGE', cx, H * 0.195)
     }
 
@@ -136,17 +122,17 @@ export class StageIntroScreen {
     this.drawPanel(ctx, leftX, panelY, leftW, panelH, '司令部通達')
     ctx.textAlign = 'left'
     ctx.fillStyle = isBoss ? '#fde68a' : '#bae6fd'
-    ctx.font = `bold ${Math.round(H * 0.030)}px sans-serif`
-    ctx.fillText(briefing.title, leftX + leftW * 0.08, panelY + panelH * 0.28)
+    ctx.font = `bold ${Math.round(H * 0.026)}px ${UI_THEME.font}`
+    wrapText(ctx, briefing.title, leftX + leftW * 0.08, panelY + panelH * 0.29, leftW * 0.84, H * .031, 2)
     ctx.fillStyle = '#cbd5e1'
-    ctx.font = `${Math.round(H * 0.023)}px sans-serif`
+    ctx.font = `${Math.round(H * 0.023)}px ${UI_THEME.font}`
     wrapText(ctx, briefing.commander, leftX + leftW * 0.08, panelY + panelH * 0.39, leftW * 0.84, H * 0.036, 5)
 
-    ctx.fillStyle = '#38bdf8'
-    ctx.font = `bold ${Math.round(H * 0.024)}px sans-serif`
+    ctx.fillStyle = UI_THEME.cyan
+    ctx.font = `bold ${Math.round(H * 0.024)}px ${UI_THEME.font}`
     ctx.fillText('任務目的', leftX + leftW * 0.08, panelY + panelH * 0.73)
     ctx.fillStyle = '#e2e8f0'
-    ctx.font = `${Math.round(H * 0.023)}px sans-serif`
+    ctx.font = `${Math.round(H * 0.023)}px ${UI_THEME.font}`
     wrapText(ctx, briefing.objective, leftX + leftW * 0.08, panelY + panelH * 0.82, leftW * 0.84, H * 0.034, 2)
 
     this.drawPanel(ctx, midX, panelY, midW, panelH, '敵情')
@@ -162,39 +148,39 @@ export class StageIntroScreen {
       const [label, count, color] = rows[i]!
       const rowY = panelY + panelH * 0.27 + i * rowH
       ctx.textAlign = 'left'
-      ctx.fillStyle = '#64748b'
-      ctx.font = `${Math.round(H * 0.022)}px sans-serif`
+      ctx.fillStyle = UI_THEME.muted
+      ctx.font = `${Math.round(H * 0.022)}px ${UI_THEME.font}`
       ctx.fillText(label, midX + midW * 0.10, rowY)
       ctx.textAlign = 'right'
-      ctx.fillStyle = count > 0 ? color : '#334155'
+      ctx.fillStyle = count > 0 ? color : UI_THEME.muted
       ctx.font = `bold ${Math.round(H * 0.028)}px monospace`
       ctx.fillText(count > 0 ? `x${count}` : '-', midX + midW * 0.90, rowY)
     }
 
     const shipY = panelY + panelH * 0.73
     ctx.textAlign = 'center'
-    ctx.fillStyle = '#475569'
-    ctx.font = `${Math.round(H * 0.020)}px sans-serif`
+    ctx.fillStyle = UI_THEME.muted
+    ctx.font = `${Math.round(H * 0.020)}px ${UI_THEME.font}`
     ctx.fillText('出撃艦', midX + midW / 2, shipY)
-    ctx.fillStyle = '#38bdf8'
-    ctx.font = `bold ${Math.round(H * 0.038)}px sans-serif`
+    ctx.fillStyle = UI_THEME.cyan
+    ctx.font = `bold ${Math.round(H * 0.038)}px ${UI_THEME.font}`
     ctx.fillText(SHIP_NAME[shipType], midX + midW / 2, shipY + H * 0.048)
-    ctx.fillStyle = '#475569'
-    ctx.font = `${Math.round(H * 0.019)}px sans-serif`
+    ctx.fillStyle = UI_THEME.muted
+    ctx.font = `${Math.round(H * 0.019)}px ${UI_THEME.font}`
     ctx.fillText(shipType.toUpperCase(), midX + midW / 2, shipY + H * 0.080)
 
     this.drawPanel(ctx, rightX, panelY, rightW, panelH, '作戦海域')
-    this.drawTacticalMap(ctx, rightX + rightW * 0.08, panelY + panelH * 0.23, rightW * 0.84, panelH * 0.40, stage)
+    this.drawTacticalMap(ctx, rightX + rightW * 0.08, panelY + panelH * 0.23, rightW * 0.84, panelH * 0.32, stage)
     ctx.textAlign = 'left'
-    ctx.fillStyle = '#38bdf8'
-    ctx.font = `bold ${Math.round(H * 0.022)}px sans-serif`
-    ctx.fillText('戦術メモ', rightX + rightW * 0.08, panelY + panelH * 0.72)
+    ctx.fillStyle = UI_THEME.cyan
+    ctx.font = `bold ${Math.round(H * 0.022)}px ${UI_THEME.font}`
+    ctx.fillText('戦術メモ', rightX + rightW * 0.08, panelY + panelH * 0.64)
     ctx.fillStyle = '#cbd5e1'
-    ctx.font = `${Math.round(H * 0.020)}px sans-serif`
+    ctx.font = `${Math.max(12, Math.round(H * 0.016))}px ${UI_THEME.font}`
     const memoLines = [...briefing.intel, ...briefing.tactics].slice(0, 4)
     for (let i = 0; i < memoLines.length; i++) {
       ctx.fillStyle = i < briefing.intel.length ? '#cbd5e1' : '#fef3c7'
-      ctx.fillText(`- ${memoLines[i]}`, rightX + rightW * 0.08, panelY + panelH * (0.80 + i * 0.060))
+      wrapText(ctx, `· ${memoLines[i]}`, rightX + rightW * 0.08, panelY + panelH * (0.70 + i * 0.075), rightW * 0.84, panelH * 0.034, 2)
     }
 
     // Sortie button
@@ -205,16 +191,16 @@ export class StageIntroScreen {
     const hovSortie = this.hovered === 'sortie'
     this.regions = [{ id: 'sortie', x: btnX, y: btnY, w: btnW, h: btnH }]
 
-    ctx.fillStyle = hovSortie ? (isBoss ? '#b91c1c' : '#0284c7') : (isBoss ? '#450a0a' : '#0f2944')
+    ctx.fillStyle = hovSortie ? '#ffe0a2' : UI_THEME.amber
     roundRect(ctx, btnX, btnY, btnW, btnH, 10)
     ctx.fill()
-    ctx.strokeStyle = hovSortie ? (isBoss ? '#ef4444' : '#38bdf8') : (isBoss ? '#7f1d1d' : '#1e3a5f')
+    ctx.strokeStyle = hovSortie ? UI_THEME.cyan : UI_THEME.amber
     ctx.lineWidth = 2
     roundRect(ctx, btnX, btnY, btnW, btnH, 10)
     ctx.stroke()
-    ctx.fillStyle = hovSortie ? '#ffffff' : (isBoss ? '#fca5a5' : '#7dd3fc')
+    ctx.fillStyle = UI_THEME.background
     ctx.textAlign = 'center'
-    ctx.font = `bold ${Math.round(btnH * 0.50)}px sans-serif`
+    ctx.font = `bold ${Math.round(btnH * 0.50)}px ${UI_THEME.font}`
     ctx.fillText('出撃', cx, btnY + btnH * 0.67)
     if (showAccessKeys) drawAccessKeyHint(ctx, SORTIE_KEY, btnX + 8, btnY + 8)
   }
@@ -224,20 +210,14 @@ export class StageIntroScreen {
     x: number, y: number, w: number, h: number,
     title: string,
   ): void {
-    ctx.fillStyle = 'rgba(10,24,46,0.85)'
-    roundRect(ctx, x, y, w, h, 12)
-    ctx.fill()
-    ctx.strokeStyle = '#1e3a5f'
-    ctx.lineWidth = 1
-    roundRect(ctx, x, y, w, h, 12)
-    ctx.stroke()
+    drawScreenPanel(ctx, x, y, w, h)
 
     ctx.textAlign = 'left'
-    ctx.fillStyle = '#475569'
-    ctx.font = `${Math.round(h * 0.110)}px sans-serif`
+    ctx.fillStyle = UI_THEME.muted
+    ctx.font = `${Math.round(h * 0.050)}px ${UI_THEME.font}`
     ctx.fillText(title, x + w * 0.10, y + h * 0.170)
 
-    ctx.strokeStyle = 'rgba(56,189,248,0.15)'
+    ctx.strokeStyle = 'rgba(101,217,237,0.15)'
     ctx.lineWidth = 1
     ctx.beginPath()
     ctx.moveTo(x + w * 0.08, y + h * 0.22)

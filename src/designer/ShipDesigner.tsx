@@ -1,7 +1,8 @@
+import { GunHeightControl } from './GunHeightControl'
 import { previewDesignMove, COPY_PREVIEW_ID, type ComponentMovePreview } from './design-preview'
 import { HullPlanOutline } from './HullPlanOutline'
 import { PartPlanDrawing } from './PartDrawing'
-import { GUN_MOUNT_HEIGHTS, isGunMount, normalizedMountHeight } from '../game/data/gun-mount-geometry'
+import { isGunMount, normalizedMountHeight } from '../game/data/gun-mount-geometry'
 import { barrelsInterfere, gunClearance } from './gun-clearance'
 import { GunBarrelOverlay } from './GunBarrelOverlay'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -377,15 +378,19 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
     })
   }
 
-  const handleMoveComponent = (instanceId: string, cell: HLGCell): boolean => {
+  const handleMoveComponent = (instanceId: string, cell: HLGCell, mountHeight?: number): boolean => {
     const component = design.components.find(item => item.instanceId === instanceId)
     const part = component ? HLG_PART_BY_ID[component.partId] : undefined
     if (!component || !part) return false
+    const height = mountHeight === undefined ? component.mountHeight : normalizedMountHeight(mountHeight)
     const without = { ...design, components: design.components.filter(item => item.instanceId !== instanceId) }
-    if (!canPlaceHLGPart(hull, without, part, cell, component.rotation, component.weaponSlot, component.mountHeight, component.barrels)) return false
+    if (!canPlaceHLGPart(hull, without, part, cell, component.rotation, component.weaponSlot, height, component.barrels)) {
+      showToast('砲身の干渉または配置範囲外のため変更できません')
+      return false
+    }
     setDesign(prev => ({
       ...prev,
-      components: prev.components.map(item => item.instanceId === instanceId ? { ...item, cell } : item),
+      components: prev.components.map(item => item.instanceId === instanceId ? { ...item, cell, mountHeight: height } : item),
     }))
     selectComponent(instanceId)
     return true
@@ -519,16 +524,27 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
           {onClose && <button className="sd-btn sd-btn-back" onClick={onClose}>タイトルへ</button>}
         </header>
         <div className="sd-ship-select">
-          <div className="sd-ship-select-title">艦種を選択</div>
+          <div className="sd-ship-select-heading">
+            <span>FLEET ENGINEERING / 01</span>
+            <h1 className="sd-ship-select-title">あなたの艦隊は、この一隻から。</h1>
+            <p>艦種を選び、兵装を設計して作戦海域へ。</p>
+          </div>
           <div className="sd-ship-cards">
             {SHIP_OPTIONS.map(opt => (
               <button key={opt.type} className="sd-ship-card" onClick={() => handleSelectShip(opt.type)}>
+                <span className="sd-ship-card-code">{opt.type === 'destroyer' ? 'DD / DESTROYER' : opt.type === 'cruiser' ? 'CA / CRUISER' : 'BB / BATTLESHIP'}</span>
+                <svg className="sd-ship-card-art" viewBox="0 0 300 90" aria-hidden="true">
+                  <path d="M12 56H288L270 74H40L12 56Z" fill="currentColor" opacity=".15" />
+                  <path d="M12 56H288L270 74H40L12 56ZM28 79H278M120 56V39H157V25H170V56M165 25V10M158 16H180M188 56V36H201V56" fill="none" stroke="currentColor" strokeWidth="1.5" />
+                  {(opt.type === 'destroyer' ? [64, 228] : opt.type === 'cruiser' ? [64, 94, 228] : [54, 88, 228]).map(x => <g key={x}><path d={`M${x} 56v-10h18v10m-14-10v-5h10v5m-10-2h-22`} fill="none" stroke="currentColor" strokeWidth={opt.type === 'battleship' ? 2.5 : 1.5} /></g>)}
+                </svg>
                 <div className="sd-ship-card-class">{opt.name}</div>
                 <div className="sd-ship-card-desc">{opt.desc}</div>
                 <div className="sd-ship-card-badges">
                   <span className="sd-ship-badge sd-ship-badge--hp">耐久 {opt.hpLabel}</span>
                   <span className="sd-ship-badge sd-ship-badge--spd">速力 {opt.speedLabel}</span>
                 </div>
+                <span className="sd-ship-card-cta">この艦で設計を始める →</span>
               </button>
             ))}
           </div>
@@ -595,7 +611,7 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
               <button type="button" aria-pressed={layer === 'deck'} onClick={() => { setLayer('deck'); setSelectedPartId(null); setSelectedComponentId(null) }}>上部構造</button>
               <button type="button" aria-pressed={layer === 'internal'} onClick={() => { setLayer('internal'); setSelectedPartId(null); setSelectedComponentId(null) }}>船内機関</button>
             </div>
-            <label>新規砲台高 <select aria-label="新規砲台高" value={placementHeight} onChange={event => setPlacementHeight(Number(event.target.value))}>{GUN_MOUNT_HEIGHTS.map(height => <option key={height} value={height}>{height} m</option>)}</select></label>
+            <GunHeightControl label="新規砲台高" value={placementHeight} onChange={setPlacementHeight} />
             <label><input type="checkbox" checked={mirrorPlacement} onChange={event => setMirrorPlacement(event.target.checked)} /> 左右対称配置</label>
             <button type="button" onClick={() => { setSelectedPartId(null); setSelectedComponentId(null) }}>選択・移動</button>
           </div>
@@ -608,7 +624,7 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
                 <button type="button" onClick={() => handleNudge(0, 1)} aria-label="艦尾へ移動">→</button>
                 <button type="button" onClick={() => handleNudge(-1, 0)} aria-label="左舷へ移動">↑</button>
                 <button type="button" onClick={() => handleNudge(1, 0)} aria-label="右舷へ移動">↓</button>
-                {isGunMount(HLG_PART_BY_ID[selectedComponent.partId]?.type) && <label>高さ <select aria-label="選択砲台の高さ" value={normalizedMountHeight(selectedComponent.mountHeight)} onChange={event => handleHeightChange(Number(event.target.value))}>{GUN_MOUNT_HEIGHTS.map(height => <option key={height} value={height}>{height}m</option>)}</select></label>}
+                {isGunMount(HLG_PART_BY_ID[selectedComponent.partId]?.type) && <GunHeightControl label="選択砲台の高さ" value={normalizedMountHeight(selectedComponent.mountHeight)} onChange={handleHeightChange} />}
                 <button type="button" className="sd-selection-delete" onClick={handleDelete}>削除</button>
               </div>
             </> : selectedPart ? <><strong>配置中：{selectedPart.name}</strong><span>艦上をクリック / ドラッグで配置</span><button type="button" onClick={() => setSelectedPartId(null)}>配置を終了</button></> : <><strong>選択・移動</strong><span>部品を選んで配置。艦上の部品をクリックして調整。</span></>}
@@ -639,7 +655,7 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
             /></div>
 
           </div>
-          <div className="sd-hull-hint">両図でドラッグ移動（側面図は前後） · Ctrl＋ドラッグでコピー · Escで中止 · 赤い砲身は干渉あり</div>
+          <div className="sd-hull-hint">側面図の砲塔：上下ドラッグで高さ・横ドラッグで前後移動 · Ctrl＋ドラッグでコピー · Escで中止 · 赤い砲身は干渉あり</div>
         </main>
 
         <aside className="sd-inspector" aria-label="設計パネル">

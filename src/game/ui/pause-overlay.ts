@@ -1,5 +1,6 @@
 import { drawAccessKeyHint } from './accesskeys'
 import { roundRect } from '../rendering/canvas-utils'
+import { UI_THEME, drawScreenPanel } from './ui-theme'
 
 export type PauseAction = 'resume' | 'title'
 
@@ -49,21 +50,17 @@ export function renderPauseOverlay(
   ctx.fillStyle = 'rgba(2,8,14,0.58)'
   ctx.fillRect(0, 0, W, H)
 
-  ctx.fillStyle = 'rgba(10,24,46,0.94)'
-  roundRect(ctx, panelX, panelY, panelW, panelH, 12)
-  ctx.fill()
-  ctx.strokeStyle = '#38bdf8'
-  ctx.lineWidth = 2
-  roundRect(ctx, panelX, panelY, panelW, panelH, 12)
-  ctx.stroke()
+  drawScreenPanel(ctx, panelX, panelY, panelW, panelH)
+  ctx.fillStyle = UI_THEME.cyan
+  ctx.fillRect(panelX + 24, panelY, 42, 3)
 
   ctx.textAlign = 'center'
-  ctx.fillStyle = '#7dd3fc'
-  ctx.font = `bold ${Math.round(panelH * 0.18)}px sans-serif`
+  ctx.fillStyle = UI_THEME.text
+  ctx.font = `bold ${Math.round(panelH * 0.18)}px ${UI_THEME.font}`
   ctx.fillText('PAUSED', cx, panelY + panelH * 0.26)
 
-  ctx.fillStyle = '#94a3b8'
-  ctx.font = `${Math.round(panelH * 0.072)}px sans-serif`
+  ctx.fillStyle = UI_THEME.muted
+  ctx.font = `${Math.round(panelH * 0.072)}px ${UI_THEME.font}`
   ctx.fillText('戦闘を一時停止中', cx, panelY + panelH * 0.39)
 
   const btnW = panelW * 0.36
@@ -73,15 +70,15 @@ export function renderPauseOverlay(
   const resumeX = cx - btnW - gap / 2
   const titleX = cx + gap / 2
 
-  drawPauseButton(ctx, resumeX, btnY, btnW, btnH, '再開', '#22c55e')
-  drawPauseButton(ctx, titleX, btnY, btnW, btnH, 'タイトルへ', '#475569')
+  drawPauseButton(ctx, resumeX, btnY, btnW, btnH, '再開', UI_THEME.amber)
+  drawPauseButton(ctx, titleX, btnY, btnW, btnH, 'タイトルへ', UI_THEME.border)
   if (showAccessKeys) {
     drawAccessKeyHint(ctx, pauseAccessKey('resume'), resumeX + 8, btnY + 8)
     drawAccessKeyHint(ctx, pauseAccessKey('title'), titleX + 8, btnY + 8)
   }
 
-  ctx.fillStyle = '#64748b'
-  ctx.font = `${Math.round(panelH * 0.052)}px sans-serif`
+  ctx.fillStyle = UI_THEME.muted
+  ctx.font = `${Math.round(panelH * 0.052)}px ${UI_THEME.font}`
   ctx.fillText('P / Esc で再開', cx, panelY + panelH * 0.90)
   ctx.restore()
 
@@ -100,15 +97,15 @@ function drawPauseButton(
   label: string,
   color: string,
 ): void {
-  ctx.fillStyle = `${color}30`
+  ctx.fillStyle = color === UI_THEME.amber ? UI_THEME.amber : UI_THEME.panel
   roundRect(ctx, x, y, w, h, 8)
   ctx.fill()
   ctx.strokeStyle = color
   ctx.lineWidth = 1.5
   roundRect(ctx, x, y, w, h, 8)
   ctx.stroke()
-  ctx.fillStyle = '#f8fafc'
+  ctx.fillStyle = color === UI_THEME.amber ? UI_THEME.background : UI_THEME.text
   ctx.textAlign = 'center'
-  ctx.font = `bold ${Math.round(h * 0.45)}px sans-serif`
+  ctx.font = `bold ${Math.round(h * 0.45)}px ${UI_THEME.font}`
   ctx.fillText(label, x + w / 2, y + h * 0.65)
 }

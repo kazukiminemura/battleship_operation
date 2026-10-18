@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { HULL_CATALOG } from '../../src/game/data/hull-catalog'
 import { defaultHLGDesign, designLayoutFromHLG, HLG_PART_BY_ID, makeComponent, canPlaceHLGPart } from '../../src/designer/hlg-system'
-import { COPY_PREVIEW_ID, previewDesignMove, sideDragCell } from '../../src/designer/design-preview'
+import { COPY_PREVIEW_ID, previewDesignMove, sideDragCell, sideDragHeight } from '../../src/designer/design-preview'
 import { initialDesignHistory, reduceDesignHistory } from '../../src/designer/design-history'
 
 const hull = HULL_CATALOG.find(h => h.templateId === 'hull.battleship.basic')!
@@ -9,6 +9,17 @@ const design = defaultHLGDesign(hull)
 const source = design.components.find(c => HLG_PART_BY_ID[c.partId]?.type === 'gun')!
 
 describe('shared plan and elevation movement preview', () => {
+  it('snaps vertical dragging to mount heights and previews without editing saved design', () => {
+    expect(sideDragHeight(0, -20, 1000, 175)).toBe(4)
+    expect(sideDragHeight(0, -10, 1000, 87.5)).toBe(4)
+    expect(sideDragHeight(4, 20, 1000, 175)).toBe(0)
+    expect(sideDragHeight(4, -200, 1000, 175)).toBe(8)
+    expect(sideDragHeight(4, 10, 0, 0)).toBe(4)
+    const before = JSON.stringify(design)
+    const preview = previewDesignMove(design, { instanceId: source.instanceId, cell: source.cell, mountHeight: 6 })
+    expect(preview.components.find(c => c.instanceId === source.instanceId)).toEqual({ ...source, mountHeight: 6 })
+    expect(JSON.stringify(design)).toBe(before)
+  })
   it('updates one shared drawing snapshot without changing saved cells, height or rotation', () => {
     const before = JSON.stringify(design), cell = { c: source.cell.c + 1, r: source.cell.r + 8 }
     const preview = previewDesignMove(design, { instanceId: source.instanceId, cell })
