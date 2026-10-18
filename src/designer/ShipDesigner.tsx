@@ -2,6 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DragEvent as ReactDragEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react'
 import { Ship3DPreview } from './Ship3DPreview'
 import { WeightGauge } from './WeightGauge'
+import { ShipBlueprint, PartSymbol } from './ShipBlueprint'
+import { useDesignHistory } from './design-history'
+import { designerLayerForPart, makePlacementComponents, mirroredPlacementCell } from './design-placement'
 import {
   calcStats,
   createDesignForHull,
@@ -43,6 +46,7 @@ import { MAX_WEAPON_SLOTS } from '../game/simulation/types'
 import type { PrepResult } from './types'
 import { firingArcForWeapon, firingArcLabel, type FiringArc } from '../game/simulation/firing-arcs'
 import './ShipDesigner.css'
+import './ShipWorkbench.css'
 
 interface Props {
   onClose?: () => void
@@ -69,6 +73,12 @@ const CATEGORY_LABEL: Record<HLGComponentCategory | 'all', string> = {
   turbine: '主機',
   aux: '補助',
   armor: '装甲',
+}
+
+type Workshop = 'weapon' | 'engine' | 'equipment' | 'armor' | 'all'
+const WORKSHOP_CATEGORIES: Record<Workshop, HLGComponentCategory[]> = {
+  weapon: ['weapon'], engine: ['boiler', 'turbine', 'funnel'], equipment: ['bridge', 'aux'], armor: ['armor'],
+  all: ['weapon', 'bridge', 'funnel', 'boiler', 'turbine', 'aux', 'armor'],
 }
 
 const WEAPON_TYPE_LABEL: Record<NonNullable<HLGPartDefinition['type']>, string> = {
@@ -99,7 +109,11 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
   const [step, setStep] = useState<Step>(() => initialResult ? 'design' : 'ship-select')
   const [shipType, setShipType] = useState<PlayerShipType>(initialShipType)
   const [hullIdx, setHullIdx] = useState(() => hullIndexForTemplate(initialShipType, initialHull.templateId))
-  const [design, setDesign] = useState<HLGDesign>(() => createDesignForHull(initialHull, initialDesign))
+  const { design, setDesign, resetDesign, undo, redo, canUndo, canRedo } = useDesignHistory(createDesignForHull(initialHull, initialDesign))
+  const [workshop, setWorkshop] = useState<Workshop>('weapon')
+  const [drawingView, setDrawingView] = useState<'plan' | 'dock'>('plan')
+  const [layer, setLayer] = useState<'deck' | 'internal'>('deck')
+  const [mirrorPlacement, setMirrorPlacement] = useState(true)
   const [selectedPartId, setSelectedPartId] = useState<string | null>(() => defaultSelectedPart(initialHull.shipType))
   const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null)
   const [selectedWeaponSlot, setSelectedWeaponSlot] = useState<number | null>(null)
@@ -117,8 +131,9 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
   const spec = useMemo(() => hlgGridSpec(hull), [hull])
   const stats = useMemo(() => calcStats(design, hull), [design, hull])
   const visibleParts = useMemo(
-    () => HLG_PARTS.filter(part => part.allowedShipClasses.includes(shipType) && (partFilter === 'all' || part.category === partFilter)),
-    [partFilter, shipType],
+    () => HLG_PARTS.filter(part => part.allowedShipClasses.includes(shipType) && (partFilter === 'all' || part.category === partFilter) &&
+      WORKSHOP_CATEGORIES[workshop].includes(part.category)),
+    [partFilter, shipType, workshop],
   )
   const paletteGroups = useMemo(() => groupPaletteParts(visibleParts), [visibleParts])
   const selectedPart = selectedPartId ? HLG_PART_BY_ID[selectedPartId] : undefined
@@ -163,37 +178,44 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
 
   const selectComponent = (instanceId: string | null) => {
     setSelectedComponentId(instanceId)
+    setSelectedPartId(null)
     const component = instanceId ? design.components.find(item => item.instanceId === instanceId) : null
     if (!component) return
     const part = HLG_PART_BY_ID[component.partId]
+    if (part) setLayer(designerLayerForPart(part))
     if (part?.type && component.weaponSlot != null) setSelectedWeaponSlot(component.weaponSlot)
   }
 
-  const replaceDesign = useCallback((next: HLGDesign) => {
-    setDesign(cloneHLGDesign(next))
+  const replaceDesign = useCallback((next: HLGDesign, clearHistory = false) => {
+    if (clearHistory) resetDesign(next)
+    else setDesign(cloneHLGDesign(next))
     setSelectedComponentId(null)
     setSelectedWeaponSlot(null)
-  }, [])
+  }, [resetDesign, setDesign])
 
   const handleSelectShip = (type: PlayerShipType) => {
     const nextHull = getHullsByClass(type)[0]!
     setShipType(type)
     setHullIdx(0)
-    replaceDesign(loadDesignerState(nextHull, saveSlot).design)
+    replaceDesign(loadDesignerState(nextHull, saveSlot).design, true)
     setSelectedPartId(defaultSelectedPart(type))
+    setLayer('deck')
+    setWorkshop('weapon')
     setStep('design')
   }
 
   const handleSelectHull = (index: number) => {
     const nextHull = hulls[index]!
     setHullIdx(index)
-    replaceDesign(loadDesignerState(nextHull, saveSlot).design)
+    replaceDesign(loadDesignerState(nextHull, saveSlot).design, true)
     setSelectedPartId(defaultSelectedPart(nextHull.shipType))
+    setLayer('deck')
+    setWorkshop('weapon')
   }
 
   const handleGridClick = (cell: HLGCell) => {
     if (!selectedPart) {
-      selectComponent(componentAtCell(design, cell)?.instanceId ?? null)
+      selectComponent(componentAtCell(design, cell, undefined, layer)?.instanceId ?? null)
       return
     }
     const rotation: HLGRotation = 0
@@ -208,7 +230,7 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
       showToast('この位置には配置できません')
       return
     }
-    const components = makePlacementComponents(hull, design, selectedPart, cell, rotation, weaponSlot)
+    const components = makePlacementComponents(hull, design, selectedPart, cell, rotation, weaponSlot, mirrorPlacement)
     const component = components[0]
     if (!component) return
     setDesign(prev => ({
@@ -223,6 +245,7 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
     const part = HLG_PART_BY_ID[partId]
     if (!part) return false
     setSelectedPartId(part.partId)
+    setLayer(designerLayerForPart(part))
     const rotation: HLGRotation = 0
     const weaponSlot = resolveWeaponSlotForPart(part)
     if (weaponSlot === null) return false
@@ -230,7 +253,7 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
       showToast('この位置には配置できません')
       return false
     }
-    const components = makePlacementComponents(hull, design, part, cell, rotation, weaponSlot)
+    const components = makePlacementComponents(hull, design, part, cell, rotation, weaponSlot, mirrorPlacement)
     const component = components[0]
     if (!component) return false
     setDesign(prev => ({
@@ -268,6 +291,7 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
     if (event.button !== 0) return
     event.preventDefault()
     setSelectedPartId(part.partId)
+    setLayer(designerLayerForPart(part))
     setDraggingPartId(part.partId)
     setPaletteDrop(null)
     setPaletteDrag({ partId: part.partId, x: event.clientX, y: event.clientY })
@@ -382,6 +406,7 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
     const target = [...design.components].reverse().find(component => component.weaponSlot === slotIndex)
     const part = target ? HLG_PART_BY_ID[target.partId] : null
     setSelectedWeaponSlot(slotIndex)
+    setLayer('deck')
     setSelectedPartId(part?.partId ?? null)
     setSelectedComponentId(target?.instanceId ?? null)
   }
@@ -389,6 +414,7 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
   const handleSelectWeaponSlot = (slotIndex: number) => {
     const slot = weaponSlotItems(design)[slotIndex]
     setSelectedWeaponSlot(slotIndex)
+    setLayer('deck')
     setSelectedPartId(slot?.part?.partId ?? null)
     setSelectedComponentId(slot?.components.at(-1)?.instanceId ?? null)
   }
@@ -427,12 +453,18 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
       hlgDesign: cloneHLGDesign(design),
       towerMount: designTowerMount(hull, design),
     })
-  }, [design, hull, onConfirm])
+  }, [design, hull, onConfirm, saveSlot])
 
   useEffect(() => {
     if (step !== 'design') return
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.repeat || isTextEntryTarget(event.target)) return
+      if ((event.ctrlKey || event.metaKey) && (event.code === 'KeyZ' || event.code === 'KeyY')) {
+        event.preventDefault()
+        if (event.code === 'KeyY' || event.shiftKey) redo()
+        else undo()
+        return
+      }
       if (event.code === 'Escape') {
         event.preventDefault()
         setSelectedComponentId(null)
@@ -445,13 +477,13 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [handleDeploy, onConfirm, step])
+  }, [handleDeploy, onConfirm, step, undo, redo])
 
   if (step === 'ship-select') {
     return (
       <div className="sd-root">
         <header className="sd-header">
-          <div className="sd-header-title">艦船設計システム 自由配置</div>
+          <div className="sd-header-title">艦船設計局 / NAVAL CONSTRUCTION</div>
           {onClose && <button className="sd-btn sd-btn-back" onClick={onClose}>タイトルへ</button>}
         </header>
         <div className="sd-ship-select">
@@ -476,7 +508,7 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
   return (
     <div className="sd-root">
       <header className="sd-header">
-        <div className="sd-header-title">艦船設計システム 自由配置</div>
+        <div className="sd-header-title">艦船設計局 / NAVAL CONSTRUCTION</div>
         <div className="sd-header-actions">
           <div className="sd-save-slots" aria-label="保存スロット">
             {DESIGN_SAVE_SLOTS.map(slot => (
@@ -499,11 +531,19 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
         </div>
       </header>
 
-      <div className="sd-body">
+      <nav className="sd-workshop-nav" aria-label="設計区分">
+        {([['weapon', '兵装'], ['engine', '機関'], ['equipment', '設備'], ['armor', '防御'], ['all', '全部品']] as const).map(([key, label]) => (
+          <button key={key} type="button" aria-pressed={workshop === key} className={workshop === key ? 'is-active' : ''} onClick={() => { setWorkshop(key); setPartFilter('all') }}>{label}</button>
+        ))}
+        <span className="sd-workshop-nav-spacer" />
+        <button type="button" onClick={undo} disabled={!canUndo}>↶ 取り消し</button>
+        <button type="button" onClick={redo} disabled={!canRedo}>↷ やり直し</button>
+      </nav>
+      <div className="sd-body sd-workbench">
         <aside className="sd-panel sd-panel-left">
-          <div className="sd-palette-title">配置パーツ</div>
+          <div className="sd-palette-title">部品一覧 / PARTS</div>
           <div className="sd-hlg-filter">
-            {(Object.keys(CATEGORY_LABEL) as Array<HLGComponentCategory | 'all'>).map(category => (
+            {(Object.keys(CATEGORY_LABEL) as Array<HLGComponentCategory | 'all'>).filter(category => category === 'all' || WORKSHOP_CATEGORIES[workshop].includes(category)).map(category => (
               <button key={category} className={`sd-hlg-chip${partFilter === category ? ' sd-hlg-chip--active' : ''}`} onClick={() => setPartFilter(category)}>
                 {CATEGORY_LABEL[category]}
               </button>
@@ -522,8 +562,9 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
                     key={part.partId}
                     className={`sd-hlg-part${selectedPartId === part.partId ? ' sd-hlg-part--active' : ''}${draggingPartId === part.partId ? ' sd-hlg-part--dragging' : ''}`}
                     onPointerDown={(event) => handlePartPointerDown(event, part)}
-                    onClick={() => setSelectedPartId(part.partId)}
+                    onClick={() => { setSelectedPartId(part.partId); setLayer(designerLayerForPart(part)) }}
                   >
+                    <PartSymbol part={part} />
                     <span className="sd-hlg-part-kind">{part.type ? WEAPON_TYPE_LABEL[part.type] : CATEGORY_LABEL[part.category]}</span>
                     <span className="sd-hlg-part-name">{part.name}</span>
                     <span className="sd-hlg-part-meta">{part.footprint.w}x{part.footprint.h} / {part.weight}t{partSystemMeta(part)}</span>
@@ -545,12 +586,27 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
             </div>
           )}
 
+          <div className="sd-drawing-toolbar">
+            <div role="group" aria-label="表示切替">
+              <button type="button" aria-pressed={drawingView === 'plan'} onClick={() => setDrawingView('plan')}>配置図</button>
+              <button type="button" aria-pressed={drawingView === 'dock'} onClick={() => setDrawingView('dock')}>3Dドック</button>
+            </div>
+            <div role="group" aria-label="配置レイヤー">
+              <button type="button" aria-pressed={layer === 'deck'} onClick={() => { setLayer('deck'); setSelectedPartId(null); setSelectedComponentId(null) }}>上部構造</button>
+              <button type="button" aria-pressed={layer === 'internal'} onClick={() => { setLayer('internal'); setSelectedPartId(null); setSelectedComponentId(null) }}>船内機関</button>
+            </div>
+            <label><input type="checkbox" checked={mirrorPlacement} onChange={event => setMirrorPlacement(event.target.checked)} /> 左右対称配置</label>
+            <button type="button" onClick={() => { setSelectedPartId(null); setSelectedComponentId(null) }}>選択・移動</button>
+          </div>
           <div className="sd-hlg-stage">
-            <Ship3DPreview hull={hull} design={design} armorBonus={stats.armorDefense} />
+            {drawingView === 'dock' ? <Ship3DPreview hull={hull} design={design} armorBonus={stats.armorDefense} /> : <ShipBlueprint hull={hull} design={design} selectedId={selectedComponentId} onSelect={selectComponent} />}
+            <div className="sd-drawing-caption"><span>PLAN / {layer === 'deck' ? '上面・上部構造' : '上面・船内機関'}</span><span>← 艦首　左舷 ↑ / 右舷 ↓　艦尾 →</span></div>
             <HLGGrid
               hull={hull}
               design={design}
-              selectedPart={placementPart}
+              layer={layer}
+              mirrorPlacement={mirrorPlacement}
+              selectedPart={placementPart && designerLayerForPart(placementPart) === layer ? placementPart : undefined}
               paletteDrag={paletteDrag}
               paletteDrop={paletteDrop}
               selectedWeaponSlot={selectedPlacementSlot}
@@ -563,6 +619,13 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
               onDeleteComponent={handleDeleteComponent}
               onPaletteDropHandled={() => setPaletteDrop(null)}
             />
+
+          </div>
+          <div className="sd-hull-hint">配置パーツからドラッグで配置。配置済みはドラッグで移動、Ctrl+ドラッグでコピー、船体外へドロップで削除。</div>
+        </main>
+
+        <section className="sd-equipment-dock" aria-label="搭載兵装表">
+          <div className="sd-equipment-heading"><strong>{hull.name}</strong><span>搭載 {design.components.length} 基 ／ 重量 {Math.round(stats.totalWeight).toLocaleString()} / {stats.maxWeight.toLocaleString()} t ／ {stats.speed.toFixed(1)} kt</span></div>
             <GroupedLoadoutPanel
               design={design}
               selectedPartId={selectedComponent?.partId ?? selectedPart?.partId ?? null}
@@ -572,9 +635,7 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
               onAdd={handleAddGroupedPart}
               onRemove={handleRemoveGroupedPart}
             />
-          </div>
-          <div className="sd-hull-hint">配置パーツからドラッグで配置。配置済みはドラッグで移動、Ctrl+ドラッグでコピー、船体外へドロップで削除。</div>
-        </main>
+        </section>
 
         <aside className="sd-panel sd-panel-right">
           <WeightGauge totalWeight={stats.totalWeight} maxWeight={stats.maxWeight} />
@@ -598,6 +659,8 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
 function HLGGrid({
   hull,
   design,
+  layer,
+  mirrorPlacement,
   selectedPart,
   paletteDrag,
   paletteDrop,
@@ -613,6 +676,8 @@ function HLGGrid({
 }: {
   hull: ReturnType<typeof getHullsByClass>[number]
   design: HLGDesign
+  layer: 'deck' | 'internal'
+  mirrorPlacement: boolean
   selectedPart?: HLGPartDefinition
   paletteDrag: PaletteDragState | null
   paletteDrop: PaletteDropState | null
@@ -902,7 +967,7 @@ function HLGGrid({
           }
           const rect = componentRect(previewComponent, selectedPart)
           const valid = canPlaceHLGPart(hull, design, selectedPart, placementPreviewCell, rotation, selectedWeaponSlot ?? undefined)
-          const mirroredCell = mirroredPlacementCell(hull, placementPreviewCell)
+          const mirroredCell = mirrorPlacement ? mirroredPlacementCell(hull, placementPreviewCell) : null
           const mirrorPreview = mirroredCell && valid ? (() => {
             const withOriginal = { ...design, components: [...design.components, previewComponent] }
             const mirrorValid = canPlaceHLGPart(hull, withOriginal, selectedPart, mirroredCell, rotation, selectedWeaponSlot ?? undefined)
@@ -936,7 +1001,7 @@ function HLGGrid({
         })()}
         {design.components.map(component => {
           const part = HLG_PART_BY_ID[component.partId]
-          if (!part) return null
+          if (!part || designerLayerForPart(part) !== layer) return null
           const footprint = rotateFootprint(part.footprint, component.rotation)
           const displayedComponent = drag?.id === component.instanceId && !drag.copying ? { ...component, cell: drag.cell } : component
           const rect = componentRect(displayedComponent, part)
@@ -1496,10 +1561,11 @@ function loadoutGroupSort(part: HLGPartDefinition): number {
   return 60
 }
 
-function componentAtCell(design: HLGDesign, cell: HLGCell, placingPart?: HLGPartDefinition): HLGComponentInstance | null {
+function componentAtCell(design: HLGDesign, cell: HLGCell, placingPart?: HLGPartDefinition, layer?: 'deck' | 'internal'): HLGComponentInstance | null {
   return design.components.find(component => {
     const part = HLG_PART_BY_ID[component.partId]
     if (!part) return false
+    if (layer && designerLayerForPart(part) !== layer) return false
     if (placingPart && !componentsShareDesignerLayer(part, placingPart)) return false
     const rect = componentRect(component, part)
     return cell.c >= Math.floor(rect.left) && cell.c < Math.ceil(rect.left + rect.w) && cell.r >= Math.floor(rect.top) && cell.r < Math.ceil(rect.top + rect.h)
@@ -1508,37 +1574,6 @@ function componentAtCell(design: HLGDesign, cell: HLGCell, placingPart?: HLGPart
 
 function componentsShareDesignerLayer(a: HLGPartDefinition, b: HLGPartDefinition): boolean {
   return designerLayerForPart(a) === designerLayerForPart(b)
-}
-
-function designerLayerForPart(part: HLGPartDefinition): 'internal' | 'deck' {
-  return part.category === 'boiler' || part.category === 'turbine' ? 'internal' : 'deck'
-}
-
-function makePlacementComponents(
-  hull: HullCatalogEntry,
-  design: HLGDesign,
-  part: HLGPartDefinition,
-  cell: HLGCell,
-  rotation: HLGRotation,
-  weaponSlot?: number,
-): HLGComponentInstance[] {
-  const component = makeComponent(part, cell, rotation, weaponSlot)
-  const components = [component]
-  const mirroredCell = mirroredPlacementCell(hull, cell)
-  if (!mirroredCell) return components
-  const withOriginal = { ...design, components: [...design.components, component] }
-  if (canPlaceHLGPart(hull, withOriginal, part, mirroredCell, rotation, weaponSlot)) {
-    components.push(makeComponent(part, mirroredCell, rotation, weaponSlot))
-  }
-  return components
-}
-
-function mirroredPlacementCell(hull: HullCatalogEntry, cell: HLGCell): HLGCell | null {
-  const spec = hlgGridSpec(hull)
-  if (cell.c === spec.centerC) return null
-  const c = spec.centerC * 2 - cell.c
-  if (c < 0 || c >= spec.cols) return null
-  return { c, r: cell.r }
 }
 
 function isPalettePartDrag(event: ReactDragEvent<HTMLElement>): boolean {

@@ -37,8 +37,9 @@ export function stepDetection(state: CombatState): CombatState {
   const newContacts = new Map<string, EnemyContact>(state.enemyContacts)
 
   for (const entity of state.entities.values()) {
-    if (entity.kind !== 'ship' && entity.kind !== 'building') continue
-    if (entity.team !== 'enemy' || entity.destroyed) continue
+    if (entity.kind !== 'ship' && entity.kind !== 'building' && entity.kind !== 'aircraft') continue
+    const visibleWreck = entity.kind === 'aircraft' && (entity.phase === 'crashing' || entity.phase === 'crashed')
+    if (entity.team !== 'enemy' || (entity.destroyed && !visibleWreck)) continue
 
     const dx = entity.pos.x - player.pos.x
     const dy = entity.pos.y - player.pos.y

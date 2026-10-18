@@ -41,7 +41,7 @@ export class ScreenManager {
 
   toStart(bgmEnabled: boolean): void {
     this._mode = 'start'
-    this.d.input.setSuspended(false)
+    this.d.input.setSuspended(true)
     this.d.start.attach()
     this.d.briefingVoice.stop()
     this.d.sound.setBgmEnabled(bgmEnabled, 'title')
@@ -50,7 +50,7 @@ export class ScreenManager {
 
   toStageIntro(stage: number, bgmEnabled: boolean): void {
     this._mode = 'stage-intro'
-    this.d.input.setSuspended(false)
+    this.d.input.setSuspended(true)
     this.d.start.detach()
     this.d.results.detach()
     this.d.stageIntro.attach()
@@ -73,7 +73,7 @@ export class ScreenManager {
 
   toResults(bgmEnabled: boolean): void {
     this._mode = 'results'
-    this.d.input.setSuspended(false)
+    this.d.input.setSuspended(true)
     this.d.briefingVoice.stop()
     // Let the final hit and sinking tails finish under the results music.
     this.d.sound.setBgmEnabled(bgmEnabled, 'results')

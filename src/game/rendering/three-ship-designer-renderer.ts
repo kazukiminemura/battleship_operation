@@ -263,6 +263,8 @@ export function buildShip(config: ShipDesignerPreviewConfig): THREE.Group {
   const h = l * profile.freeboard / 0.44
   const ship = new THREE.Group()
   ship.name = config.hull.name
+  ship.userData['waterlineLength'] = l
+  ship.userData['waterlineBeam'] = w
 
   if (shape === 'yukimura') ship.add(buildYukimuraSnowman(l))
   else addHull(ship, shape, l, w, h, config.armorBonus)

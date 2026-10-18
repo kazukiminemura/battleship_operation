@@ -35,7 +35,11 @@ export function generateAutoFireCommands(state: CombatState): Command[] {
     .filter(p => isIncomingThreat(p, playerShip, state.entities, state.weather))
     .map(p => ({ pos: p.pos, vel: p.vel, kind: 'projectile' as const }))
 
-  if (surfaceTargets.length === 0 && projectileTargets.length === 0) return cmds
+  const aircraftTargets = [...state.entities.values()]
+    .filter(e => e.kind === 'aircraft' && !e.destroyed && state.detectedByPlayer.has(e.id))
+    .map(e => { const plane = e as import('./types').AircraftEntity; return { pos: plane.pos, vel: plane.vel, kind: 'aircraft' as const } })
+
+  if (surfaceTargets.length === 0 && projectileTargets.length === 0 && aircraftTargets.length === 0) return cmds
 
   for (const [weaponSlot, weapon] of player.weapons.entries()) {
     if (!weapon.autoFire || weapon.cooldownTick > 0 || weapon.ammo <= 0) continue
@@ -44,7 +48,9 @@ export function generateAutoFireCommands(state: CombatState): Command[] {
       ? surfaceTargets.filter(t => t.kind === 'ship')
       : weapon.type === 'aa' && projectileTargets.length > 0
         ? projectileTargets
-        : surfaceTargets
+        : weapon.type === 'aa' && aircraftTargets.length > 0
+          ? aircraftTargets
+          : surfaceTargets
     if (candidates.length === 0) continue
 
     let nearest = candidates[0]!
@@ -59,7 +65,7 @@ export function generateAutoFireCommands(state: CombatState): Command[] {
 
     const cfg = getWeaponConfig(weapon.id, weapon.type)
     if (minDist > cfg.maxRange) continue
-    const aimPos = (weapon.type !== 'aa' && nearest.kind === 'ship')
+    const aimPos = (nearest.kind === 'aircraft' || (weapon.type !== 'aa' && nearest.kind === 'ship'))
       ? predictLeadPosition(player.pos, nearest, cfg.speed)
       : { ...nearest.pos }
     cmds.push({
@@ -104,7 +110,7 @@ function predictLeadPosition(
     predicted = {
       x: target.pos.x + target.vel.x * tof,
       y: target.pos.y + target.vel.y * tof,
-      z: 0,
+      z: target.pos.z,
     }
   }
   return predicted

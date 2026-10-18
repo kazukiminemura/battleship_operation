@@ -5,7 +5,7 @@ import { createInitialState } from '../../src/game/data/masterdata'
 import { defaultHLGDesign, designLayoutFromHLG, hlgDesignToLoadout, hlgGridSpec, HLG_PART_BY_ID, makeComponent, towerMountFromHLG } from '../../src/designer/hlg-system'
 import type { ShipEntity } from '../../src/game/simulation/types'
 import { buildShip } from '../../src/game/rendering/three-ship-designer-renderer'
-import { combatShipPreviewConfig } from '../../src/game/rendering/three-battlefield-renderer'
+import { combatShipPreviewConfig } from '../../src/game/rendering/combat-ship-config'
 
 const hull = HULL_CATALOG.find(h => h.templateId === 'hull.battleship.basic')!
 function fixture() {

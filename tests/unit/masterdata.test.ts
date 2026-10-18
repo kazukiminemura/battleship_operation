@@ -54,7 +54,8 @@ describe('createInitialState', () => {
     const state = createInitialState()
     const buildings = [...state.entities.values()].filter(e => e.kind === 'building') as BuildingEntity[]
 
-    expect(buildings).toHaveLength(1)
+    expect(buildings).toHaveLength(2)
+    expect(buildings.map(b => b.id)).toContain('building.stage1.airfield')
     expect(buildings.map(b => b.id)).toContain('building.stage1.command')
     expect(buildings.every(b => b.team === 'enemy')).toBe(true)
     expect(buildings.every(b => b.hp > 0 && !b.destroyed)).toBe(true)

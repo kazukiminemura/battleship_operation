@@ -1,4 +1,4 @@
-import type { ShipShapeClass } from './ship-rendering-data'
+import { shipLengthToBeam, type ShipShapeClass } from './ship-rendering-data'
 
 export interface HistoricalShipProfile {
   kind: 'destroyer' | 'cruiser' | 'battleship'
@@ -14,17 +14,17 @@ export interface HistoricalShipProfile {
 
 const PROFILES: Record<HistoricalShipProfile['kind'], HistoricalShipProfile> = {
   destroyer: {
-    kind: 'destroyer', inspiration: 'Fubuki-era destroyer', lengthToBeam: 10.2,
+    kind: 'destroyer', inspiration: 'Fubuki-era destroyer', lengthToBeam: shipLengthToBeam('destroyer'),
     freeboard: 0.032, gunScale: 0.47, funnelPositions: [-0.01, -0.135],
     funnelHeight: 0.062, bridgeHeight: 0.09, timberDeck: false,
   },
   cruiser: {
-    kind: 'cruiser', inspiration: 'Takao-era cruiser', lengthToBeam: 9.0,
+    kind: 'cruiser', inspiration: 'Takao-era cruiser', lengthToBeam: shipLengthToBeam('cruiser'),
     freeboard: 0.035, gunScale: 0.70, funnelPositions: [-0.035, -0.14],
     funnelHeight: 0.061, bridgeHeight: 0.13, timberDeck: true,
   },
   battleship: {
-    kind: 'battleship', inspiration: 'Yamato-era battleship', lengthToBeam: 7.3,
+    kind: 'battleship', inspiration: 'Yamato-era battleship', lengthToBeam: shipLengthToBeam('battleship'),
     freeboard: 0.028, gunScale: 1.13, funnelPositions: [-0.055],
     funnelHeight: 0.074, bridgeHeight: 0.14, timberDeck: true,
   },

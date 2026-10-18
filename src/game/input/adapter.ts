@@ -7,6 +7,7 @@ export interface InputFeedback {
   onSpeedChanged?: (direction: 'up' | 'down') => void
   onZoomIn?: () => void
   onZoomOut?: () => void
+  canFireAt?: (x: number, y: number) => boolean
 }
 
 export class InputAdapter {
@@ -18,6 +19,8 @@ export class InputAdapter {
   private renderer: CanvasRenderer
   private feedback: InputFeedback
   private suspended = false
+  private fireHeld = false
+  private pointer: { x: number; y: number } | null = null
 
   constructor(canvas: HTMLCanvasElement, renderer: CanvasRenderer, feedback: InputFeedback = {}) {
     this.canvas = canvas
@@ -43,6 +46,7 @@ export class InputAdapter {
     if (suspended) {
       this.keys.clear()
       this.commands = []
+      this.fireHeld = false
     }
   }
 
@@ -83,31 +87,57 @@ export class InputAdapter {
     window.addEventListener('blur', () => {
       this.keys.clear()
       this.commands = []
-    })
-
-    this.canvas.addEventListener('mousemove', (e) => {
-      const rect = this.canvas.getBoundingClientRect()
-      const cx = e.clientX - rect.left
-      const cy = e.clientY - rect.top
-      const [wx, wy] = this.renderer.s2w(cx, cy)
-      this.aimPoint = { x: wx, y: wy, z: 0 }
-    })
-
-    this.canvas.addEventListener('mouseleave', () => {
+      this.fireHeld = false
+      this.pointer = null
       this.aimPoint = null
     })
 
-    this.canvas.addEventListener('click', (e) => {
-      if (this.suspended) return
-      const rect = this.canvas.getBoundingClientRect()
-      const cx = e.clientX - rect.left
-      const cy = e.clientY - rect.top
-      // use isometric inverse transform from renderer
-      const [wx, wy] = this.renderer.s2w(cx, cy)
-      const target: Vec3 = { x: wx, y: wy, z: 0 }
-
-      this.commands.push({ tick: 0, actorId: 'ship.player', type: 'fire.slot', value: this.weaponMode, target })
+    this.canvas.addEventListener('pointermove', (e) => {
+      if (e.isPrimary === false) return
+      this.pointer = { x: e.clientX, y: e.clientY }
+      this.updateAim()
     })
+
+    this.canvas.addEventListener('pointerleave', () => {
+      this.aimPoint = null
+      this.pointer = null
+      this.fireHeld = false
+    })
+
+    this.canvas.addEventListener('pointerdown', (e) => {
+      if (this.suspended || e.button !== 0 || e.isPrimary === false) return
+      this.pointer = { x: e.clientX, y: e.clientY }
+      this.updateAim()
+      if (!this.aimPoint) return
+      this.fireHeld = true
+      // Preserve a brief tap between simulation ticks.
+      this.queueShot()
+    })
+    window.addEventListener('pointerup', (e) => { if (e.button === 0 && e.isPrimary !== false) this.fireHeld = false })
+    window.addEventListener('pointercancel', () => {
+      this.fireHeld = false
+      this.commands = this.commands.filter(command => command.type !== 'fire.slot')
+    })
+    this.canvas.addEventListener('click', (e) => {
+      // Pointer gestures are handled above; keep assistive/synthetic clicks.
+      if (this.suspended || e.detail !== 0) return
+      this.pointer = { x: e.clientX, y: e.clientY }
+      this.updateAim()
+      this.queueShot()
+    })
+  }
+
+  private updateAim(): void {
+    if (!this.pointer) return
+    const rect = this.canvas.getBoundingClientRect()
+    const x = this.pointer.x - rect.left, y = this.pointer.y - rect.top
+    if (this.feedback.canFireAt && !this.feedback.canFireAt(x, y)) { this.aimPoint = null; return }
+    const [wx, wy] = this.renderer.s2w(x, y)
+    this.aimPoint = { x: wx, y: wy, z: 0 }
+  }
+
+  private queueShot(): void {
+    if (this.aimPoint) this.commands.push({ tick: 0, actorId: 'ship.player', type: 'fire.slot', value: this.weaponMode, target: { ...this.aimPoint } })
   }
 
   selectWeaponMode(weaponMode: WeaponMode): void {
@@ -130,6 +160,10 @@ export class InputAdapter {
   }
 
   pollCommands(tick: number): Command[] {
+    if (this.suspended) return []
+    // Reproject a stationary pointer as the camera follows the moving ship.
+    this.updateAim()
+    if (this.fireHeld && !this.commands.some(c => c.type === 'fire.slot')) this.queueShot()
     const cmds: Command[] = []
 
     if ((this.keys.has('ArrowLeft') || this.keys.has('KeyA')) &&

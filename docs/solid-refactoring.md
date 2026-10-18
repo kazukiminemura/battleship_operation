@@ -14,6 +14,18 @@
 - ブラウザ API に依存する処理は rendering/audio/input の shell 側に閉じ込める。
 - 新しい演出を追加するときは、まず既存 renderer へ委譲できるか、独立 renderer にすべきかを判断する。
 
+## 艦船描画の責務分担
+
+- `combat-ship-config.ts`: 戦闘中の艦船データを、設計画面と共通の船体生成設定へ変換する。
+- `combat-ship-visual.ts`: 共通モデル、影、砲塔参照を生成する。船首はモデルのローカル +X とする。
+- `ship-projection.ts`: 艦の位置と角度を、注入された `w2s` に従って画面へ投影する。Canvas の下向き Y と Three.js の上向き Y の変換をここに集約する。
+- `ship-turret-traverse.ts`: 目標選択と砲塔の旋回表示を担当する。
+- `ThreeBattlefieldRenderer`: シーンと描画ライフサイクルを管理し、上記の関数へ委譲する。
+
+投影は位置・角度と投影関数だけに依存し、simulation state を変更しない。航跡・煙は実際のモデル行列から取得した取付点を利用する。航跡描画は `ShipWakeRenderer` が担当し、船首の水しぶきは描画しない。継承階層や未使用の汎用 registry は追加しない。
+
+`ship-heading-projection.test.ts` は船首から船尾への軸と前進の投影を16方向で比較する。実際の駆逐艦・巡洋艦・戦艦モデルについても、複数のズームと傾斜で衝突判定の船体寸法との一致を検証する。修正前の上下反転は16方向中14方向で再現し、回帰テストが検出する。
+
 ## SOLID の適用ルール
 
 ### S: Single Responsibility

@@ -1,0 +1,89 @@
+/* Drafting table: synchronized drawings above, equipment ledger below. */
+.sd-root {
+  --sd-bg: #131b20;
+  --sd-panel: #20282a;
+  --sd-border: #536367;
+  --sd-text: #d3d9cd;
+  --sd-dim: #93a5a4;
+  --sd-accent: #d0b766;
+  font-family: 'Yu Gothic', 'Meiryo', sans-serif;
+}
+.sd-header { height: auto; min-height: 42px; flex-wrap: wrap; gap: 8px; padding: 7px 12px; background: linear-gradient(#444c4c, #242d2f); border-bottom: 2px solid #0c1418; }
+.sd-header-title { color: #eadfb8; font-size: 13px; letter-spacing: .12em; }
+.sd-header-actions { flex-wrap: wrap; }
+.sd-root .sd-btn { background: linear-gradient(#35484e, #18282f); border-color: #67797b; color: #d4dfd8; border-radius: 2px; }
+.sd-root .sd-btn-deploy { background: linear-gradient(#6e5330, #443421); color: #ffdfa0; }
+.sd-root button:disabled { opacity: .4; cursor: default; }
+.sd-root button:focus-visible { outline: 2px solid #f2d27c; outline-offset: 2px; }
+.sd-workshop-nav { display: flex; flex: 0 0 auto; gap: 5px; padding: 6px 10px; background: #172228; overflow-x: auto; }
+.sd-workshop-nav button, .sd-drawing-toolbar button { padding: 5px 14px; color: #d6e0d8; background: linear-gradient(#34516a, #1c2d3d); border: 1px solid #687b8b; border-radius: 2px; white-space: nowrap; cursor: pointer; }
+.sd-workshop-nav .is-active, .sd-drawing-toolbar button[aria-pressed="true"] { color: #ffe8a2; background: linear-gradient(#665a39, #3d382a); border-color: #ceb66e; }
+.sd-workshop-nav-spacer { flex: 1; }
+.sd-body.sd-workbench { display: grid; grid-template-columns: minmax(0, 1fr) 300px; grid-template-rows: minmax(0, 1fr) minmax(180px, 30vh); grid-template-areas: 'drawing palette' 'equipment stats'; min-height: 0; }
+.sd-workbench .sd-center { grid-area: drawing; min-width: 0; width: auto; padding: 8px 14px; align-items: stretch; justify-content: flex-start; background-color: #102d36; background-image: linear-gradient(#76949b16 1px, transparent 1px), linear-gradient(90deg, #76949b16 1px, transparent 1px), radial-gradient(ellipse at 45% 40%, #1b4247, transparent); background-size: 10px 10px, 10px 10px, 100% 100%; }
+.sd-workbench .sd-panel-left { grid-area: palette; width: auto; min-width: 0; border-left: 3px ridge #677375; padding: 10px; background: #1b2528; }
+.sd-workbench .sd-panel-right { grid-area: stats; width: auto; min-width: 0; padding: 10px; border-top: 3px ridge #677375; border-left: 3px ridge #677375; background: #111c22; }
+.sd-workbench .sd-hlg-stage { width: 100%; max-width: 100%; margin: auto 0; gap: 0; }
+.sd-workbench .sd-hull-tabs { flex: 0 0 auto; justify-content: flex-start; }
+.sd-drawing-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 7px 12px; flex: 0 0 auto; padding: 4px 0 8px; font-size: 11px; }
+.sd-drawing-toolbar button { padding: 4px 8px; font-size: 11px; }
+.sd-drawing-toolbar label { display: flex; gap: 5px; align-items: center; color: #cfba75; }
+.sd-drawing-toolbar input { accent-color: #d0b766; }
+.sd-blueprint { width: 100%; }
+.sd-blueprint > svg { display: block; width: 100%; overflow: visible; }
+.sd-drawing-caption { display: flex; justify-content: space-between; gap: 8px; padding: 5px 2px; color: #9fb9b8; font-size: 10px; letter-spacing: .08em; }
+.sd-blueprint-part { cursor: pointer; }
+.sd-blueprint-part:hover, .sd-blueprint-part:focus-visible { stroke: #fff6b2; outline: none; }
+.sd-workbench .sd-hlg-grid-wrap { padding: 0; border: 0; border-radius: 0; background: transparent; overflow: visible; }
+.sd-workbench .sd-hlg-grid { gap: 0; }
+.sd-workbench .sd-hlg-cell { background: transparent; border-color: transparent; }
+.sd-workbench .sd-hlg-cell--inside { background: #9cbab908; border-color: #99b6b224; }
+.sd-workbench .sd-hlg-cell--inside:not(.sd-hlg-cell--side) { background: #9cbab908; }
+.sd-workbench .sd-hlg-cell--inside::after { border-color: #b0c6bc; }
+.sd-workbench .sd-hlg-cell--valid { background: #90cda518; }
+.sd-workbench .sd-hlg-component { border-radius: 1px; background: #102e32; border: 1px solid #cbb66b; color: #e7d288; box-shadow: none; }
+.sd-workbench .sd-hlg-component--boiler, .sd-workbench .sd-hlg-component--turbine { background: repeating-linear-gradient(45deg, #732e2740 0 2px, #0c252f 2px 5px); border-color: #c47d68; color: #f4b8a4; opacity: 1; }
+.sd-workbench .sd-hlg-component--selected { background: #76663d; border-color: #fff2b1; color: #fff7cb; box-shadow: 0 0 0 2px #e2c469; z-index: 35; }
+.sd-workbench .sd-hlg-component--invalid, .sd-workbench .sd-hlg-component--delete { background: #74372f; border-color: #ff8a78; color: #ffe5de; }
+.sd-workbench .sd-hull-hint { flex: 0 0 auto; color: #8fa9a9; font-size: 10px; margin-top: 8px; }
+.sd-workbench .sd-hlg-part { position: relative; padding: 7px 7px 7px 65px; margin-left: 0; background: #111c23; border-color: #3b5158; border-radius: 1px; min-height: 74px; }
+.sd-workbench .sd-hlg-part-name { color: #d9decf; font-size: 12px; }
+.sd-workbench .sd-hlg-part-kind { color: #bca968; font-size: 10px; }
+.sd-workbench .sd-hlg-part-meta { color: #8b9ea1; font-size: 10px; }
+.sd-workbench .sd-hlg-part--active { background: #343c32; border-color: #d7c17a; }
+.sd-part-symbol { width: 52px; height: 46px; color: #d7ca8f; }
+.sd-hlg-part > .sd-part-symbol { position: absolute; left: 6px; top: 14px; }
+.sd-workbench .sd-hlg-part-group-title { color: #a9bfc4; background: #26383e; }
+.sd-workbench .sd-hlg-chip { height: 25px; color: #a4b6b5; background: #182a31; border-color: #3a5159; }
+.sd-workbench .sd-hlg-chip--active { color: #f2d583; border-color: #aa965a; background: #3a3c2c; }
+.sd-equipment-dock { grid-area: equipment; min-width: 0; overflow: auto; padding: 8px 12px; background: #121c21; border-top: 3px ridge #677375; }
+.sd-equipment-heading { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; padding: 0 0 8px; color: #b9c9c4; font-size: 11px; }
+.sd-equipment-heading strong { color: #e8d392; font-size: 13px; }
+.sd-equipment-dock .sd-loadout-slots { border-color: #44575a; background: #17272f; border-radius: 0; }
+.sd-equipment-dock .sd-loadout-slot-cell { border-radius: 0; background: #111e26; border-color: #3c515a; }
+.sd-equipment-dock .sd-loadout-slot-cell--selected { background: #4e4830; }
+.sd-equipment-dock .sd-loadout-group-column { background: transparent; border-color: #44575a; border-radius: 0; }
+.sd-equipment-dock .sd-loadout-group-row { border-bottom: 1px solid #35474c; background: #18242a; min-height: 30px; }
+.sd-equipment-dock .sd-loadout-group-name { color: #cbd8d5; }
+.sd-workbench .sd-3d-preview-stage { height: clamp(180px, 27vh, 320px); }
+.sd-workbench .sd-3d-preview-header { display: flex; }
+.sd-workbench .sd-armor-panel { margin-top: 8px; }
+.sd-workbench .sd-section-title { color: #c4b77e; border-color: #44575a; }
+.sd-workbench .sd-engine-row { background: #17262c; border-color: #3c5157; }
+@media (max-width: 1100px) and (min-width: 761px) {
+  .sd-body.sd-workbench { grid-template-columns: minmax(0, 1fr) 250px; }
+  .sd-workshop-nav button { padding: 5px 10px; }
+}
+@media (max-width: 760px) {
+  .sd-body.sd-workbench { display: flex; flex-direction: column; overflow-y: auto; }
+  .sd-workbench .sd-center { order: 0; flex: 0 0 auto; width: 100%; min-height: 300px; overflow: visible; padding: 8px; }
+  .sd-workbench .sd-panel-left { order: 1; flex: 0 0 auto; width: 100%; max-height: 300px; border-left: 0; }
+  .sd-workbench .sd-equipment-dock { order: 2; }
+  .sd-workbench .sd-panel-right { order: 3; }
+  .sd-equipment-dock, .sd-workbench .sd-panel-right { flex: 0 0 auto; width: 100%; max-height: none; overflow: visible; }
+  .sd-workbench .sd-hlg-part-list { display: block; }
+  .sd-drawing-caption { font-size: 8px; letter-spacing: 0; }
+  .sd-workshop-nav button { padding: 5px 10px; }
+  .sd-workshop-nav-spacer { display: none; }
+  .sd-equipment-dock .sd-loadout-slot-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}

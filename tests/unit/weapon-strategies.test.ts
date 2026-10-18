@@ -42,9 +42,9 @@ describe('weapon strategies', () => {
       .toBeGreaterThan(WEAPON_CONFIGS.missile.maxRange)
   })
 
-  it('uses realistic reload windows for representative weapons', () => {
-    expect(getWeaponConfig('weapon.gun.406mm.twin', 'gun').cooldown).toBe(32 * TICKS_PER_SECOND)
-    expect(getWeaponConfig('weapon.gun.460mm', 'gun').cooldown).toBe(40 * TICKS_PER_SECOND)
+  it('uses arcade gun reloads while preserving torpedo and AA timing', () => {
+    expect(getWeaponConfig('weapon.gun.406mm.twin', 'gun').cooldown).toBe(Math.round(3.6 * TICKS_PER_SECOND))
+    expect(getWeaponConfig('weapon.gun.460mm', 'gun').cooldown).toBe(Math.round(4.5 * TICKS_PER_SECOND))
     expect(getWeaponConfig('weapon.torpedo.610mm.dd', 'torpedo').cooldown).toBe(80 * TICKS_PER_SECOND)
     expect(getWeaponConfig('weapon.aa.ciws.bb', 'aa').cooldown).toBeLessThan(TICKS_PER_SECOND)
   })

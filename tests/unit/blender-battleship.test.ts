@@ -4,7 +4,7 @@ import kit from '../../src/game/rendering/assets/battleship-kit.json'
 import { blenderBattleshipPart } from '../../src/game/rendering/blender-battleship'
 import { buildShip } from '../../src/game/rendering/three-ship-designer-renderer'
 import { createInitialState } from '../../src/game/data/masterdata'
-import { combatShipPreviewConfig } from '../../src/game/rendering/three-battlefield-renderer'
+import { combatShipPreviewConfig } from '../../src/game/rendering/combat-ship-config'
 import type { ShipEntity } from '../../src/game/simulation/types'
 import { historicalProfile } from '../../src/game/rendering/historical-ship-profiles'
 

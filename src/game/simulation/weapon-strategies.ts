@@ -66,12 +66,13 @@ class SecondaryGunWeaponStrategy extends BaseWeaponStrategy {
   readonly type = 'secondary' as const
 }
 
+// Reloads are compressed for maneuver-and-salvo combat; they are not historical timings.
 export const WEAPON_STRATEGIES: Record<WeaponType, WeaponStrategy> = {
   gun: new CannonWeaponStrategy({
-    speed: 20, damageMin: 30, damageMax: 50, lifetime: 60, cooldown: cooldownSeconds(10), hitRadius: 18, maxRange: 1200, maxHeight: 220,
+    speed: 20, damageMin: 30, damageMax: 50, lifetime: 60, cooldown: cooldownSeconds(1.8), hitRadius: 18, maxRange: 1200, maxHeight: 220,
   }),
   secondary: new SecondaryGunWeaponStrategy({
-    speed: 22, damageMin: 20, damageMax: 32, lifetime: 55, cooldown: cooldownSeconds(6), hitRadius: 18, maxRange: 900, maxHeight: 180,
+    speed: 22, damageMin: 20, damageMax: 32, lifetime: 55, cooldown: cooldownSeconds(.9), hitRadius: 18, maxRange: 900, maxHeight: 180,
   }),
   torpedo: new TorpedoWeaponStrategy({
     speed: 8, damageMin: 80, damageMax: 120, lifetime: 150, cooldown: cooldownSeconds(75), hitRadius: 30, maxRange: 1200, maxHeight: 0,
@@ -106,7 +107,7 @@ const WEAPON_CONFIG_OVERRIDES: Record<string, WeaponConfigOverride> = {
   },
   // ── 駆逐艦 追加武器 ──────────────────────────────────────────────────
   'weapon.gun.127mm.ap': {
-    speed: 23, damageMin: 45, damageMax: 72, lifetime: 68, cooldown: cooldownSeconds(7.5), hitRadius: 20, maxRange: 1380, maxHeight: 230,
+    speed: 23, damageMin: 45, damageMax: 72, lifetime: 68, cooldown: cooldownSeconds(1.5), hitRadius: 20, maxRange: 1380, maxHeight: 230,
   },
   'weapon.torpedo.610mm.dd': {
     speed: 7, damageMin: 130, damageMax: 190, lifetime: 170, cooldown: cooldownSeconds(80), hitRadius: 33, maxRange: 1190, maxHeight: 0,
@@ -122,13 +123,13 @@ const WEAPON_CONFIG_OVERRIDES: Record<string, WeaponConfigOverride> = {
   },
   // ── 巡洋艦 追加武器 ──────────────────────────────────────────────────
   'weapon.gun.203mm.forward': {
-    speed: 22, damageMin: 60, damageMax: 95, lifetime: 90, cooldown: cooldownSeconds(15), hitRadius: 24, maxRange: 1980, maxHeight: 380,
+    speed: 22, damageMin: 60, damageMax: 95, lifetime: 90, cooldown: cooldownSeconds(2.4), hitRadius: 24, maxRange: 1980, maxHeight: 380,
   },
   'weapon.gun.203mm.aft': {
-    speed: 22, damageMin: 60, damageMax: 95, lifetime: 90, cooldown: cooldownSeconds(15), hitRadius: 24, maxRange: 1980, maxHeight: 380,
+    speed: 22, damageMin: 60, damageMax: 95, lifetime: 90, cooldown: cooldownSeconds(2.4), hitRadius: 24, maxRange: 1980, maxHeight: 380,
   },
   'weapon.secondary.100mm.cl': {
-    speed: 25, damageMin: 18, damageMax: 28, lifetime: 48, cooldown: cooldownSeconds(4), hitRadius: 17, maxRange: 960, maxHeight: 200,
+    speed: 25, damageMin: 18, damageMax: 28, lifetime: 48, cooldown: cooldownSeconds(0.8), hitRadius: 17, maxRange: 960, maxHeight: 200,
   },
   'weapon.torpedo.610mm.cl': {
     speed: 7, damageMin: 130, damageMax: 190, lifetime: 170, cooldown: cooldownSeconds(85), hitRadius: 33, maxRange: 1190, maxHeight: 0,
@@ -141,28 +142,28 @@ const WEAPON_CONFIG_OVERRIDES: Record<string, WeaponConfigOverride> = {
   },
   // ── 戦艦 追加武器 ─────────────────────────────────────────────────────
   'weapon.gun.406mm.he.forward': {
-    speed: 21, damageMin: 65, damageMax: 100, lifetime: 105, cooldown: cooldownSeconds(30), hitRadius: 30, maxRange: 2000, maxHeight: 400,
+    speed: 21, damageMin: 65, damageMax: 100, lifetime: 105, cooldown: cooldownSeconds(3.2), hitRadius: 30, maxRange: 2000, maxHeight: 400,
   },
   'weapon.gun.406mm.he.center': {
-    speed: 21, damageMin: 65, damageMax: 100, lifetime: 105, cooldown: cooldownSeconds(30), hitRadius: 30, maxRange: 2000, maxHeight: 400,
+    speed: 21, damageMin: 65, damageMax: 100, lifetime: 105, cooldown: cooldownSeconds(3.2), hitRadius: 30, maxRange: 2000, maxHeight: 400,
   },
   'weapon.gun.406mm.he.aft': {
-    speed: 21, damageMin: 65, damageMax: 100, lifetime: 105, cooldown: cooldownSeconds(30), hitRadius: 30, maxRange: 2000, maxHeight: 400,
+    speed: 21, damageMin: 65, damageMax: 100, lifetime: 105, cooldown: cooldownSeconds(3.2), hitRadius: 30, maxRange: 2000, maxHeight: 400,
   },
   'weapon.gun.460mm.forward': {
-    speed: 23, damageMin: 130, damageMax: 195, lifetime: 130, cooldown: cooldownSeconds(40), hitRadius: 36, maxRange: 2600, maxHeight: 580,
+    speed: 23, damageMin: 130, damageMax: 195, lifetime: 130, cooldown: cooldownSeconds(4.5), hitRadius: 36, maxRange: 2600, maxHeight: 580,
   },
   'weapon.gun.460mm.center': {
-    speed: 23, damageMin: 130, damageMax: 195, lifetime: 130, cooldown: cooldownSeconds(40), hitRadius: 36, maxRange: 2600, maxHeight: 580,
+    speed: 23, damageMin: 130, damageMax: 195, lifetime: 130, cooldown: cooldownSeconds(4.5), hitRadius: 36, maxRange: 2600, maxHeight: 580,
   },
   'weapon.gun.460mm.aft': {
-    speed: 23, damageMin: 130, damageMax: 195, lifetime: 130, cooldown: cooldownSeconds(40), hitRadius: 36, maxRange: 2600, maxHeight: 580,
+    speed: 23, damageMin: 130, damageMax: 195, lifetime: 130, cooldown: cooldownSeconds(4.5), hitRadius: 36, maxRange: 2600, maxHeight: 580,
   },
   'weapon.secondary.127mm.bb.port': {
-    speed: 24, damageMin: 22, damageMax: 35, lifetime: 58, cooldown: cooldownSeconds(5), hitRadius: 18, maxRange: 1000, maxHeight: 190,
+    speed: 24, damageMin: 22, damageMax: 35, lifetime: 58, cooldown: cooldownSeconds(0.9), hitRadius: 18, maxRange: 1000, maxHeight: 190,
   },
   'weapon.secondary.127mm.bb.starboard': {
-    speed: 24, damageMin: 22, damageMax: 35, lifetime: 58, cooldown: cooldownSeconds(5), hitRadius: 18, maxRange: 1000, maxHeight: 190,
+    speed: 24, damageMin: 22, damageMax: 35, lifetime: 58, cooldown: cooldownSeconds(0.9), hitRadius: 18, maxRange: 1000, maxHeight: 190,
   },
   'weapon.torpedo.610mm.bb': {
     speed: 7, damageMin: 130, damageMax: 190, lifetime: 170, cooldown: cooldownSeconds(90), hitRadius: 33, maxRange: 1190, maxHeight: 0,
@@ -175,41 +176,41 @@ const WEAPON_CONFIG_OVERRIDES: Record<string, WeaponConfigOverride> = {
   },
   // Canonical IDs (position-agnostic) — used by player weapons from the prep screen
   'weapon.gun.152mm.twin': {
-    speed: 22, damageMin: 50, damageMax: 80, lifetime: 80, cooldown: cooldownSeconds(10), hitRadius: 22, maxRange: 1600, maxHeight: 300,
+    speed: 22, damageMin: 50, damageMax: 80, lifetime: 80, cooldown: cooldownSeconds(1.8), hitRadius: 22, maxRange: 1600, maxHeight: 300,
   },
   'weapon.gun.203mm': {
-    speed: 22, damageMin: 60, damageMax: 95, lifetime: 90, cooldown: cooldownSeconds(15), hitRadius: 24, maxRange: 1980, maxHeight: 380,
+    speed: 22, damageMin: 60, damageMax: 95, lifetime: 90, cooldown: cooldownSeconds(2.4), hitRadius: 24, maxRange: 1980, maxHeight: 380,
   },
   'weapon.gun.406mm.twin': {
-    speed: 24, damageMin: 85, damageMax: 130, lifetime: 100, cooldown: cooldownSeconds(32), hitRadius: 27, maxRange: 2200, maxHeight: 430,
+    speed: 24, damageMin: 85, damageMax: 130, lifetime: 100, cooldown: cooldownSeconds(3.6), hitRadius: 27, maxRange: 2200, maxHeight: 430,
   },
   'weapon.gun.406mm.he': {
-    speed: 21, damageMin: 65, damageMax: 100, lifetime: 105, cooldown: cooldownSeconds(30), hitRadius: 30, maxRange: 2000, maxHeight: 400,
+    speed: 21, damageMin: 65, damageMax: 100, lifetime: 105, cooldown: cooldownSeconds(3.2), hitRadius: 30, maxRange: 2000, maxHeight: 400,
   },
   'weapon.gun.460mm': {
-    speed: 23, damageMin: 130, damageMax: 195, lifetime: 130, cooldown: cooldownSeconds(40), hitRadius: 36, maxRange: 2600, maxHeight: 580,
+    speed: 23, damageMin: 130, damageMax: 195, lifetime: 130, cooldown: cooldownSeconds(4.5), hitRadius: 36, maxRange: 2600, maxHeight: 580,
   },
   'weapon.secondary.152mm.twin': {
-    speed: 24, damageMin: 28, damageMax: 45, lifetime: 75, cooldown: cooldownSeconds(8), hitRadius: 21, maxRange: 1300, maxHeight: 240,
+    speed: 24, damageMin: 28, damageMax: 45, lifetime: 75, cooldown: cooldownSeconds(1.2), hitRadius: 21, maxRange: 1300, maxHeight: 240,
   },
   'weapon.secondary.127mm.bb': {
-    speed: 24, damageMin: 22, damageMax: 35, lifetime: 58, cooldown: cooldownSeconds(5), hitRadius: 18, maxRange: 1000, maxHeight: 190,
+    speed: 24, damageMin: 22, damageMax: 35, lifetime: 58, cooldown: cooldownSeconds(0.9), hitRadius: 18, maxRange: 1000, maxHeight: 190,
   },
   // Position-specific aliases (ships.json enemies use these IDs)
   'weapon.gun.406mm.twin.forward': {
-    speed: 24, damageMin: 85, damageMax: 130, lifetime: 100, cooldown: cooldownSeconds(32), hitRadius: 27, maxRange: 2200, maxHeight: 430,
+    speed: 24, damageMin: 85, damageMax: 130, lifetime: 100, cooldown: cooldownSeconds(3.6), hitRadius: 27, maxRange: 2200, maxHeight: 430,
   },
   'weapon.gun.406mm.twin.center': {
-    speed: 24, damageMin: 85, damageMax: 130, lifetime: 100, cooldown: cooldownSeconds(32), hitRadius: 27, maxRange: 2200, maxHeight: 430,
+    speed: 24, damageMin: 85, damageMax: 130, lifetime: 100, cooldown: cooldownSeconds(3.6), hitRadius: 27, maxRange: 2200, maxHeight: 430,
   },
   'weapon.gun.406mm.twin.aft': {
-    speed: 24, damageMin: 85, damageMax: 130, lifetime: 100, cooldown: cooldownSeconds(32), hitRadius: 27, maxRange: 2200, maxHeight: 430,
+    speed: 24, damageMin: 85, damageMax: 130, lifetime: 100, cooldown: cooldownSeconds(3.6), hitRadius: 27, maxRange: 2200, maxHeight: 430,
   },
   'weapon.secondary.152mm.twin.port': {
-    speed: 24, damageMin: 28, damageMax: 45, lifetime: 75, cooldown: cooldownSeconds(8), hitRadius: 21, maxRange: 1300, maxHeight: 240,
+    speed: 24, damageMin: 28, damageMax: 45, lifetime: 75, cooldown: cooldownSeconds(1.2), hitRadius: 21, maxRange: 1300, maxHeight: 240,
   },
   'weapon.secondary.152mm.twin.starboard': {
-    speed: 24, damageMin: 28, damageMax: 45, lifetime: 75, cooldown: cooldownSeconds(8), hitRadius: 21, maxRange: 1300, maxHeight: 240,
+    speed: 24, damageMin: 28, damageMax: 45, lifetime: 75, cooldown: cooldownSeconds(1.2), hitRadius: 21, maxRange: 1300, maxHeight: 240,
   },
   'weapon.missile.cruiser.standard': {
     speed: 13, damageMin: 55, damageMax: 85, lifetime: 180, cooldown: cooldownSeconds(28), hitRadius: 36, maxRange: 2200, maxHeight: 420,
@@ -218,13 +219,13 @@ const WEAPON_CONFIG_OVERRIDES: Record<string, WeaponConfigOverride> = {
     speed: 14, damageMin: 80, damageMax: 120, lifetime: 240, cooldown: cooldownSeconds(40), hitRadius: 45, maxRange: 3200, maxHeight: 560,
   },
   'weapon.boss.460mm.twin.forward': {
-    speed: 25, damageMin: 110, damageMax: 165, lifetime: 120, cooldown: cooldownSeconds(38), hitRadius: 22, maxRange: 2600, maxHeight: 520,
+    speed: 25, damageMin: 110, damageMax: 165, lifetime: 120, cooldown: cooldownSeconds(5), hitRadius: 22, maxRange: 2600, maxHeight: 520,
   },
   'weapon.boss.460mm.twin.center': {
-    speed: 25, damageMin: 110, damageMax: 165, lifetime: 120, cooldown: cooldownSeconds(38), hitRadius: 22, maxRange: 2600, maxHeight: 520,
+    speed: 25, damageMin: 110, damageMax: 165, lifetime: 120, cooldown: cooldownSeconds(5), hitRadius: 22, maxRange: 2600, maxHeight: 520,
   },
   'weapon.boss.460mm.twin.aft': {
-    speed: 25, damageMin: 110, damageMax: 165, lifetime: 120, cooldown: cooldownSeconds(38), hitRadius: 22, maxRange: 2600, maxHeight: 520,
+    speed: 25, damageMin: 110, damageMax: 165, lifetime: 120, cooldown: cooldownSeconds(5), hitRadius: 22, maxRange: 2600, maxHeight: 520,
   },
 }
 
