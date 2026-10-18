@@ -1,3 +1,4 @@
+import { HullPlanOutline } from './HullPlanOutline'
 import { PartPlanDrawing } from './PartDrawing'
 import { GUN_MOUNT_HEIGHTS, isGunMount, normalizedMountHeight } from '../game/data/gun-mount-geometry'
 import { barrelsInterfere, gunClearance } from './gun-clearance'
@@ -51,6 +52,7 @@ import type { PrepResult } from './types'
 import { firingArcForWeapon, firingArcLabel, type FiringArc } from '../game/simulation/firing-arcs'
 import './ShipDesigner.css'
 import './ShipWorkbench.css'
+import './CompactWorkbench.css'
 
 interface Props {
   onClose?: () => void
@@ -115,6 +117,8 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
   const [hullIdx, setHullIdx] = useState(() => hullIndexForTemplate(initialShipType, initialHull.templateId))
   const { design, setDesign, resetDesign, undo, redo, canUndo, canRedo } = useDesignHistory(createDesignForHull(initialHull, initialDesign))
   const [workshop, setWorkshop] = useState<Workshop>('weapon')
+  const [sideTab, setSideTab] = useState<'parts' | 'loadout' | 'stats' | 'armor'>('parts')
+  const [partSearch, setPartSearch] = useState('')
   const [drawingView, setDrawingView] = useState<'plan' | 'dock'>('plan')
   const [layer, setLayer] = useState<'deck' | 'internal'>('deck')
   const [mirrorPlacement, setMirrorPlacement] = useState(true)
@@ -137,8 +141,8 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
   const stats = useMemo(() => calcStats(design, hull), [design, hull])
   const visibleParts = useMemo(
     () => HLG_PARTS.filter(part => part.allowedShipClasses.includes(shipType) && (partFilter === 'all' || part.category === partFilter) &&
-      WORKSHOP_CATEGORIES[workshop].includes(part.category)),
-    [partFilter, shipType, workshop],
+      WORKSHOP_CATEGORIES[workshop].includes(part.category) && part.name.toLocaleLowerCase().includes(partSearch.trim().toLocaleLowerCase())),
+    [partFilter, shipType, workshop, partSearch],
   )
   const paletteGroups = useMemo(() => groupPaletteParts(visibleParts), [visibleParts])
   const selectedPart = selectedPartId ? HLG_PART_BY_ID[selectedPartId] : undefined
@@ -206,6 +210,7 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
     setSelectedPartId(defaultSelectedPart(type))
     setLayer('deck')
     setWorkshop('weapon')
+    setSideTab('parts')
     setStep('design')
   }
 
@@ -216,6 +221,7 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
     setSelectedPartId(defaultSelectedPart(nextHull.shipType))
     setLayer('deck')
     setWorkshop('weapon')
+    setSideTab('parts')
   }
 
   const handleGridClick = (cell: HLGCell) => {
@@ -296,6 +302,7 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
     if (event.button !== 0) return
     event.preventDefault()
     setSelectedPartId(part.partId)
+    setSelectedComponentId(null)
     setLayer(designerLayerForPart(part))
     setDraggingPartId(part.partId)
     setPaletteDrop(null)
@@ -504,7 +511,7 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
     return (
       <div className="sd-root">
         <header className="sd-header">
-          <div className="sd-header-title">艦船設計局 / NAVAL CONSTRUCTION</div>
+          <div className="sd-header-title">艦船設計局</div>
           {onClose && <button className="sd-btn sd-btn-back" onClick={onClose}>タイトルへ</button>}
         </header>
         <div className="sd-ship-select">
@@ -527,9 +534,9 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
   }
 
   return (
-    <div className="sd-root">
+    <div className="sd-root sd-root--design">
       <header className="sd-header">
-        <div className="sd-header-title">艦船設計局 / NAVAL CONSTRUCTION</div>
+        <div className="sd-header-title">艦船設計局</div>
         <div className="sd-header-actions">
           <div className="sd-save-slots" aria-label="保存スロット">
             {DESIGN_SAVE_SLOTS.map(slot => (
@@ -545,56 +552,24 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
           </div>
           <button className="sd-btn" onClick={handleSave}>保存</button>
           <button className="sd-btn" onClick={handleLoad}>読込</button>
-          <button className="sd-btn sd-btn-danger" onClick={handleResetWeapons}>兵装リセット</button>
-          <button className="sd-btn sd-btn-auto" onClick={handleReset}>標準配置</button>
-          <button className="sd-btn sd-btn-back" onClick={() => setStep('ship-select')}>艦種変更</button>
+          <details className="sd-design-menu"><summary className="sd-btn">操作 ▾</summary><div>
+            <button className="sd-btn sd-btn-danger" onClick={handleResetWeapons}>兵装リセット</button>
+            <button className="sd-btn sd-btn-auto" onClick={handleReset}>標準配置に戻す</button>
+            <button className="sd-btn sd-btn-back" onClick={() => setStep('ship-select')}>艦種を変更</button>
+          </div></details>
           {onConfirm && <button className="sd-btn sd-btn-deploy" onClick={handleDeploy}>出撃</button>}
         </div>
       </header>
 
       <nav className="sd-workshop-nav" aria-label="設計区分">
         {([['weapon', '兵装'], ['engine', '機関'], ['equipment', '設備'], ['armor', '防御'], ['all', '全部品']] as const).map(([key, label]) => (
-          <button key={key} type="button" aria-pressed={workshop === key} className={workshop === key ? 'is-active' : ''} onClick={() => { setWorkshop(key); setPartFilter('all') }}>{label}</button>
+          <button key={key} type="button" aria-pressed={workshop === key} className={workshop === key ? 'is-active' : ''} onClick={() => { setWorkshop(key); setPartFilter('all'); setPartSearch(''); setSideTab(key === 'armor' ? 'armor' : 'parts'); setSelectedPartId(null); setSelectedComponentId(null); setLayer(key === 'engine' ? 'internal' : 'deck') }}>{label}</button>
         ))}
         <span className="sd-workshop-nav-spacer" />
         <button type="button" onClick={undo} disabled={!canUndo}>↶ 取り消し</button>
         <button type="button" onClick={redo} disabled={!canRedo}>↷ やり直し</button>
       </nav>
       <div className="sd-body sd-workbench">
-        <aside className="sd-panel sd-panel-left">
-          <div className="sd-palette-title">部品一覧 / PARTS</div>
-          <div className="sd-hlg-filter">
-            {(Object.keys(CATEGORY_LABEL) as Array<HLGComponentCategory | 'all'>).filter(category => category === 'all' || WORKSHOP_CATEGORIES[workshop].includes(category)).map(category => (
-              <button key={category} className={`sd-hlg-chip${partFilter === category ? ' sd-hlg-chip--active' : ''}`} onClick={() => setPartFilter(category)}>
-                {CATEGORY_LABEL[category]}
-              </button>
-            ))}
-          </div>
-          <div className="sd-hlg-part-list">
-            {paletteGroups.map(group => (
-              <div className={`sd-hlg-part-group${collapsedPaletteGroups.has(group.label) ? ' sd-hlg-part-group--collapsed' : ''}`} key={group.label}>
-                <button className="sd-hlg-part-group-title" type="button" onClick={() => togglePaletteGroup(group.label)}>
-                  <span className="sd-hlg-tree-arrow">{collapsedPaletteGroups.has(group.label) ? '▶' : '▼'}</span>
-                  <span>{group.label}</span>
-                  <span className="sd-hlg-tree-count">{group.parts.length}</span>
-                </button>
-                {!collapsedPaletteGroups.has(group.label) && group.parts.map(part => (
-                  <button
-                    key={part.partId}
-                    className={`sd-hlg-part${selectedPartId === part.partId ? ' sd-hlg-part--active' : ''}${draggingPartId === part.partId ? ' sd-hlg-part--dragging' : ''}`}
-                    onPointerDown={(event) => handlePartPointerDown(event, part)}
-                    onClick={() => { setSelectedPartId(part.partId); setLayer(designerLayerForPart(part)) }}
-                  >
-                    <PartSymbol part={part} />
-                    <span className="sd-hlg-part-kind">{part.type ? WEAPON_TYPE_LABEL[part.type] : CATEGORY_LABEL[part.category]}</span>
-                    <span className="sd-hlg-part-name">{part.name}</span>
-                    <span className="sd-hlg-part-meta">{part.footprint.w}x{part.footprint.h} / {part.weight}t{partSystemMeta(part)}</span>
-                  </button>
-                ))}
-              </div>
-            ))}
-          </div>
-        </aside>
 
         <main className="sd-center">
           {hulls.length > 1 && (
@@ -620,10 +595,24 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
             <label><input type="checkbox" checked={mirrorPlacement} onChange={event => setMirrorPlacement(event.target.checked)} /> 左右対称配置</label>
             <button type="button" onClick={() => { setSelectedPartId(null); setSelectedComponentId(null) }}>選択・移動</button>
           </div>
+          <div className="sd-selection-toolbar" aria-label="選択部品の調整">
+            {selectedComponent ? <>
+              <strong>{HLG_PART_BY_ID[selectedComponent.partId]?.name}</strong>
+              <div className="sd-selection-actions">
+                <button type="button" onClick={handleRotate}>↻ 回転</button>
+                <button type="button" onClick={() => handleNudge(0, -1)} aria-label="艦首へ移動">←</button>
+                <button type="button" onClick={() => handleNudge(0, 1)} aria-label="艦尾へ移動">→</button>
+                <button type="button" onClick={() => handleNudge(-1, 0)} aria-label="左舷へ移動">↑</button>
+                <button type="button" onClick={() => handleNudge(1, 0)} aria-label="右舷へ移動">↓</button>
+                {isGunMount(HLG_PART_BY_ID[selectedComponent.partId]?.type) && <label>高さ <select aria-label="選択砲台の高さ" value={normalizedMountHeight(selectedComponent.mountHeight)} onChange={event => handleHeightChange(Number(event.target.value))}>{GUN_MOUNT_HEIGHTS.map(height => <option key={height} value={height}>{height}m</option>)}</select></label>}
+                <button type="button" className="sd-selection-delete" onClick={handleDelete}>削除</button>
+              </div>
+            </> : selectedPart ? <><strong>配置中：{selectedPart.name}</strong><span>艦上をクリック / ドラッグで配置</span><button type="button" onClick={() => setSelectedPartId(null)}>配置を終了</button></> : <><strong>選択・移動</strong><span>部品を選んで配置。艦上の部品をクリックして調整。</span></>}
+          </div>
           <div className="sd-hlg-stage">
             {drawingView === 'dock' ? <Ship3DPreview hull={hull} design={design} armorBonus={stats.armorDefense} /> : <ShipBlueprint hull={hull} design={design} selectedId={selectedComponentId} onSelect={selectComponent} />}
             <div className="sd-drawing-caption"><span>PLAN / {layer === 'deck' ? '上面・上部構造' : '上面・船内機関'}</span><span>← 艦首　左舷 ↑ / 右舷 ↓　艦尾 →</span></div>
-            <HLGGrid
+            <div className="sd-plan-viewport"><HLGGrid
               hull={hull}
               design={design}
               layer={layer}
@@ -641,13 +630,53 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
               onCopyComponent={handleCopyComponent}
               onDeleteComponent={handleDeleteComponent}
               onPaletteDropHandled={() => setPaletteDrop(null)}
-            />
+            /></div>
 
           </div>
-          <div className="sd-hull-hint">配置パーツからドラッグで配置。配置済みはドラッグで移動、Ctrl+ドラッグでコピー、船体外へドロップで削除。砲身の線は設置方向の占有範囲。赤は干渉、砲台高で調整。</div>
+          <div className="sd-hull-hint">ドラッグで移動 · Ctrl＋ドラッグでコピー · Escで選択解除 · 赤い砲身は干渉あり</div>
         </main>
 
-        <section className="sd-equipment-dock" aria-label="搭載兵装表">
+        <aside className="sd-inspector" aria-label="設計パネル">
+          <div className="sd-inspector-tabs" role="group" aria-label="設計パネル切替">
+            {([['parts', '部品'], ['loadout', '搭載'], ['stats', '性能'], ['armor', '防御']] as const).map(([key, label]) => <button type="button" key={key} id={`sd-tab-${key}`} aria-pressed={sideTab === key} aria-controls="sd-inspector-content" onClick={() => setSideTab(key)}>{label}{key === 'stats' && stats.warnings.length > 0 ? ` (${stats.warnings.length})` : ''}</button>)}
+          </div>
+          <div className="sd-inspector-content" id="sd-inspector-content" role="region" aria-labelledby={`sd-tab-${sideTab}`}>
+            {sideTab === 'parts' && (        <div className="sd-parts-pane">
+          <label className="sd-part-search">部品を探す<input type="search" value={partSearch} onChange={event => setPartSearch(event.target.value)} placeholder="主砲・レーダーなど" /></label>
+          <div className="sd-hlg-filter">
+            {(Object.keys(CATEGORY_LABEL) as Array<HLGComponentCategory | 'all'>).filter(category => category === 'all' || WORKSHOP_CATEGORIES[workshop].includes(category)).map(category => (
+              <button key={category} className={`sd-hlg-chip${partFilter === category ? ' sd-hlg-chip--active' : ''}`} onClick={() => setPartFilter(category)}>
+                {CATEGORY_LABEL[category]}
+              </button>
+            ))}
+          </div>
+          <div className="sd-hlg-part-list">{paletteGroups.length === 0 && <p>該当する部品はありません</p>}
+            {paletteGroups.map(group => (
+              <div className={`sd-hlg-part-group${collapsedPaletteGroups.has(group.label) ? ' sd-hlg-part-group--collapsed' : ''}`} key={group.label}>
+                <button className="sd-hlg-part-group-title" type="button" onClick={() => togglePaletteGroup(group.label)}>
+                  <span className="sd-hlg-tree-arrow">{collapsedPaletteGroups.has(group.label) ? '▶' : '▼'}</span>
+                  <span>{group.label}</span>
+                  <span className="sd-hlg-tree-count">{group.parts.length}</span>
+                </button>
+                {!collapsedPaletteGroups.has(group.label) && group.parts.map(part => (
+                  <button
+                    key={part.partId}
+                    className={`sd-hlg-part${selectedPartId === part.partId ? ' sd-hlg-part--active' : ''}${draggingPartId === part.partId ? ' sd-hlg-part--dragging' : ''}`}
+                    onPointerDown={(event) => handlePartPointerDown(event, part)}
+                    onClick={() => { setSelectedPartId(part.partId); setSelectedComponentId(null); setLayer(designerLayerForPart(part)) }}
+                  >
+                    <PartSymbol part={part} />
+                    <span className="sd-hlg-part-kind">{part.type ? WEAPON_TYPE_LABEL[part.type] : CATEGORY_LABEL[part.category]}</span>
+                    <span className="sd-hlg-part-name">{part.name}</span>
+                    <span className="sd-hlg-part-meta">{part.footprint.w}x{part.footprint.h} / {part.weight}t{partSystemMeta(part)}</span>
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+)}
+            {sideTab === 'loadout' && (        <section className="sd-equipment-dock" aria-label="搭載兵装表">
           <div className="sd-equipment-heading"><strong>{hull.name}</strong><span>搭載 {design.components.length} 基 ／ 重量 {Math.round(stats.totalWeight).toLocaleString()} / {stats.maxWeight.toLocaleString()} t ／ {stats.speed.toFixed(1)} kt</span></div>
             <GroupedLoadoutPanel
               design={design}
@@ -659,21 +688,14 @@ export function ShipDesigner({ onClose, onConfirm, initialResult = null }: Props
               onRemove={handleRemoveGroupedPart}
             />
         </section>
-
-        <aside className="sd-panel sd-panel-right">
-          <WeightGauge totalWeight={stats.totalWeight} maxWeight={stats.maxWeight} />
-          <ArmorPlanPanel design={design} stats={stats} onChange={handleArmorChange} />
-          <HLGStatsPanel stats={stats} selectedComponent={selectedComponent} onHeightChange={handleHeightChange} onRotate={handleRotate} onDelete={handleDelete} onNudge={handleNudge} />
-          <div className="sd-section-title" style={{ marginTop: 16 }}>設計情報</div>
-          <div className="sd-hlg-info">
-            <div>船体: {hull.name}</div>
-            <div>格子: {spec.cols} x {spec.rows}</div>
-            <div>配置: {design.components.length} パーツ</div>
-            <div>選択: {selectedPart?.name ?? 'なし'}</div>
+)}
+            {sideTab === 'stats' && <><WeightGauge totalWeight={stats.totalWeight} maxWeight={stats.maxWeight} /><HLGStatsPanel stats={stats} /></>}
+            {sideTab === 'armor' && <ArmorPlanPanel design={design} stats={stats} onChange={handleArmorChange} />}
           </div>
         </aside>
       </div>
 
+      <footer className="sd-design-status"><span>{hull.name} · {design.components.length}基</span><span>重量 {Math.round(stats.totalWeight).toLocaleString()} / {stats.maxWeight.toLocaleString()}t</span><span>{stats.speed.toFixed(1)}kt · 火力 {stats.totalFirepower.toFixed(0)}</span><button type="button" className={stats.canDeploy ? 'is-ready' : 'has-warning'} onClick={() => setSideTab('stats')}>{stats.canDeploy ? '✓ 出撃可能' : `⚠ 設計を確認 (${stats.warnings.length})`}</button></footer>
       <div id="sd-toast" className="sd-toast" aria-live="polite" />
     </div>
   )
@@ -964,7 +986,7 @@ function HLGGrid({
   }
 
   return (
-    <div className="sd-hlg-grid-wrap">
+    <div className="sd-hlg-grid-wrap" style={{ width: `min(100cqw, ${100 * spec.rows / spec.cols}cqh)` }}>
       <div
         ref={gridRef}
         className="sd-hlg-grid"
@@ -980,6 +1002,7 @@ function HLGGrid({
         onDrop={dropPartAtPointer}
         onPointerMove={updatePlacementPreviewFromPointer}
       >
+        <HullPlanOutline hull={hull} design={overlayDesign} showMachinery={layer === 'deck'} />
         {cells}
         {layer === 'deck' && <GunBarrelOverlay hull={hull} design={overlayDesign} selectedId={selectedComponentId}
           preview={selectedPart && placementPreviewCell && !componentAtCell(design, placementPreviewCell, selectedPart) ? { partId: selectedPart.partId, category: selectedPart.category, cell: placementPreviewCell, rotation: 0, barrels: selectedPart.barrels, instanceId: 'barrel-preview', mountHeight: placementHeight } : undefined} />}
@@ -1158,22 +1181,7 @@ function arcPoint(cx: number, cy: number, radius: number, angle: number): { x: n
   }
 }
 
-function HLGStatsPanel({
-  stats,
-  selectedComponent,
-  onRotate,
-  onDelete,
-  onNudge,
-  onHeightChange,
-}: {
-  stats: ReturnType<typeof calcStats>
-  selectedComponent: HLGComponentInstance | null
-  onRotate: () => void
-  onDelete: () => void
-  onNudge: (dc: number, dr: number) => void
-  onHeightChange: (value: number) => void
-}) {
-  const selectedPart = selectedComponent ? HLG_PART_BY_ID[selectedComponent.partId] : null
+function HLGStatsPanel({ stats }: { stats: ReturnType<typeof calcStats> }) {
   return (
     <div className="sd-stats">
       <div className="sd-section-title">性能パラメータ</div>
@@ -1190,33 +1198,6 @@ function HLGStatsPanel({
       </div>
 
       <EngineBalancePanel stats={stats} />
-
-      <div className="sd-section-title" style={{ marginTop: 16 }}>選択パーツ</div>
-      {selectedPart ? (
-        <div className="sd-hlg-selected">
-          <strong>{selectedPart.name}</strong>
-          {selectedPart.type && isGunMount(selectedPart.type) && <label className="sd-mount-height">砲台高（甲板から）
-            <select aria-label="選択砲台の高さ" value={normalizedMountHeight(selectedComponent?.mountHeight)} onChange={event => onHeightChange(Number(event.target.value))}>
-              {GUN_MOUNT_HEIGHTS.map(height => <option key={height} value={height}>{height} m</option>)}
-            </select>
-          </label>}
-          <span>{CATEGORY_LABEL[selectedPart.category]} / {selectedPart.weight}t</span>
-          <div className="sd-hlg-nudge" aria-label="微調整">
-            <span />
-            <button className="sd-btn sd-hlg-nudge-btn" onClick={() => onNudge(0, -1)}>前</button>
-            <span />
-            <button className="sd-btn sd-hlg-nudge-btn" onClick={() => onNudge(-1, 0)}>左舷</button>
-            <button className="sd-btn sd-hlg-nudge-btn" onClick={() => onNudge(0, 1)}>後</button>
-            <button className="sd-btn sd-hlg-nudge-btn" onClick={() => onNudge(1, 0)}>右舷</button>
-          </div>
-          <div className="sd-hlg-selected-actions">
-            <button className="sd-btn" onClick={onRotate}>回転</button>
-            <button className="sd-btn sd-btn-danger" onClick={onDelete}>削除</button>
-          </div>
-        </div>
-      ) : (
-        <div className="sd-stats-empty">パーツ未選択</div>
-      )}
 
       <div className="sd-section-title" style={{ marginTop: 16 }}>検証</div>
       {stats.warnings.length === 0 ? (

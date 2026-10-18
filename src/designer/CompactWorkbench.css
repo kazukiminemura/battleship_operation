@@ -1,0 +1,88 @@
+/* One workspace with a single scrolling inspector. */
+.sd-root--design { max-height: 100dvh; min-height: 0; }
+.sd-root--design .sd-header { min-height: 34px; padding: 4px 8px; gap: 4px; }
+.sd-root--design .sd-header-title { font-size: 11px; letter-spacing: 0; }
+.sd-root--design .sd-workshop-nav { padding: 4px 8px; }
+.sd-root--design .sd-workshop-nav button { padding: 4px 10px; font-size: 11px; }
+.sd-root--design .sd-workbench { display: grid; grid-template-columns: minmax(0, 1fr) clamp(240px, 25vw, 310px); grid-template-rows: minmax(0, 1fr); grid-template-areas: 'drawing inspector'; flex: 1 1 0; min-height: 0; overflow: hidden; }
+.sd-root--design .sd-center { display: flex; flex-direction: column; width: auto; min-height: 0; padding: 6px 12px; overflow: hidden; }
+.sd-root--design .sd-hull-tabs { margin: 0 0 3px; overflow-x: auto; gap: 4px; }
+.sd-root--design .sd-hull-tab { padding: 3px 7px; font-size: 10px; white-space: nowrap; }
+.sd-root--design .sd-drawing-toolbar { gap: 4px 8px; padding: 0 0 5px; font-size: 10px; }
+.sd-root--design .sd-drawing-toolbar button { padding: 3px 6px; font-size: 10px; }
+.sd-selection-toolbar { display: flex; flex: 0 0 auto; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 5px 10px; padding: 6px 8px; border: 1px solid #526f79; background: #092630; color: #afc5c8; font-size: 11px; }
+.sd-selection-toolbar strong { color: #e8d67c; font-size: 11px; }
+.sd-selection-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.sd-selection-actions label { display: flex; align-items: center; gap: 4px; }
+.sd-selection-toolbar button, .sd-selection-toolbar select { padding: 4px 7px; border: 1px solid #607d85; border-radius: 2px; background: #213c46; color: #d8dfce; font-size: 11px; cursor: pointer; }
+.sd-selection-toolbar .sd-selection-delete { color: #ffb5a4; border-color: #b77766; }
+.sd-root--design .sd-hlg-stage { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto minmax(0, 1fr); flex: 1 1 0; width: 100%; min-height: 0; margin: 4px 0 0; align-items: stretch; }
+.sd-root--design .sd-blueprint { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.sd-root--design .sd-blueprint > svg { flex: 1 1 0; height: 0; min-height: 0; width: 100%; overflow: hidden; }
+.sd-root--design .sd-drawing-caption { flex: 0 0 auto; padding: 3px 2px; font-size: 9px; }
+.sd-plan-viewport { container-type: size; display: flex; align-items: center; justify-content: center; width: 100%; min-height: 0; min-width: 0; padding: 5px 14px 14px; box-sizing: border-box; }
+.sd-root--design .sd-hlg-grid-wrap { flex: 0 1 auto; max-width: 100%; min-width: 0; min-height: 0; }
+.sd-root--design .sd-3d-preview { display: flex; flex-direction: column; min-height: 0; height: 100%; padding: 0; }
+.sd-root--design .sd-3d-preview-header { padding: 3px 6px; flex: 0 0 auto; }
+.sd-root--design .sd-3d-preview-title { font-size: 10px; }
+.sd-root--design .sd-3d-preview-subtitle { display: none; }
+.sd-root--design .sd-3d-preview-stage { flex: 1 1 0; height: 0; min-height: 0; }
+.sd-root--design .sd-hull-hint { margin-top: 3px; font-size: 9px; }
+.sd-inspector { grid-area: inspector; display: flex; flex-direction: column; min-height: 0; min-width: 0; background: #15232b; border-left: 2px solid #627377; overflow: hidden; }
+.sd-inspector-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3px; flex: 0 0 auto; padding: 5px; background: #0d1b23; }
+.sd-inspector-tabs button { padding: 7px 2px; border: 1px solid #526c73; border-radius: 3px; background: #203842; color: #cbd7cd; font-size: 11px; cursor: pointer; }
+.sd-inspector-tabs button[aria-pressed='true'] { color: #ffe5a0; background: #544b32; border-color: #c6ad68; }
+.sd-inspector-content { flex: 1 1 0; min-height: 0; overflow: auto; padding: 8px; scrollbar-width: thin; scrollbar-color: #59757b #10232c; }
+.sd-parts-pane { display: flex; flex-direction: column; gap: 6px; }
+.sd-part-search { display: flex; flex-direction: column; gap: 4px; color: #bed1cf; font-size: 10px; }
+.sd-part-search input { width: 100%; box-sizing: border-box; padding: 7px 8px; border: 1px solid #5a777f; border-radius: 3px; background: #0b1b24; color: #e1e7d6; font-size: 12px; }
+.sd-root--design .sd-hlg-filter { margin: 0; gap: 3px; }
+.sd-root--design .sd-hlg-part-list { overflow: visible; flex: none; max-height: none; }
+.sd-root--design .sd-hlg-part { min-height: 58px; padding: 5px 5px 5px 49px; margin-bottom: 4px; }
+.sd-root--design .sd-hlg-part > .sd-part-symbol { width: 38px; height: 36px; left: 5px; top: 11px; }
+.sd-root--design .sd-hlg-part-name { font-size: 11px; }
+.sd-root--design .sd-hlg-part-meta { font-size: 9px; line-height: 1.4; }
+.sd-root--design .sd-equipment-dock { padding: 0; border: 0; overflow: visible; max-height: none; width: auto; }
+.sd-root--design .sd-equipment-heading { font-size: 10px; gap: 4px; }
+.sd-root--design .sd-loadout-slot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.sd-root--design .sd-loadout-groups { grid-template-columns: minmax(0, 1fr); }
+.sd-design-status { display: flex; flex: 0 0 auto; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 10px; padding: 5px 8px; background: #0a1820; border-top: 1px solid #506b71; color: #b9ccc6; font-size: 10px; }
+.sd-design-status button { border: 1px solid #526e70; border-radius: 3px; background: #18342f; padding: 3px 8px; color: #aee1ab; font: inherit; cursor: pointer; }
+.sd-design-status .has-warning { color: #ffbf8c; background: #49382a; border-color: #af815b; }
+@media (max-width: 760px) {
+ .sd-root--design .sd-header-title { display: none; }
+ .sd-root--design .sd-header-actions { flex-wrap: wrap; gap: 3px; }
+ .sd-root--design .sd-header-actions .sd-btn { font-size: 9px; padding: 3px 4px; }
+ .sd-root--design .sd-workshop-nav { padding: 3px; gap: 3px; }
+ .sd-root--design .sd-workshop-nav button { padding: 3px 5px; font-size: 9px; }
+ .sd-root--design .sd-workbench { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1.6fr) minmax(0, 1fr); grid-template-areas: 'drawing' 'inspector'; overflow: hidden; }
+ .sd-root--design .sd-center { width: auto; min-height: 0; padding: 4px 6px; overflow: hidden; }
+ .sd-inspector { border-left: 0; border-top: 1px solid #627377; }
+ .sd-inspector-tabs { padding: 3px; }
+ .sd-inspector-tabs button { padding: 4px; }
+ .sd-inspector-content { padding: 5px 7px; }
+ .sd-selection-toolbar { padding: 4px; }
+ .sd-selection-toolbar > span { display: none; }
+ .sd-selection-toolbar button, .sd-selection-toolbar select { padding: 3px 5px; font-size: 10px; }
+ .sd-root--design .sd-hull-hint { display: none; }
+ .sd-design-status { padding: 3px 5px; font-size: 9px; }
+}
+/* Blueprint linework: the same silhouettes with no opaque faces. */
+.sd-root--design .sd-center { background-color: #0b2937; background-image: linear-gradient(#66a1b00d 1px, transparent 1px), linear-gradient(90deg, #66a1b00d 1px, transparent 1px), linear-gradient(#66a1b015 1px, transparent 1px), linear-gradient(90deg, #66a1b015 1px, transparent 1px); background-size: 8px 8px, 8px 8px, 40px 40px, 40px 40px; }
+.sd-root--design .sd-part-plan, .sd-root--design .sd-part-symbol, .sd-root--design .sd-part-elevation { color: #c9bc62; }
+.sd-root--design [data-category='bridge'], .sd-root--design [data-category='funnel'] { color: #a6bec1; }
+.sd-root--design [data-category='boiler'], .sd-root--design [data-category='turbine'], .sd-root--design [data-category='aux'] { color: #4dbbc3; }
+.sd-root--design .sd-part-plan *, .sd-root--design .sd-part-symbol *, .sd-root--design .sd-part-elevation * { fill: none; stroke: currentColor; stroke-width: .65px; vector-effect: non-scaling-stroke; }
+.sd-root--design .sd-hlg-component--selected .sd-part-plan { color: #fff0a1; }
+.sd-root--design .sd-hlg-component--invalid .sd-part-plan, .sd-root--design .sd-hlg-component--delete .sd-part-plan { color: #ff8b7b; }
+.sd-root--design .sd-hlg-component--selected { background: #ffe38a0b; box-shadow: none; }
+.sd-root--design .sd-hlg-cell--inside, .sd-root--design .sd-hlg-cell--inside:not(.sd-hlg-cell--side) { background: transparent; border-color: transparent; }
+.sd-root--design .sd-hlg-cell--inside::after { border-color: transparent; }
+.sd-root--design .sd-hlg-cell--valid { background: #9aca8d0b; }
+.sd-root--design .sd-hlg-cell--inside:hover { background: #9aca8d44; }
+.sd-hull-plan-outline { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; z-index: 1; }
+.sd-machinery-underlay { opacity: .5; overflow: visible; }
+.sd-design-menu { position: relative; }
+.sd-design-menu summary { list-style: none; cursor: pointer; }
+.sd-design-menu summary::-webkit-details-marker { display: none; }
+.sd-design-menu > div { position: absolute; right: 0; top: calc(100% + 7px); z-index: 100; display: grid; gap: 7px; width: 165px; padding: 9px; background: #142932; border: 1px solid #779292; box-shadow: 0 8px 24px #0008; }

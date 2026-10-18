@@ -856,7 +856,7 @@ function normalizeArmorPlan(armorPlan: HLGDesign['armorPlan']): HLGDesign['armor
   }
 }
 
-function hlgHullHalfWidth(ny: number, shipClass: PlayerShipType): number {
+export function hlgHullHalfWidth(ny: number, shipClass: PlayerShipType): number {
   const fine = shipClass === 'destroyer' ? 0.82 : shipClass === 'cruiser' ? 0.92 : 1
   if (ny < -0.84) return Math.max(0.02, (ny + 1) / 0.16 * 0.34 * fine)
   if (ny < -0.48) return (0.34 + (ny + 0.84) / 0.36 * 0.66) * fine

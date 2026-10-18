@@ -36,7 +36,7 @@ export function ShipBlueprint({ hull, design, selectedId, onSelect }: {
           stroke={selected ? '#fff6b2' : internal ? '#cd8375' : '#d7bf62'} strokeWidth={selected ? 2.2 : 1}>
           <title>{`${part.name} / ${part.weight}t / 砲台高 ${mountHeight}m`}</title>
           {mountHeight > 0 && <><rect x={x - width * .3} y={106 - mountHeight * 5} width={width * .6} height={mountHeight * 5} fill="rgba(100,140,145,.3)" /><text x={x} y={y - 4} textAnchor="middle" stroke="none" fill="currentColor" fontSize="9">+{mountHeight}m</text></>}
-          <g transform={`translate(${x - width / 2} ${y}) scale(${width / 100} ${height / 100})`} className="sd-part-elevation">
+          <g transform={`translate(${x - width / 2} ${y}) scale(${width / 100} ${height / 100})`} className="sd-part-elevation" data-category={part.category}>
             <g transform={component.rotation === 180 ? 'translate(100 0) scale(-1 1)' : undefined}><PartElevation part={part} /></g>
           </g>
           {geometry && <path d={`M${x + direction * geometry.barrelRoot * units} ${106 - (mountHeight + geometry.barrelHeight) * 5}h${direction * geometry.barrelLength * units}`} strokeWidth={Math.max(1.2, geometry.barrelRadius * 10)} strokeLinecap="round" stroke="#cbd0b9" />}

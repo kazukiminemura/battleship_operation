@@ -7,7 +7,7 @@ export function PartPlanDrawing({ part, rotation = 0, barrels = part.barrels ?? 
   const length = part.footprint.h, beam = part.footprint.w
   const turned = rotation === 90 || rotation === 270
   const w = turned ? beam : length, h = turned ? length : beam
-  return <svg className={className} viewBox={`${-w / 2} ${-h / 2} ${w} ${h}`} preserveAspectRatio="none" aria-hidden="true" focusable="false">
+  return <svg className={className} data-category={part.category} viewBox={`${-w / 2} ${-h / 2} ${w} ${h}`} preserveAspectRatio="none" aria-hidden="true" focusable="false">
     <g transform={`rotate(${-rotation}) scale(${length / 100} ${beam / 100}) translate(-50 -50)`} stroke="currentColor" strokeWidth=".8" strokeLinejoin="round" fill="var(--part-steel, #617476)">
       <PlanBody part={part} barrels={Math.max(1, Math.min(4, barrels))} />
     </g>

@@ -29,7 +29,7 @@ export function GunBarrelOverlay({ hull, design, selectedId, preview }: {
             const y = (i - (count - 1) / 2) * geometry.barrelSpacing / DESIGN_CELL_METERS
             const radius = geometry.barrelRadius / DESIGN_CELL_METERS
             return <g key={i}>
-              <path d={`M${root} ${y - radius}L${tip} ${y - radius * .65}V${y + radius * .65}L${root} ${y + radius}Z`} fill={blocked ? '#e87d69' : '#b7c3b4'} stroke="#2a4149" strokeWidth=".08" />
+              <path d={`M${root} ${y - radius}L${tip} ${y - radius * .65}V${y + radius * .65}L${root} ${y + radius}Z`} fill="none" stroke={blocked ? '#ff7272' : '#c9bd69'} strokeWidth=".08" />
               <path d={`M${root} ${y - radius * .4}L${tip} ${y - radius * .3}`} stroke={color} strokeWidth=".05" />
               <path d={`M${tip} ${y - radius * .6}v${radius * 1.2}`} stroke="#102832" strokeWidth=".1" />
             </g>
